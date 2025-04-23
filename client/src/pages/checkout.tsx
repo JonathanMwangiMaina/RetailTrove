@@ -367,6 +367,46 @@ export default function Checkout() {
                       />
                       <Label htmlFor="paypal" className="ml-3 block text-sm font-medium text-gray-700">PayPal</Label>
                     </div>
+                    
+                    {paymentMethod === "paypal" && (
+                      <div className="border rounded-md p-4">
+                        <div className="flex flex-col items-center space-y-4">
+                          <img 
+                            src="https://www.paypalobjects.com/webstatic/en_US/i/buttons/PP_logo_h_100x26.png" 
+                            alt="PayPal" 
+                            className="h-8" 
+                          />
+                          <p className="text-sm text-gray-600 text-center">
+                            You'll be redirected to PayPal to complete your payment securely.
+                          </p>
+                          <Button
+                            type="button"
+                            onClick={() => {
+                              // Simulate PayPal redirect and return
+                              toast({
+                                title: "Connecting to PayPal",
+                                description: "Securely connecting to PayPal services...",
+                              });
+                              
+                              // Simulate a redirect delay
+                              setTimeout(() => {
+                                toast({
+                                  title: "PayPal Authorization Successful",
+                                  description: "Completing your order...",
+                                  variant: "success"
+                                });
+                                
+                                // Continue with the checkout flow
+                                form.handleSubmit(onSubmit)();
+                              }, 1500);
+                            }}
+                            className="bg-[#0070ba] hover:bg-[#005ea6] text-white w-full"
+                          >
+                            Pay with PayPal
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
                 

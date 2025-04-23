@@ -46,9 +46,11 @@ export default function Home() {
                     Shop Now
                   </Button>
                 </Link>
-                <Button variant="outline" size="lg" className="border-white text-white hover:bg-white/10">
-                  Learn More
-                </Button>
+                <Link href="/about">
+                  <Button variant="outline" size="lg" className="border-white text-white hover:bg-white/10 hover:border-accent-300">
+                    Learn More
+                  </Button>
+                </Link>
               </div>
             </div>
           </div>
@@ -61,9 +63,9 @@ export default function Home() {
           <div className="flex items-center justify-between overflow-x-auto no-scrollbar">
             {categories.map((category, index) => (
               <Link key={index} href={`/shop/${category}`}>
-                <a className="whitespace-nowrap text-sm font-medium text-primary-600 hover:text-primary-900 px-3 py-2">
+                <span className="whitespace-nowrap text-sm font-medium text-primary-600 hover:text-primary-900 px-3 py-2 cursor-pointer">
                   {category}
-                </a>
+                </span>
               </Link>
             ))}
           </div>
@@ -76,9 +78,9 @@ export default function Home() {
           <div className="sm:flex sm:items-center sm:justify-between">
             <h2 className="text-2xl font-bold tracking-tight text-primary-900">Featured Products</h2>
             <Link href="/shop">
-              <a className="hidden sm:block text-sm font-semibold text-secondary-600 hover:text-secondary-500">
+              <span className="hidden sm:block text-sm font-semibold text-secondary-600 hover:text-secondary-500 cursor-pointer">
                 Browse all products<span aria-hidden="true"> &rarr;</span>
-              </a>
+              </span>
             </Link>
           </div>
 
@@ -105,9 +107,9 @@ export default function Home() {
 
           <div className="mt-8 text-center sm:hidden">
             <Link href="/shop">
-              <a className="text-sm font-semibold text-secondary-600 hover:text-secondary-500">
+              <span className="text-sm font-semibold text-secondary-600 hover:text-secondary-500 cursor-pointer">
                 Browse all products<span aria-hidden="true"> &rarr;</span>
-              </a>
+              </span>
             </Link>
           </div>
         </div>
@@ -272,7 +274,7 @@ export default function Home() {
               </Button>
             </form>
             <p className="mt-3 text-sm text-secondary-200">
-              We care about your data. Read our <a href="#" className="font-medium text-white underline">Privacy Policy</a>.
+              We care about your data. Read our <span className="font-medium text-white underline cursor-pointer" onClick={() => alert('Privacy Policy - Coming Soon')}>Privacy Policy</span>.
             </p>
           </div>
         </div>
