@@ -433,8 +433,8 @@ export default function Checkout() {
                   </Button>
                   <p className="mt-4 text-xs text-center text-gray-500">
                     By placing your order, you agree to our{" "}
-                    <a href="#" className="text-secondary-600 hover:text-secondary-500">Terms & Conditions</a> and{" "}
-                    <a href="#" className="text-secondary-600 hover:text-secondary-500">Privacy Policy</a>.
+                    <span className="text-secondary-600 hover:text-secondary-500 cursor-pointer" onClick={() => alert('Terms & Conditions - Coming Soon')}>Terms & Conditions</span> and{" "}
+                    <span className="text-secondary-600 hover:text-secondary-500 cursor-pointer" onClick={() => alert('Privacy Policy - Coming Soon')}>Privacy Policy</span>.
                   </p>
                 </div>
               </form>
@@ -504,8 +504,8 @@ export default function Checkout() {
                 <div className="mt-4 text-center">
                   <p className="text-xs text-gray-500">
                     By placing your order, you agree to our{" "}
-                    <a href="#" className="text-secondary-600 hover:text-secondary-500">Terms & Conditions</a> and{" "}
-                    <a href="#" className="text-secondary-600 hover:text-secondary-500">Privacy Policy</a>.
+                    <span className="text-secondary-600 hover:text-secondary-500 cursor-pointer" onClick={() => alert('Terms & Conditions - Coming Soon')}>Terms & Conditions</span> and{" "}
+                    <span className="text-secondary-600 hover:text-secondary-500 cursor-pointer" onClick={() => alert('Privacy Policy - Coming Soon')}>Privacy Policy</span>.
                   </p>
                 </div>
               </div>

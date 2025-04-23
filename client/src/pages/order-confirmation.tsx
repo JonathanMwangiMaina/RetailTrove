@@ -104,12 +104,11 @@ export default function OrderConfirmation() {
           </div>
           
           <div className="mt-8 flex justify-center">
-            <Button 
-              className="w-full sm:w-auto"
-              onClick={() => window.location.href = "/shop"}
-            >
-              Continue Shopping
-            </Button>
+            <Link href="/shop">
+              <Button className="w-full sm:w-auto">
+                Continue Shopping
+              </Button>
+            </Link>
           </div>
         </div>
         
@@ -118,9 +117,11 @@ export default function OrderConfirmation() {
             If you have any questions about your order, please contact our customer support.
           </p>
           <p className="mt-2 text-sm text-gray-500">
-            <a href="/contact" className="text-secondary-600 hover:text-secondary-500">
-              Contact Support
-            </a>
+            <Link href="/contact">
+              <span className="text-secondary-600 hover:text-secondary-500 cursor-pointer">
+                Contact Support
+              </span>
+            </Link>
           </p>
         </div>
       </div>
