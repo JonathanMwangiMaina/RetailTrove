@@ -37,23 +37,23 @@ export default function Footer() {
             <h3 className="text-white font-semibold text-base mb-4">Shop</h3>
             <ul className="space-y-3">
               <li>
-                <Link href="/shop">
-                  <a className="text-primary-300 hover:text-white text-sm">All Products</a>
+                <Link className="text-primary-300 hover:text-white text-sm" href="/shop">
+                  All Products
                 </Link>
               </li>
               <li>
-                <Link href="/shop?category=New%20Arrivals">
-                  <a className="text-primary-300 hover:text-white text-sm">New Arrivals</a>
+                <Link className="text-primary-300 hover:text-white text-sm" href="/shop?category=New%20Arrivals">
+                  New Arrivals
                 </Link>
               </li>
               <li>
-                <Link href="/shop?featured=true">
-                  <a className="text-primary-300 hover:text-white text-sm">Featured</a>
+                <Link className="text-primary-300 hover:text-white text-sm" href="/shop?featured=true">
+                  Featured
                 </Link>
               </li>
               <li>
-                <Link href="/shop?sale=true">
-                  <a className="text-primary-300 hover:text-white text-sm">Sales & Discounts</a>
+                <Link className="text-primary-300 hover:text-white text-sm" href="/shop?sale=true">
+                  Sales & Discounts
                 </Link>
               </li>
               <li>
@@ -66,8 +66,8 @@ export default function Footer() {
             <h3 className="text-white font-semibold text-base mb-4">About</h3>
             <ul className="space-y-3">
               <li>
-                <Link href="/about">
-                  <a className="text-primary-300 hover:text-white text-sm">Our Story</a>
+                <Link className="text-primary-300 hover:text-white text-sm" href="/about">
+                  Our Story
                 </Link>
               </li>
               <li>
@@ -89,8 +89,8 @@ export default function Footer() {
             <h3 className="text-white font-semibold text-base mb-4">Customer Service</h3>
             <ul className="space-y-3">
               <li>
-                <Link href="/contact">
-                  <a className="text-primary-300 hover:text-white text-sm">Contact Us</a>
+                <Link className="text-primary-300 hover:text-white text-sm" href="/contact">
+                  Contact Us
                 </Link>
               </li>
               <li>

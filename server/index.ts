@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { seed } from "./seed-db";
 import { updateProducts } from "./update-products";
+import { updateProducts2 } from "./update-products-2";
 import { db } from "./db";
 
 const app = express();
@@ -46,6 +47,9 @@ app.use((req, res, next) => {
     
     // Update products with new images and add new products
     await updateProducts();
+    
+    // Further product updates with more categories and image fixes
+    await updateProducts2();
   } catch (error) {
     console.error("Error initializing database:", error);
   }
