@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { seed } from "./seed-db";
+import { updateProducts } from "./update-products";
 import { db } from "./db";
 
 const app = express();
@@ -42,8 +43,11 @@ app.use((req, res, next) => {
   try {
     // Seed database with initial data
     await seed();
+    
+    // Update products with new images and add new products
+    await updateProducts();
   } catch (error) {
-    console.error("Error seeding database:", error);
+    console.error("Error initializing database:", error);
   }
   
   const server = await registerRoutes(app);
