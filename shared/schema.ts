@@ -1,5 +1,6 @@
-import { pgTable, text, serial, integer, numeric, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, numeric, timestamp, boolean, primaryKey } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
+import { relations } from "drizzle-orm";
 import { z } from "zod";
 
 // Product Schema
@@ -28,7 +29,7 @@ export const insertProductSchema = createInsertSchema(products).omit({
 // Cart Item Schema (for tracking items in cart)
 export const cartItems = pgTable("cart_items", {
   id: serial("id").primaryKey(),
-  productId: integer("product_id").notNull(),
+  productId: integer("product_id").notNull().references(() => products.id),
   quantity: integer("quantity").notNull().default(1),
   cartId: text("cart_id").notNull(),
 });
@@ -36,6 +37,14 @@ export const cartItems = pgTable("cart_items", {
 export const insertCartItemSchema = createInsertSchema(cartItems).omit({
   id: true,
 });
+
+// Cart items relation to products
+export const cartItemsRelations = relations(cartItems, ({ one }) => ({
+  product: one(products, {
+    fields: [cartItems.productId],
+    references: [products.id],
+  }),
+}));
 
 // Order Schema
 export const orders = pgTable("orders", {
@@ -62,8 +71,8 @@ export const insertOrderSchema = createInsertSchema(orders).omit({
 // Order Item Schema
 export const orderItems = pgTable("order_items", {
   id: serial("id").primaryKey(),
-  orderId: integer("order_id").notNull(),
-  productId: integer("product_id").notNull(),
+  orderId: integer("order_id").notNull().references(() => orders.id),
+  productId: integer("product_id").notNull().references(() => products.id),
   productName: text("product_name").notNull(),
   price: numeric("price", { precision: 10, scale: 2 }).notNull(),
   quantity: integer("quantity").notNull().default(1),
@@ -72,6 +81,29 @@ export const orderItems = pgTable("order_items", {
 export const insertOrderItemSchema = createInsertSchema(orderItems).omit({
   id: true,
 });
+
+// Order items relations
+export const orderItemsRelations = relations(orderItems, ({ one }) => ({
+  order: one(orders, {
+    fields: [orderItems.orderId],
+    references: [orders.id],
+  }),
+  product: one(products, {
+    fields: [orderItems.productId],
+    references: [products.id],
+  }),
+}));
+
+// Orders relations
+export const ordersRelations = relations(orders, ({ many }) => ({
+  items: many(orderItems),
+}));
+
+// Products relations
+export const productsRelations = relations(products, ({ many }) => ({
+  cartItems: many(cartItems),
+  orderItems: many(orderItems),
+}));
 
 // Types
 export type Product = typeof products.$inferSelect;
