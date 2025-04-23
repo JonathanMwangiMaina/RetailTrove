@@ -20,7 +20,7 @@ export default function ProductPage() {
   ];
   
   // Fetch product data
-  const { data: product, isLoading, error } = useQuery<Product>({
+  const { data: product, isLoading, error } = useQuery<ProductType>({
     queryKey: [`/api/products/${id}`],
   });
   

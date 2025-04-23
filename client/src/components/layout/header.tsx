@@ -58,9 +58,9 @@ export default function Header() {
             {/* Logo */}
             <div className="flex-shrink-0 flex items-center">
               <Link href="/">
-                <a className="font-bold text-xl text-primary-900">
+                <span className="font-bold text-xl text-primary-900 cursor-pointer">
                   Modern<span className="text-accent-500">Retail</span>
-                </a>
+                </span>
               </Link>
             </div>
 
@@ -68,13 +68,13 @@ export default function Header() {
             <nav className="hidden md:flex space-x-8 text-sm">
               {navigationLinks.map((link) => (
                 <Link key={link.name} href={link.href}>
-                  <a className={`font-medium ${
+                  <span className={`font-medium cursor-pointer ${
                     location === link.href
                       ? "text-secondary-600"
                       : "text-primary-900 hover:text-secondary-600"
                   } transition-colors`}>
                     {link.name}
-                  </a>
+                  </span>
                 </Link>
               ))}
             </nav>
@@ -142,8 +142,8 @@ export default function Header() {
             <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
               {navigationLinks.map((link) => (
                 <Link key={link.name} href={link.href}>
-                  <a 
-                    className={`block px-3 py-2 rounded-md text-base font-medium ${
+                  <span 
+                    className={`block px-3 py-2 rounded-md text-base font-medium cursor-pointer ${
                       location === link.href
                         ? "bg-primary-50 text-secondary-600"
                         : "text-primary-900 hover:bg-primary-50"
@@ -151,7 +151,7 @@ export default function Header() {
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     {link.name}
-                  </a>
+                  </span>
                 </Link>
               ))}
             </div>
