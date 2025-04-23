@@ -104,14 +104,19 @@ export default function Checkout() {
       // Clear cart
       clearCart();
       
+      // Get order data from response
+      const orderData = await response.json();
+      const orderId = orderData.id || 'ORDER123456'; // Fallback for demo purposes
+      
       // Show success toast
       toast({
         title: "Order placed successfully!",
         description: "Thank you for your purchase",
+        variant: "success",
       });
       
-      // Redirect to success page (or home for now)
-      navigate("/");
+      // Redirect to order confirmation page
+      navigate(`/order-confirmation?id=${orderId}&total=${total}`);
     } catch (error) {
       console.error("Error submitting order:", error);
       toast({
