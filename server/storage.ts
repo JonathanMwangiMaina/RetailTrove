@@ -14,6 +14,8 @@ export interface IStorage {
   getFeaturedProducts(): Promise<Product[]>;
   getNewArrivals(): Promise<Product[]>;
   searchProducts(query: string): Promise<Product[]>;
+  updateProduct(id: number, productData: Partial<Product>): Promise<Product | undefined>;
+  deleteProduct(id: number): Promise<boolean>;
   
   // Cart
   getCartItems(cartId: string): Promise<CartItemWithProduct[]>;
@@ -25,6 +27,7 @@ export interface IStorage {
   // Orders
   createOrder(order: InsertOrder, items: InsertOrderItem[]): Promise<Order>;
   getOrderById(id: number): Promise<Order | undefined>;
+  getAllOrders(): Promise<Order[]>;
 }
 
 export class MemStorage implements IStorage {
