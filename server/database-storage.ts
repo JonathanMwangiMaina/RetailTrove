@@ -168,8 +168,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async ensureDefaultAdmin(hashPassword: (pw: string) => Promise<string>): Promise<void> {
-    const existing = await db.select().from(users).where(eq(users.role, "admin"));
-    if (existing.length === 0) {
+    const allUsers = await db.select().from(users);
+    const hasAdmin = allUsers.some((u) => u.email === "admin@retailtrove.com");
+    const hasVendor = allUsers.some((u) => u.email === "vendor@retailtrove.com");
+
+    if (!hasAdmin) {
       const passwordHash = await hashPassword("admin123");
       await db.insert(users).values({
         email: "admin@retailtrove.com",
@@ -178,6 +181,17 @@ export class DatabaseStorage implements IStorage {
         role: "admin",
       });
       console.log("Default admin created: admin@retailtrove.com / admin123");
+    }
+
+    if (!hasVendor) {
+      const passwordHash = await hashPassword("vendor123");
+      await db.insert(users).values({
+        email: "vendor@retailtrove.com",
+        passwordHash,
+        name: "Vendor Demo",
+        role: "vendor",
+      });
+      console.log("Default vendor created: vendor@retailtrove.com / vendor123");
     }
   }
 }

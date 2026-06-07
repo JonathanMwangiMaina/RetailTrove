@@ -104,9 +104,10 @@ export default function LoginPage() {
                       required
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground bg-blue-50 border border-blue-200 rounded p-2">
-                    <strong>Demo admin:</strong> admin@retailtrove.com / admin123
-                  </p>
+                  <div className="text-xs text-muted-foreground bg-blue-50 border border-blue-200 rounded p-2 space-y-1">
+                    <p><strong>Demo admin:</strong> admin@retailtrove.com / admin123</p>
+                    <p><strong>Demo vendor:</strong> vendor@retailtrove.com / vendor123</p>
+                  </div>
                 </CardContent>
                 <CardFooter>
                   <Button type="submit" className="w-full" disabled={loginLoading}>
