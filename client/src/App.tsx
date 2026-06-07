@@ -9,9 +9,12 @@ import Checkout from "@/pages/checkout";
 import OrderConfirmation from "@/pages/order-confirmation";
 import About from "@/pages/about";
 import Contact from "@/pages/contact";
+import LoginPage from "@/pages/login";
+import AdminPage from "@/pages/admin";
 import Header from "@/components/layout/header";
 import Footer from "@/components/layout/footer";
 import { CartProvider } from "@/hooks/use-cart";
+import { AuthProvider } from "@/hooks/use-auth";
 
 function Router() {
   return (
@@ -24,6 +27,8 @@ function Router() {
       <Route path="/order-confirmation" component={OrderConfirmation} />
       <Route path="/about" component={About} />
       <Route path="/contact" component={Contact} />
+      <Route path="/login" component={LoginPage} />
+      <Route path="/admin" component={AdminPage} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -31,18 +36,20 @@ function Router() {
 
 function App() {
   return (
-    <CartProvider>
-      <TooltipProvider>
-        <Toaster />
-        <div className="flex flex-col min-h-screen">
-          <Header />
-          <main className="flex-grow">
-            <Router />
-          </main>
-          <Footer />
-        </div>
-      </TooltipProvider>
-    </CartProvider>
+    <AuthProvider>
+      <CartProvider>
+        <TooltipProvider>
+          <Toaster />
+          <div className="flex flex-col min-h-screen">
+            <Header />
+            <main className="flex-grow">
+              <Router />
+            </main>
+            <Footer />
+          </div>
+        </TooltipProvider>
+      </CartProvider>
+    </AuthProvider>
   );
 }
 

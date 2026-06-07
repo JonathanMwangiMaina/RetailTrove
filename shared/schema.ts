@@ -1,7 +1,35 @@
-import { pgTable, text, serial, integer, numeric, timestamp, boolean, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, numeric, timestamp, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { relations } from "drizzle-orm";
 import { z } from "zod";
+
+// Users
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  name: text("name").notNull(),
+  role: text("role").notNull().default("customer"), // admin | vendor | customer
+  avatarUrl: text("avatar_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
+export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+
+// Banner Settings (singleton row, id = 1)
+export const bannerSettings = pgTable("banner_settings", {
+  id: serial("id").primaryKey(),
+  text: text("text").notNull().default("Free shipping on all orders over $50! Use code: FREESHIP"),
+  bgColor: text("bg_color").notNull().default("#1d4ed8"),
+  isActive: boolean("is_active").notNull().default(true),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertBannerSchema = createInsertSchema(bannerSettings).omit({ id: true, updatedAt: true });
+export type BannerSettings = typeof bannerSettings.$inferSelect;
+export type InsertBannerSettings = z.infer<typeof insertBannerSchema>;
 
 // Product Schema
 export const products = pgTable("products", {
@@ -17,7 +45,9 @@ export const products = pgTable("products", {
   featured: boolean("featured").default(false),
   newArrival: boolean("new_arrival").default(false),
   inStock: boolean("in_stock").default(true),
+  stockQuantity: integer("stock_quantity").default(0),
   rating: numeric("rating", { precision: 3, scale: 2 }).default("5"),
+  vendorId: integer("vendor_id").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -26,7 +56,7 @@ export const insertProductSchema = createInsertSchema(products).omit({
   createdAt: true,
 });
 
-// Cart Item Schema (for tracking items in cart)
+// Cart Item Schema
 export const cartItems = pgTable("cart_items", {
   id: serial("id").primaryKey(),
   productId: integer("product_id").notNull().references(() => products.id),
@@ -34,9 +64,7 @@ export const cartItems = pgTable("cart_items", {
   cartId: text("cart_id").notNull(),
 });
 
-export const insertCartItemSchema = createInsertSchema(cartItems).omit({
-  id: true,
-});
+export const insertCartItemSchema = createInsertSchema(cartItems).omit({ id: true });
 
 // Cart items relation to products
 export const cartItemsRelations = relations(cartItems, ({ one }) => ({
@@ -63,10 +91,7 @@ export const orders = pgTable("orders", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertOrderSchema = createInsertSchema(orders).omit({
-  id: true,
-  createdAt: true,
-});
+export const insertOrderSchema = createInsertSchema(orders).omit({ id: true, createdAt: true });
 
 // Order Item Schema
 export const orderItems = pgTable("order_items", {
@@ -78,31 +103,26 @@ export const orderItems = pgTable("order_items", {
   quantity: integer("quantity").notNull().default(1),
 });
 
-export const insertOrderItemSchema = createInsertSchema(orderItems).omit({
-  id: true,
-});
+export const insertOrderItemSchema = createInsertSchema(orderItems).omit({ id: true });
 
-// Order items relations
+// Relations
 export const orderItemsRelations = relations(orderItems, ({ one }) => ({
-  order: one(orders, {
-    fields: [orderItems.orderId],
-    references: [orders.id],
-  }),
-  product: one(products, {
-    fields: [orderItems.productId],
-    references: [products.id],
-  }),
+  order: one(orders, { fields: [orderItems.orderId], references: [orders.id] }),
+  product: one(products, { fields: [orderItems.productId], references: [products.id] }),
 }));
 
-// Orders relations
 export const ordersRelations = relations(orders, ({ many }) => ({
   items: many(orderItems),
 }));
 
-// Products relations
-export const productsRelations = relations(products, ({ many }) => ({
+export const productsRelations = relations(products, ({ many, one }) => ({
   cartItems: many(cartItems),
   orderItems: many(orderItems),
+  vendor: one(users, { fields: [products.vendorId], references: [users.id] }),
+}));
+
+export const usersRelations = relations(users, ({ many }) => ({
+  products: many(products),
 }));
 
 // Types
@@ -118,7 +138,4 @@ export type InsertOrder = z.infer<typeof insertOrderSchema>;
 export type OrderItem = typeof orderItems.$inferSelect;
 export type InsertOrderItem = z.infer<typeof insertOrderItemSchema>;
 
-// Extended types for frontend
-export type CartItemWithProduct = CartItem & {
-  product: Product;
-};
+export type CartItemWithProduct = CartItem & { product: Product };
