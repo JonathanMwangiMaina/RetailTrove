@@ -5,7 +5,10 @@ import {
   OrderItem, InsertOrderItem,
   User, InsertUser,
   BannerSettings,
-  products,
+  UserVisit,
+  SiteContent,
+  SiteSetting,
+  Faq, InsertFaq,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -19,6 +22,8 @@ export interface IStorage {
   createProduct(product: InsertProduct): Promise<Product>;
   updateProduct(id: number, productData: Partial<Product>): Promise<Product | undefined>;
   deleteProduct(id: number): Promise<boolean>;
+  getPendingProducts(): Promise<Product[]>;
+  approveProduct(id: number, status: string): Promise<Product | undefined>;
 
   // Cart
   getCartItems(cartId: string): Promise<CartItemWithProduct[]>;
@@ -36,54 +41,72 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserById(id: number): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  getAllUsers(): Promise<User[]>;
+  getUsersByRole(role: string): Promise<User[]>;
+  updateUser(id: number, data: Partial<User>): Promise<User | undefined>;
+  deleteUser(id: number): Promise<boolean>;
+  countUsersByRole(role: string): Promise<number>;
+
+  // Visits
+  recordVisit(userId: number, path: string): Promise<void>;
+  getVisitsByUser(userId: number): Promise<UserVisit[]>;
+  getAllVisits(): Promise<(UserVisit & { userName: string; userEmail: string; userRole: string })[]>;
 
   // Banner
   getBanner(): Promise<BannerSettings>;
   updateBanner(data: Partial<BannerSettings>): Promise<BannerSettings>;
   ensureBanner(): Promise<void>;
+
+  // Site Content
+  getSiteContent(type: string): Promise<SiteContent | undefined>;
+  updateSiteContent(type: string, content: string): Promise<SiteContent>;
+  ensureSiteContent(): Promise<void>;
+
+  // Site Settings
+  getAllSiteSettings(): Promise<SiteSetting[]>;
+  updateSiteSetting(key: string, value: string): Promise<SiteSetting>;
+  ensureSiteSettings(): Promise<void>;
+
+  // FAQs
+  getFaqs(status?: string): Promise<Faq[]>;
+  getFaqsByUser(userId: number): Promise<Faq[]>;
+  createFaq(data: InsertFaq): Promise<Faq>;
+  updateFaq(id: number, data: Partial<Faq>): Promise<Faq | undefined>;
+  deleteFaq(id: number): Promise<boolean>;
+  ensureDefaultFaqs(): Promise<void>;
+
+  // Seeding
   ensureDefaultAdmin(hashPassword: (pw: string) => Promise<string>): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
-  private products: Map<number, Product>;
-  private cartItems: Map<number, CartItem>;
-  private orders: Map<number, Order>;
-  private orderItems: Map<number, OrderItem>;
-  private users: Map<number, User>;
-  private banner: BannerSettings;
+  private products: Map<number, Product> = new Map();
+  private cartItems: Map<number, CartItem> = new Map();
+  private orders: Map<number, Order> = new Map();
+  private orderItems: Map<number, OrderItem> = new Map();
+  private users: Map<number, User> = new Map();
+  private visits: Map<number, UserVisit> = new Map();
+  private faqsMap: Map<number, Faq> = new Map();
+  private banner: BannerSettings = {
+    id: 1, text: "Free shipping on all orders over $50! Use code: FREESHIP",
+    bgColor: "#1d4ed8", isActive: true, updatedAt: new Date(),
+  };
   private currentProductId = 1;
   private currentCartItemId = 1;
   private currentOrderId = 1;
   private currentOrderItemId = 1;
   private currentUserId = 1;
+  private currentVisitId = 1;
+  private currentFaqId = 1;
 
-  constructor() {
-    this.products = new Map();
-    this.cartItems = new Map();
-    this.orders = new Map();
-    this.orderItems = new Map();
-    this.users = new Map();
-    this.banner = {
-      id: 1,
-      text: "Free shipping on all orders over $50! Use code: FREESHIP",
-      bgColor: "#1d4ed8",
-      isActive: true,
-      updatedAt: new Date(),
-    };
-  }
-
-  async getProducts(): Promise<Product[]> { return Array.from(this.products.values()); }
-  async getProductById(id: number): Promise<Product | undefined> { return this.products.get(id); }
-  async getProductsByCategory(category: string): Promise<Product[]> {
+  async getProducts() { return Array.from(this.products.values()); }
+  async getProductById(id: number) { return this.products.get(id); }
+  async getProductsByCategory(category: string) {
     return Array.from(this.products.values()).filter(p => p.category === category || category === "All Products");
   }
-  async getFeaturedProducts(): Promise<Product[]> {
-    return Array.from(this.products.values()).filter(p => p.featured);
-  }
-  async getNewArrivals(): Promise<Product[]> {
-    return Array.from(this.products.values()).filter(p => p.newArrival);
-  }
-  async searchProducts(query: string): Promise<Product[]> {
+  async getFeaturedProducts() { return Array.from(this.products.values()).filter(p => p.featured); }
+  async getNewArrivals() { return Array.from(this.products.values()).filter(p => p.newArrival); }
+  async searchProducts(query: string) {
     const q = query.toLowerCase();
     return Array.from(this.products.values()).filter(p =>
       p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q) || p.category.toLowerCase().includes(q)
@@ -91,25 +114,27 @@ export class MemStorage implements IStorage {
   }
   async createProduct(product: InsertProduct): Promise<Product> {
     const id = this.currentProductId++;
-    const p: Product = { id, ...product, createdAt: new Date() } as Product;
+    const p = { id, ...product, createdAt: new Date() } as Product;
     this.products.set(id, p);
     return p;
   }
-  async updateProduct(id: number, data: Partial<Product>): Promise<Product | undefined> {
+  async updateProduct(id: number, data: Partial<Product>) {
     const p = this.products.get(id);
     if (!p) return undefined;
     const updated = { ...p, ...data };
     this.products.set(id, updated);
     return updated;
   }
-  async deleteProduct(id: number): Promise<boolean> { return this.products.delete(id); }
+  async deleteProduct(id: number) { return this.products.delete(id); }
+  async getPendingProducts() { return Array.from(this.products.values()).filter(p => p.approvalStatus === "pending"); }
+  async approveProduct(id: number, status: string) { return this.updateProduct(id, { approvalStatus: status } as any); }
 
   async getCartItems(cartId: string): Promise<CartItemWithProduct[]> {
     return Array.from(this.cartItems.values())
       .filter(i => i.cartId === cartId)
       .map(i => { const product = this.products.get(i.productId)!; return { ...i, product }; });
   }
-  async getCartItem(cartId: string, productId: number): Promise<CartItemWithProduct | undefined> {
+  async getCartItem(cartId: string, productId: number) {
     const item = Array.from(this.cartItems.values()).find(i => i.cartId === cartId && i.productId === productId);
     if (!item) return undefined;
     const product = this.products.get(item.productId);
@@ -118,11 +143,11 @@ export class MemStorage implements IStorage {
   }
   async addCartItem(cartItem: InsertCartItem): Promise<CartItem> {
     const id = this.currentCartItemId++;
-    const item: CartItem = { id, ...cartItem };
+    const item = { id, ...cartItem };
     this.cartItems.set(id, item);
     return item;
   }
-  async updateCartItem(id: number, quantity: number): Promise<CartItem | undefined> {
+  async updateCartItem(id: number, quantity: number) {
     const item = this.cartItems.get(id);
     if (!item) return undefined;
     if (quantity <= 0) { this.cartItems.delete(id); return undefined; }
@@ -130,11 +155,11 @@ export class MemStorage implements IStorage {
     this.cartItems.set(id, item);
     return item;
   }
-  async removeCartItem(id: number): Promise<boolean> { return this.cartItems.delete(id); }
+  async removeCartItem(id: number) { return this.cartItems.delete(id); }
 
   async createOrder(orderData: InsertOrder, items: InsertOrderItem[]): Promise<Order> {
     const id = this.currentOrderId++;
-    const order: Order = { id, ...orderData, createdAt: new Date() } as Order;
+    const order = { id, ...orderData, createdAt: new Date() } as Order;
     this.orders.set(id, order);
     items.forEach(item => {
       const oid = this.currentOrderItemId++;
@@ -142,27 +167,82 @@ export class MemStorage implements IStorage {
     });
     return order;
   }
-  async getOrderById(id: number): Promise<Order | undefined> { return this.orders.get(id); }
-  async getAllOrders(): Promise<Order[]> { return Array.from(this.orders.values()); }
+  async getOrderById(id: number) { return this.orders.get(id); }
+  async getAllOrders() { return Array.from(this.orders.values()); }
 
-  async getUserByEmail(email: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(u => u.email === email);
-  }
-  async getUserById(id: number): Promise<User | undefined> { return this.users.get(id); }
+  async getUserByEmail(email: string) { return Array.from(this.users.values()).find(u => u.email === email); }
+  async getUserById(id: number) { return this.users.get(id); }
   async createUser(user: InsertUser): Promise<User> {
     const id = this.currentUserId++;
-    const u: User = { id, ...user, createdAt: new Date() } as User;
+    const u = { id, ...user, createdAt: new Date() } as User;
     this.users.set(id, u);
     return u;
   }
+  async getAllUsers() { return Array.from(this.users.values()); }
+  async getUsersByRole(role: string) { return Array.from(this.users.values()).filter(u => u.role === role); }
+  async updateUser(id: number, data: Partial<User>) {
+    const u = this.users.get(id);
+    if (!u) return undefined;
+    const updated = { ...u, ...data };
+    this.users.set(id, updated);
+    return updated;
+  }
+  async deleteUser(id: number) { return this.users.delete(id); }
+  async countUsersByRole(role: string) { return Array.from(this.users.values()).filter(u => u.role === role).length; }
 
-  async getBanner(): Promise<BannerSettings> { return this.banner; }
-  async updateBanner(data: Partial<BannerSettings>): Promise<BannerSettings> {
+  async recordVisit(userId: number, path: string) {
+    const id = this.currentVisitId++;
+    this.visits.set(id, { id, userId, path, visitedAt: new Date() });
+  }
+  async getVisitsByUser(userId: number) { return Array.from(this.visits.values()).filter(v => v.userId === userId); }
+  async getAllVisits() {
+    return Array.from(this.visits.values()).map(v => {
+      const u = this.users.get(v.userId);
+      return { ...v, userName: u?.name ?? "Unknown", userEmail: u?.email ?? "", userRole: u?.role ?? "" };
+    });
+  }
+
+  async getBanner() { return this.banner; }
+  async updateBanner(data: Partial<BannerSettings>) {
     this.banner = { ...this.banner, ...data, updatedAt: new Date() };
     return this.banner;
   }
-  async ensureBanner(): Promise<void> { /* already initialized in constructor */ }
-  async ensureDefaultAdmin(_hashPassword: (pw: string) => Promise<string>): Promise<void> { /* mem-only */ }
+  async ensureBanner() {}
+
+  async getSiteContent(_type: string) { return undefined; }
+  async updateSiteContent(type: string, content: string): Promise<SiteContent> {
+    return { id: 1, type, content, updatedAt: new Date() };
+  }
+  async ensureSiteContent() {}
+
+  async getAllSiteSettings() { return []; }
+  async updateSiteSetting(key: string, value: string): Promise<SiteSetting> {
+    return { id: 1, key, value, updatedAt: new Date() };
+  }
+  async ensureSiteSettings() {}
+
+  async getFaqs(status?: string) {
+    const all = Array.from(this.faqsMap.values());
+    return status ? all.filter(f => f.status === status) : all;
+  }
+  async getFaqsByUser(userId: number) { return Array.from(this.faqsMap.values()).filter(f => f.submittedBy === userId); }
+  async createFaq(data: InsertFaq): Promise<Faq> {
+    const id = this.currentFaqId++;
+    const faq = { id, ...data, createdAt: new Date() } as Faq;
+    this.faqsMap.set(id, faq);
+    return faq;
+  }
+  async updateFaq(id: number, data: Partial<Faq>) {
+    const f = this.faqsMap.get(id);
+    if (!f) return undefined;
+    const updated = { ...f, ...data };
+    this.faqsMap.set(id, updated);
+    return updated;
+  }
+  async deleteFaq(id: number) { return this.faqsMap.delete(id); }
+  async ensureDefaultFaqs() {}
+
+  async ensureDefaultAdmin(_hashPassword: (pw: string) => Promise<string>) {}
 }
 
 import { DatabaseStorage } from "./database-storage";

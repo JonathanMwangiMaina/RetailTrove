@@ -11,6 +11,8 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   role: text("role").notNull().default("customer"), // admin | vendor | customer
   avatarUrl: text("avatar_url"),
+  status: text("status").notNull().default("active"), // active | suspended
+  isApproved: boolean("is_approved").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -48,13 +50,11 @@ export const products = pgTable("products", {
   stockQuantity: integer("stock_quantity").default(0),
   rating: numeric("rating", { precision: 3, scale: 2 }).default("5"),
   vendorId: integer("vendor_id").references(() => users.id),
+  approvalStatus: text("approval_status").notNull().default("approved"), // approved | pending | rejected
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertProductSchema = createInsertSchema(products).omit({
-  id: true,
-  createdAt: true,
-});
+export const insertProductSchema = createInsertSchema(products).omit({ id: true, createdAt: true });
 
 // Cart Item Schema
 export const cartItems = pgTable("cart_items", {
@@ -66,12 +66,8 @@ export const cartItems = pgTable("cart_items", {
 
 export const insertCartItemSchema = createInsertSchema(cartItems).omit({ id: true });
 
-// Cart items relation to products
 export const cartItemsRelations = relations(cartItems, ({ one }) => ({
-  product: one(products, {
-    fields: [cartItems.productId],
-    references: [products.id],
-  }),
+  product: one(products, { fields: [cartItems.productId], references: [products.id] }),
 }));
 
 // Order Schema
@@ -105,6 +101,53 @@ export const orderItems = pgTable("order_items", {
 
 export const insertOrderItemSchema = createInsertSchema(orderItems).omit({ id: true });
 
+// User Visits
+export const userVisits = pgTable("user_visits", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  path: text("path").notNull(),
+  visitedAt: timestamp("visited_at").defaultNow(),
+});
+
+export const insertUserVisitSchema = createInsertSchema(userVisits).omit({ id: true, visitedAt: true });
+export type UserVisit = typeof userVisits.$inferSelect;
+export type InsertUserVisit = z.infer<typeof insertUserVisitSchema>;
+
+// Site Content (About, Contact, Footer, ToS, Privacy)
+export const siteContent = pgTable("site_content", {
+  id: serial("id").primaryKey(),
+  type: text("type").notNull().unique(), // about | contact | footer_about | tos | privacy
+  content: text("content").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type SiteContent = typeof siteContent.$inferSelect;
+
+// Site Settings (social media URLs, etc.)
+export const siteSettings = pgTable("site_settings", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  value: text("value").notNull().default(""),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type SiteSetting = typeof siteSettings.$inferSelect;
+
+// FAQs
+export const faqs = pgTable("faqs", {
+  id: serial("id").primaryKey(),
+  question: text("question").notNull(),
+  answer: text("answer").notNull(),
+  status: text("status").notNull().default("approved"), // approved | pending | rejected
+  submittedBy: integer("submitted_by").references(() => users.id),
+  displayOrder: integer("display_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertFaqSchema = createInsertSchema(faqs).omit({ id: true, createdAt: true });
+export type Faq = typeof faqs.$inferSelect;
+export type InsertFaq = z.infer<typeof insertFaqSchema>;
+
 // Relations
 export const orderItemsRelations = relations(orderItems, ({ one }) => ({
   order: one(orders, { fields: [orderItems.orderId], references: [orders.id] }),
@@ -123,6 +166,16 @@ export const productsRelations = relations(products, ({ many, one }) => ({
 
 export const usersRelations = relations(users, ({ many }) => ({
   products: many(products),
+  visits: many(userVisits),
+  faqs: many(faqs),
+}));
+
+export const userVisitsRelations = relations(userVisits, ({ one }) => ({
+  user: one(users, { fields: [userVisits.userId], references: [users.id] }),
+}));
+
+export const faqsRelations = relations(faqs, ({ one }) => ({
+  submitter: one(users, { fields: [faqs.submittedBy], references: [users.id] }),
 }));
 
 // Types
