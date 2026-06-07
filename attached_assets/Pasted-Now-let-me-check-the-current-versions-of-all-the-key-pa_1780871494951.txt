@@ -1,0 +1,124 @@
+Now let me check the current versions of all the key packages mentioned in the README:
+
+Good — I now have enough current version data to give Jonathan a comprehensive, accurate response. Let me compile everything.
+
+---
+
+Great timing to tackle this, Jonathan. I've read the full README and cross-referenced current release data. Here's a two-part breakdown: **README enhancements** for client-readiness, and a **dependency currency audit** for your stack.
+
+---
+
+## Part 1 — README Enhancements for a Client-Ready Document
+
+### Sections to Add
+
+**1. Prerequisites & Quick Start**
+The README jumps straight into architecture with no onboarding path. Add a section listing required tools (Node.js version, npm, PostgreSQL), a `git clone` + `npm install` + `npm run dev` flow, and a note about copying `.env.example`. Clients and collaborators expect this first.
+
+**2. `.env.example` File Reference**
+The Environment Variables section lists all variables but doesn't reference a template file. Create a `.env.example` in the repo and link to it from the README. Never ship a `.env` with real credentials, but an example file is standard practice.
+
+**3. Contributing Guide**
+Even for a private client repo, add a brief section: branching convention (e.g. `feature/`, `fix/`), commit message format, and PR review expectations. Clients handing this off to a team will thank you.
+
+**4. License / Ownership**
+Private repos still need a license section or at least a proprietary notice (e.g. "© 2026 [Client Name]. All rights reserved.") to establish ownership.
+
+**5. Deployment Guide**
+The README covers Replit only. Add a section covering deployment to a production host (Railway, Render, or a VPS), what environment variables to set, and how to run `npm run build && npm run start`. Clients often want to know what production deployment looks like.
+
+**6. Testing Section**
+Currently no test suite is documented. Even if tests don't exist yet, document that this is a known gap (you already do this in Known Limitations). Add a placeholder `## Testing` section noting the intent to add Vitest or Jest.
+
+**7. API Authentication Plan**
+The Known Limitations section flags the unauthenticated admin portal. Elevate this into a dedicated `## Security Roadmap` section so the client sees the plan clearly — it signals professionalism and manages expectations.
+
+**8. Changelog / Version History**
+Add a `CHANGELOG.md` (linked from the README) using Keep a Changelog format. Even a single entry at v0.1.0 sets a professional baseline.
+
+### Sections to Improve
+
+**Tech Stack Table** — Currently lists versions with caret ranges (`^`). For a client-facing document, pin them to exact installed versions and note which are outdated (see Part 2 below).
+
+**Known Limitations** — Reorder by risk: Red items first (unauthenticated admin, no payment gateway), then Yellow, then Green. The current mixed order undersells the urgency.
+
+**Proposed Migration Summary** — Rename this to `## Roadmap` and add rough effort estimates or phases (Phase 1: Auth + Admin security, Phase 2: Payments, Phase 3: M-Pesa). Clients respond better to phased plans than flat tables.
+
+---
+
+## Part 2 — Dependency Currency Audit
+
+Here's how your stack compares against current latest versions as of June 2026:
+
+### Runtime & Tooling
+
+| Package | Your Version | Current Latest | Status |
+|---|---|---|---|
+| Node.js | LTS (unspecified) | **24.16.0 LTS** ("Krypton") | ⚠️ Pin this explicitly |
+| npm | bundled | **11.13.0** | Ensure ≥11 |
+| TypeScript | 5.6.3 | **~5.9+** | 🔴 Behind — update |
+
+Node.js LTS is currently at **24.16.0** ("Krypton"), with Node.js 26 being the Current (non-LTS) release. Production apps should stay on Active LTS, so target Node 24 explicitly rather than the vague "LTS via Replit Nix" your README currently states.
+
+### Backend
+
+| Package | Your Version | Current Latest | Status |
+|---|---|---|---|
+| Express | ^4.21.2 | **5.2.1** (stable) / **4.22.2** (v4 latest) | 🔴 v4 entering maintenance |
+| express-session | ^1.18.1 | Check npm | ✅ Recent |
+| connect-pg-simple | ^10.0.0 | Check npm | ✅ Recent |
+| passport | ^0.7.0 | ^0.7.x | ✅ OK |
+| tsx | ^4.19.1 | Check npm | ✅ Recent |
+| esbuild | ^0.25.0 | Check npm | ✅ Recent |
+
+This is the most important upgrade decision. Express **5.2.1** is the current stable latest, released December 2025. [Wikipedia](https://en.wikipedia.org/wiki/Express.js) [npm](https://www.npmjs.com/package/express) Express 4 entered formal Maintenance status on April 1, 2025, with a target EOL of no sooner than October 2026 — giving you roughly six to eighteen months of security patches remaining on the v4 line. [HeroDevs](https://www.herodevs.com/blog-posts/express-3-is-eol-express-4-is-next-the-2026-support-reference) For a new client-facing project, I'd strongly recommend upgrading to **Express 5**. It introduces async error handling by default and path-to-regexp v8, which closes a known ReDoS vulnerability in v4.
+
+### Frontend
+
+| Package | Your Version | Current Latest | Status |
+|---|---|---|---|
+| React | ^18.3.1 | **19.x** | 🟡 v18 still supported; v19 is stable |
+| Vite | ^5.4.14 | **7.x** | 🔴 Two major versions behind |
+| Tailwind CSS | ^3.4.17 | **4.x** | 🔴 Major version behind |
+| TanStack Query | ^5.60.5 | **v5.x** | ✅ OK — on current major |
+| Zod | ^3.24.2 | **v3.x** / Zod 4 in beta | ✅ OK |
+| react-hook-form | ^7.55.0 | 7.x | ✅ OK |
+| Framer Motion | ^11.13.1 | Motion (rebranded) | 🟡 Package renamed |
+| wouter | ^3.3.5 | 3.x | ✅ OK |
+| Lucide React | ^0.453.0 | Check npm | ✅ Recent |
+| Recharts | ^2.15.2 | 2.x | ✅ OK |
+
+Current 2026 production React stacks use **React 19+** with **Vite 7+** and **Tailwind CSS v4+**. [Cursor Directory](https://cursor.directory/plugins/react-vite-2026) Tailwind v4 changed the setup process significantly — it now ships a dedicated Vite plugin and no longer requires `postcss.config.js` or `tailwind.config.js` in the same way. [Medium](https://medium.com/@fasihuddin102/how-to-set-up-tailwindcss-in-a-react-vite-project-2025-edition-999e0541a493) Migrating Tailwind and Vite are the two highest-ROI upgrades for security and performance.
+
+> **Note on Framer Motion:** The library was rebranded to simply "Motion" (`motion` on npm). `framer-motion` still works but the canonical package name has changed.
+
+### Database & ORM
+
+| Package | Your Version | Current Latest | Status |
+|---|---|---|---|
+| @neondatabase/serverless | ^0.10.4 | Check npm | ✅ Recent |
+| drizzle-orm | ^0.39.1 | **0.44.x** | 🟡 Behind — update |
+| drizzle-zod | ^0.7.0 | **0.8.x** | 🟡 Behind — update |
+| drizzle-kit | ^0.30.4 | Check npm | 🟡 Check for latest |
+
+Drizzle ORM is currently at **0.44.7** with drizzle-zod at **0.8.3** [GitHub](https://github.com/drizzle-team/drizzle-orm/issues/5315) , so your versions are behind. The upgrade is non-breaking for most use cases but includes query performance improvements and better Zod 4 compatibility.
+
+---
+
+### Quick Action List
+
+Run this in your project root to see exactly what's outdated:
+
+```bash
+npx npm-check-updates
+```
+
+Priority upgrade order for security:
+1. **Express 4 → 5** (closes path-to-regexp ReDoS, adds async error handling)
+2. **Node.js → pin 24.16.0 LTS** (explicitly, not "via Nix")
+3. **TypeScript → 5.9+**
+4. **Vite 5 → 7** (ESM-native, faster cold starts)
+5. **Tailwind 3 → 4** (new Vite plugin, no config files, CSS-first)
+6. **Drizzle ORM → 0.44.x** (minor, low risk)
+
+The React 18 → 19 upgrade is optional for now — v18 remains fully supported, and v19 introduces enough API changes (Actions, `use()`) to warrant a dedicated migration pass rather than a rushed bump.
