@@ -80,12 +80,17 @@
     "wouter": "^3.10.0",
     "ws": "^8.21.0",
     "zod": "^3.24.2",
-    "zod-validation-error": "^3.4.0"
+    "zod-validation-error": "^3.4.0",
+    "autoprefixer": "^10.5.0",
+    "esbuild": "^0.28.0",
+    "postcss": "^8.5.15",
+    "tailwindcss": "^3.4.17",
+    "@tailwindcss/typography": "^0.5.19",
+    "tsx": "^4.22.4",
+    "typescript": "5.6.3",
+    "vite": "^5.4.21"
   },
   "devDependencies": {
-    "@replit/vite-plugin-cartographer": "^0.0.11",
-    "@replit/vite-plugin-runtime-error-modal": "^0.0.3",
-    "@tailwindcss/typography": "^0.5.19",
     "@types/connect-pg-simple": "^7.0.3",
     "@types/express": "4.17.21",
     "@types/express-session": "^1.19.0",
@@ -96,15 +101,7 @@
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
     "@types/ws": "^8.18.1",
-    "@vitejs/plugin-react": "^4.7.0",
-    "autoprefixer": "^10.5.0",
-    "drizzle-kit": "^0.30.4",
-    "esbuild": "^0.28.0",
-    "postcss": "^8.5.15",
-    "tailwindcss": "^3.4.17",
-    "tsx": "^4.22.4",
-    "typescript": "5.6.3",
-    "vite": "^5.4.21"
+    "drizzle-kit": "^0.30.4"
   },
   "optionalDependencies": {
     "bufferutil": "^4.1.0"
