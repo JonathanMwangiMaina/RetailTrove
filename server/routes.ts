@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { insertCartItemSchema, insertOrderSchema, insertOrderItemSchema, insertProductSchema, insertFaqSchema, insertNewsletterSubscriberSchema } from "@shared/schema";
 import { z } from "zod";
 import { hashPassword, comparePassword, requireAuth, requireRole } from "./auth";
+import { sendWelcomeEmail } from "./email";
 
 export async function registerRoutes(app: Express): Promise<Server> {
 
@@ -617,6 +618,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const subscriber = await storage.createNewsletterSubscriber(result.data);
+
+      // Send welcome email asynchronously (don't wait for it)
+      sendWelcomeEmail(subscriber.email).catch(err => {
+        console.error("Failed to send welcome email:", err);
+      });
+
       res.status(201).json({ message: "Thank you for subscribing to our newsletter!", subscriber });
     } catch (error) {
       console.error("Newsletter subscription error:", error);
