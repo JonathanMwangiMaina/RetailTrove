@@ -1,6 +1,9 @@
 // Load environment variables first, before any other imports
+// Only load .env in development - Vercel injects env vars automatically
 import dotenv from "dotenv";
-dotenv.config();
+if (process.env.NODE_ENV !== "production") {
+  dotenv.config();
+}
 
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
@@ -60,7 +63,12 @@ app.use((req, res, next) => {
   next();
 });
 
-(async () => {
+// Initialize the app
+let isInitialized = false;
+
+async function initializeApp() {
+  if (isInitialized) return;
+
   try {
     await seed();
     await updateProducts();
@@ -91,9 +99,25 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  // Port 5000 preferred but 3000 used for tunnel compatibility
-  const port = parseInt(process.env.PORT || "3000", 10);
-  server.listen(port, "0.0.0.0", () => {
-    log(`serving on port ${port}`);
-  });
-})();
+  isInitialized = true;
+  return server;
+}
+
+// For Vercel serverless deployment
+if (process.env.VERCEL) {
+  initializeApp().catch(console.error);
+}
+
+// For local development
+if (!process.env.VERCEL) {
+  (async () => {
+    const server = await initializeApp();
+    const port = parseInt(process.env.PORT || "3000", 10);
+    server!.listen(port, "0.0.0.0", () => {
+      log(`serving on port ${port}`);
+    });
+  })();
+}
+
+// Export for Vercel
+export default app;
