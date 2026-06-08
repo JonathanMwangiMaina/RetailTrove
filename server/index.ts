@@ -1,3 +1,7 @@
+// Load environment variables first, before any other imports
+import dotenv from "dotenv";
+dotenv.config();
+
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import MemoryStore from "memorystore";
@@ -66,8 +70,10 @@ app.use((req, res, next) => {
     await storage.ensureSiteContent();
     await storage.ensureSiteSettings();
     await storage.ensureDefaultFaqs();
+    log("Database initialized successfully");
   } catch (error) {
-    console.error("Error initializing database:", error);
+    log("⚠️  Warning: Database initialization failed. Server will start but database features will be unavailable.");
+    console.error("Database error:", error instanceof Error ? error.message : error);
   }
 
   const server = await registerRoutes(app);
@@ -85,8 +91,9 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  const port = 5000;
-  server.listen({ port, host: "0.0.0.0", reusePort: true }, () => {
+  // Port 5000 preferred but 3000 used for tunnel compatibility
+  const port = parseInt(process.env.PORT || "3000", 10);
+  server.listen(port, "0.0.0.0", () => {
     log(`serving on port ${port}`);
   });
 })();

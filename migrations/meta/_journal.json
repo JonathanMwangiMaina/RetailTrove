@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1780946512461,
+      "tag": "0000_famous_firebird",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1780952105505,
+      "tag": "0001_add_newsletter_subscribers",
+      "breakpoints": true
+    }
+  ]
+}
