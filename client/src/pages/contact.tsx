@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -36,6 +37,11 @@ type ContactFormValues = z.infer<typeof formSchema>;
 export default function Contact() {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { data: contactData } = useQuery<any>({
+    queryKey: ["/api/site-content/contact"],
+    retry: false,
+  });
+  const contactContent: string | undefined = contactData?.content;
   
   // Initialize the form
   const form = useForm<ContactFormValues>({
@@ -105,8 +111,12 @@ export default function Contact() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-16">
           {/* Contact information */}
           <div>
-            <h2 className="text-2xl font-bold text-primary-900 mb-8">Contact Information</h2>
-            
+            <h2 className="text-2xl font-bold text-primary-900 mb-6">Contact Information</h2>
+            {contactContent && (
+              <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-6 text-sm text-gray-700 whitespace-pre-line leading-relaxed">
+                {contactContent}
+              </div>
+            )}
             <div className="space-y-8">
               <div className="flex items-start">
                 <div className="flex-shrink-0">

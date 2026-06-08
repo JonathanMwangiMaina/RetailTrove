@@ -1,7 +1,14 @@
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 
 export default function About() {
+  const { data: contentData } = useQuery<any>({
+    queryKey: ["/api/site-content/about"],
+    retry: false,
+  });
+  const dbContent: string | undefined = contentData?.content;
+
   return (
     <div className="bg-white">
       {/* Hero section */}
@@ -28,15 +35,25 @@ export default function About() {
         <div className="lg:grid lg:grid-cols-2 lg:gap-16">
           <div>
             <h2 className="text-3xl font-extrabold text-primary-900 tracking-tight sm:text-4xl">Our Story</h2>
-            <p className="mt-4 text-lg text-gray-500">
-              ModernRetail began with a simple idea: to create a shopping experience that prioritizes quality, design, and customer satisfaction. Founded in 2018, we've grown from a small startup to a beloved brand with customers worldwide.
-            </p>
-            <p className="mt-4 text-lg text-gray-500">
-              Our team of passionate designers and curators search the globe for exceptional products that combine functionality with beautiful aesthetics. We believe that everyday items should bring joy and enhance your lifestyle.
-            </p>
-            <p className="mt-4 text-lg text-gray-500">
-              From premium watches to minimalist home goods, every item in our collection is carefully selected to ensure it meets our high standards for quality and design excellence.
-            </p>
+            {dbContent ? (
+              <div className="space-y-4 mt-4">
+                {dbContent.split("\n\n").filter((p: string) => p.trim()).map((p: string, i: number) => (
+                  <p key={i} className="text-lg text-gray-500 whitespace-pre-line">{p.trim()}</p>
+                ))}
+              </div>
+            ) : (
+              <>
+                <p className="mt-4 text-lg text-gray-500">
+                  ModernRetail began with a simple idea: to create a shopping experience that prioritizes quality, design, and customer satisfaction. Founded in 2018, we've grown from a small startup to a beloved brand with customers worldwide.
+                </p>
+                <p className="mt-4 text-lg text-gray-500">
+                  Our team of passionate designers and curators search the globe for exceptional products that combine functionality with beautiful aesthetics. We believe that everyday items should bring joy and enhance your lifestyle.
+                </p>
+                <p className="mt-4 text-lg text-gray-500">
+                  From premium watches to minimalist home goods, every item in our collection is carefully selected to ensure it meets our high standards for quality and design excellence.
+                </p>
+              </>
+            )}
           </div>
           <div className="mt-10 lg:mt-0">
             <div className="aspect-w-16 aspect-h-9 rounded-lg overflow-hidden">

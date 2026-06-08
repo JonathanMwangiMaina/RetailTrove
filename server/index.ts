@@ -61,12 +61,11 @@ app.use((req, res, next) => {
     await seed();
     await updateProducts();
     await updateProducts2();
-
-    // Seed default banner if none exists
     await storage.ensureBanner();
-
-    // Seed default admin user if no users exist
     await storage.ensureDefaultAdmin(hashPassword);
+    await storage.ensureSiteContent();
+    await storage.ensureSiteSettings();
+    await storage.ensureDefaultFaqs();
   } catch (error) {
     console.error("Error initializing database:", error);
   }
