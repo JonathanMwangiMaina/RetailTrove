@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertCartItemSchema, insertOrderSchema, insertOrderItemSchema, insertProductSchema, insertFaqSchema } from "@shared/schema";
+import { insertCartItemSchema, insertOrderSchema, insertOrderItemSchema, insertProductSchema, insertFaqSchema, insertNewsletterSubscriberSchema } from "@shared/schema";
 import { z } from "zod";
 import { hashPassword, comparePassword, requireAuth, requireRole } from "./auth";
 
@@ -593,6 +593,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(await storage.getAllOrders());
     } catch {
       res.status(500).json({ message: "Failed to fetch orders" });
+    }
+  });
+
+  // ── Newsletter ────────────────────────────────────────────────────────────
+
+  app.post("/api/newsletter/subscribe", async (req: Request, res: Response) => {
+    try {
+      const result = insertNewsletterSubscriberSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ message: "Invalid email address", errors: result.error.format() });
+      }
+
+      // Check if email already exists
+      const existing = await storage.getNewsletterSubscriberByEmail(result.data.email);
+      if (existing) {
+        if (existing.status === "unsubscribed") {
+          // Reactivate subscription
+          const updated = await storage.updateNewsletterSubscriber(existing.id, { status: "active" });
+          return res.json({ message: "Welcome back! You've been resubscribed to our newsletter.", subscriber: updated });
+        }
+        return res.status(409).json({ message: "You're already subscribed to our newsletter!" });
+      }
+
+      const subscriber = await storage.createNewsletterSubscriber(result.data);
+      res.status(201).json({ message: "Thank you for subscribing to our newsletter!", subscriber });
+    } catch (error) {
+      console.error("Newsletter subscription error:", error);
+      res.status(500).json({ message: "Failed to subscribe. Please try again." });
+    }
+  });
+
+  app.get("/api/admin/newsletter/subscribers", requireRole("admin"), async (_req: Request, res: Response) => {
+    try {
+      res.json(await storage.getAllNewsletterSubscribers());
+    } catch {
+      res.status(500).json({ message: "Failed to fetch subscribers" });
+    }
+  });
+
+  app.delete("/api/admin/newsletter/subscribers/:id", requireRole("admin"), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid subscriber ID" });
+      const removed = await storage.deleteNewsletterSubscriber(id);
+      if (!removed) return res.status(404).json({ message: "Subscriber not found" });
+      res.status(204).end();
+    } catch {
+      res.status(500).json({ message: "Failed to delete subscriber" });
     }
   });
 

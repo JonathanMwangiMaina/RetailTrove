@@ -9,6 +9,7 @@ import {
   SiteContent,
   SiteSetting,
   Faq, InsertFaq,
+  NewsletterSubscriber, InsertNewsletterSubscriber,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -74,6 +75,13 @@ export interface IStorage {
   updateFaq(id: number, data: Partial<Faq>): Promise<Faq | undefined>;
   deleteFaq(id: number): Promise<boolean>;
   ensureDefaultFaqs(): Promise<void>;
+
+  // Newsletter
+  getAllNewsletterSubscribers(): Promise<NewsletterSubscriber[]>;
+  getNewsletterSubscriberByEmail(email: string): Promise<NewsletterSubscriber | undefined>;
+  createNewsletterSubscriber(data: InsertNewsletterSubscriber): Promise<NewsletterSubscriber>;
+  updateNewsletterSubscriber(id: number, data: Partial<NewsletterSubscriber>): Promise<NewsletterSubscriber | undefined>;
+  deleteNewsletterSubscriber(id: number): Promise<boolean>;
 
   // Seeding
   ensureDefaultAdmin(hashPassword: (pw: string) => Promise<string>): Promise<void>;
@@ -241,6 +249,14 @@ export class MemStorage implements IStorage {
   }
   async deleteFaq(id: number) { return this.faqsMap.delete(id); }
   async ensureDefaultFaqs() {}
+
+  async getAllNewsletterSubscribers() { return []; }
+  async getNewsletterSubscriberByEmail(_email: string) { return undefined; }
+  async createNewsletterSubscriber(data: InsertNewsletterSubscriber): Promise<NewsletterSubscriber> {
+    return { id: 1, ...data, status: "active", subscribedAt: new Date() };
+  }
+  async updateNewsletterSubscriber(_id: number, _data: Partial<NewsletterSubscriber>) { return undefined; }
+  async deleteNewsletterSubscriber(_id: number) { return false; }
 
   async ensureDefaultAdmin(_hashPassword: (pw: string) => Promise<string>) {}
 }

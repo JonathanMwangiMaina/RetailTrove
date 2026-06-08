@@ -44,30 +44,30 @@ export default function Footer() {
           <div>
             <h3 className="text-white font-semibold text-base mb-4">Shop</h3>
             <ul className="space-y-3">
-              <li><Link className="text-primary-300 hover:text-white text-sm" href="/shop">All Products</Link></li>
-              <li><Link className="text-primary-300 hover:text-white text-sm" href="/shop?category=New%20Arrivals">New Arrivals</Link></li>
-              <li><Link className="text-primary-300 hover:text-white text-sm" href="/shop?featured=true">Featured</Link></li>
-              <li><Link className="text-primary-300 hover:text-white text-sm" href="/shop?sale=true">Sales &amp; Discounts</Link></li>
+              <li><a className="text-primary-300 hover:text-white text-sm" href="/shop" target="_blank" rel="noopener noreferrer">All Products</a></li>
+              <li><a className="text-primary-300 hover:text-white text-sm" href="/shop?category=New%20Arrivals" target="_blank" rel="noopener noreferrer">New Arrivals</a></li>
+              <li><a className="text-primary-300 hover:text-white text-sm" href="/shop?featured=true" target="_blank" rel="noopener noreferrer">Featured</a></li>
+              <li><a className="text-primary-300 hover:text-white text-sm" href="/shop?sale=true" target="_blank" rel="noopener noreferrer">Sales &amp; Discounts</a></li>
             </ul>
           </div>
 
           <div>
             <h3 className="text-white font-semibold text-base mb-4">About</h3>
             <ul className="space-y-3">
-              <li><Link className="text-primary-300 hover:text-white text-sm" href="/about">Our Story</Link></li>
-              <li><Link className="text-primary-300 hover:text-white text-sm" href="/faq">FAQ</Link></li>
-              <li><Link className="text-primary-300 hover:text-white text-sm" href="/contact">Contact Us</Link></li>
+              <li><a className="text-primary-300 hover:text-white text-sm" href="/about" target="_blank" rel="noopener noreferrer">Our Story</a></li>
+              <li><a className="text-primary-300 hover:text-white text-sm" href="/faq" target="_blank" rel="noopener noreferrer">FAQ</a></li>
+              <li><a className="text-primary-300 hover:text-white text-sm" href="/contact" target="_blank" rel="noopener noreferrer">Contact Us</a></li>
             </ul>
           </div>
 
           <div>
             <h3 className="text-white font-semibold text-base mb-4">Customer Service</h3>
             <ul className="space-y-3">
-              <li><Link className="text-primary-300 hover:text-white text-sm" href="/contact">Contact Us</Link></li>
-              <li><Link className="text-primary-300 hover:text-white text-sm" href="/faq">FAQ</Link></li>
-              <li><Link className="text-primary-300 hover:text-white text-sm" href="/faq">Shipping &amp; Returns</Link></li>
-              <li><Link className="text-primary-300 hover:text-white text-sm" href="/faq">Privacy Policy</Link></li>
-              <li><Link className="text-primary-300 hover:text-white text-sm" href="/faq">Terms &amp; Conditions</Link></li>
+              <li><a className="text-primary-300 hover:text-white text-sm" href="/contact" target="_blank" rel="noopener noreferrer">Contact Us</a></li>
+              <li><a className="text-primary-300 hover:text-white text-sm" href="/faq" target="_blank" rel="noopener noreferrer">FAQ</a></li>
+              <li><a className="text-primary-300 hover:text-white text-sm" href="/faq" target="_blank" rel="noopener noreferrer">Shipping &amp; Returns</a></li>
+              <li><a className="text-primary-300 hover:text-white text-sm" href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a></li>
+              <li><a className="text-primary-300 hover:text-white text-sm" href="/faq" target="_blank" rel="noopener noreferrer">Terms &amp; Conditions</a></li>
             </ul>
           </div>
         </div>

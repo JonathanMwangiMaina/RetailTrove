@@ -9,11 +9,13 @@ import {
   type SiteContent,
   type SiteSetting,
   type Faq, type InsertFaq,
+  type NewsletterSubscriber, type InsertNewsletterSubscriber,
   products, cartItems, orders, orderItems, users, bannerSettings,
   userVisits,
   siteContent as siteContentTable,
   siteSettings as siteSettingsTable,
   faqs,
+  newsletterSubscribers,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, ilike, or, desc, asc } from "drizzle-orm";
@@ -431,6 +433,33 @@ export class DatabaseStorage implements IStorage {
       }
       console.log("Default FAQs seeded");
     }
+  }
+
+  // ── Newsletter ──────────────────────────────────────────────────────────────
+
+  async getAllNewsletterSubscribers(): Promise<NewsletterSubscriber[]> {
+    return db.select().from(newsletterSubscribers).orderBy(desc(newsletterSubscribers.subscribedAt));
+  }
+
+  async getNewsletterSubscriberByEmail(email: string): Promise<NewsletterSubscriber | undefined> {
+    const [subscriber] = await db.select().from(newsletterSubscribers).where(eq(newsletterSubscribers.email, email)).limit(1);
+    return subscriber;
+  }
+
+  async createNewsletterSubscriber(data: InsertNewsletterSubscriber): Promise<NewsletterSubscriber> {
+    const [subscriber] = await db.insert(newsletterSubscribers).values(data).returning();
+    return subscriber;
+  }
+
+  async updateNewsletterSubscriber(id: number, data: Partial<NewsletterSubscriber>): Promise<NewsletterSubscriber | undefined> {
+    const { id: _id, subscribedAt: _sa, ...updateData } = data as any;
+    const [updated] = await db.update(newsletterSubscribers).set(updateData).where(eq(newsletterSubscribers.id, id)).returning();
+    return updated;
+  }
+
+  async deleteNewsletterSubscriber(id: number): Promise<boolean> {
+    const [deleted] = await db.delete(newsletterSubscribers).where(eq(newsletterSubscribers.id, id)).returning({ id: newsletterSubscribers.id });
+    return !!deleted;
   }
 
   // ── Seeding ─────────────────────────────────────────────────────────────────

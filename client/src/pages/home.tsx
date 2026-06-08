@@ -1,21 +1,69 @@
 import { Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/components/ui/product-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StarIcon } from "lucide-react";
 import { Product } from "@shared/schema";
+import { useState } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Home() {
+  const [newsletterEmail, setNewsletterEmail] = useState("");
+  const { toast } = useToast();
+
   // Fetch featured products
   const { data: featuredProducts, isLoading: featuredLoading } = useQuery<Product[]>({
     queryKey: ["/api/products/featured"],
   });
-  
+
   // Fetch new arrivals
-  const { data: newArrivals, isLoading: newArrivalsLoading } = useQuery<Product[]>({
+  const { data: newArrivals, isLoading: newArrivalsLoading} = useQuery<Product[]>({
     queryKey: ["/api/products/new-arrivals"],
   });
+
+  // Newsletter subscription mutation
+  const newsletterMutation = useMutation({
+    mutationFn: async (email: string) => {
+      const response = await fetch("/api/newsletter/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Subscription failed");
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Success!",
+        description: data.message,
+      });
+      setNewsletterEmail("");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Subscription failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleNewsletterSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newsletterEmail && newsletterEmail.includes("@")) {
+      newsletterMutation.mutate(newsletterEmail);
+    } else {
+      toast({
+        title: "Invalid email",
+        description: "Please enter a valid email address",
+        variant: "destructive",
+      });
+    }
+  };
   
   // List of categories
   const categories = [
@@ -38,7 +86,7 @@ export default function Home() {
         <div className="absolute inset-0 flex items-center z-20">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full text-white">
             <div className="max-w-xl">
-              <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">Summer Collection 2023</h1>
+              <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">Summer Collection 2026</h1>
               <p className="mt-4 text-xl">Discover our latest collection of premium products for your lifestyle.</p>
               <div className="mt-8 flex gap-x-4">
                 <Link href="/shop">
@@ -255,26 +303,30 @@ export default function Home() {
           <h2 className="text-3xl font-bold text-white">Subscribe to our newsletter</h2>
           <p className="mt-4 text-xl text-secondary-100">Get the latest updates on new products and special sales</p>
           <div className="mt-8 max-w-md mx-auto">
-            <form className="sm:flex">
+            <form className="sm:flex" onSubmit={handleNewsletterSubmit}>
               <label htmlFor="email-address" className="sr-only">Email address</label>
-              <input 
-                id="email-address" 
-                name="email" 
-                type="email" 
-                autoComplete="email" 
-                required 
-                className="w-full rounded-md border-gray-300 px-5 py-3 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-secondary-700" 
+              <input
+                id="email-address"
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                value={newsletterEmail}
+                onChange={(e) => setNewsletterEmail(e.target.value)}
+                disabled={newsletterMutation.isPending}
+                className="w-full rounded-md border-gray-300 px-5 py-3 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-secondary-700 disabled:opacity-50"
                 placeholder="Enter your email"
               />
-              <Button 
-                type="submit" 
-                className="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto flex items-center justify-center px-5 py-3 border border-transparent text-base font-medium rounded-md text-secondary-700 bg-white hover:bg-secondary-50 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-secondary-700"
+              <Button
+                type="submit"
+                disabled={newsletterMutation.isPending}
+                className="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto flex items-center justify-center px-5 py-3 border border-transparent text-base font-medium rounded-md text-secondary-700 bg-white hover:bg-secondary-50 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-secondary-700 disabled:opacity-50"
               >
-                Subscribe
+                {newsletterMutation.isPending ? "Subscribing..." : "Subscribe"}
               </Button>
             </form>
             <p className="mt-3 text-sm text-secondary-200">
-              We care about your data. Read our <span className="font-medium text-white underline cursor-pointer" onClick={() => alert('Privacy Policy - Coming Soon')}>Privacy Policy</span>.
+              We care about your data. Read our <Link href="/privacy"><span className="font-medium text-white underline cursor-pointer">Privacy Policy</span></Link>.
             </p>
           </div>
         </div>

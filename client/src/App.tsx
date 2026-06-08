@@ -11,6 +11,7 @@ import OrderConfirmation from "@/pages/order-confirmation";
 import About from "@/pages/about";
 import Contact from "@/pages/contact";
 import FaqPage from "@/pages/faq";
+import Privacy from "@/pages/privacy";
 import LoginPage from "@/pages/login";
 import AdminPage from "@/pages/admin";
 import VendorPage from "@/pages/vendor";
@@ -47,6 +48,7 @@ function Router() {
         <Route path="/about" component={About} />
         <Route path="/contact" component={Contact} />
         <Route path="/faq" component={FaqPage} />
+        <Route path="/privacy" component={Privacy} />
         <Route path="/login" component={LoginPage} />
         <Route path="/admin" component={AdminPage} />
         <Route path="/vendor" component={VendorPage} />
