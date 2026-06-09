@@ -74,6 +74,27 @@ Role:     customer
 
 ---
 
+### 5. Customer Account #3 (Jane Doe)
+
+**Credentials:**
+- Email: `janedoe@example.com`
+- Password: `Jane123!`
+- Role: `customer`
+- Status: `active`
+
+**Use Case:**
+- Additional customer test account
+- Alternative customer for testing multi-user scenarios
+- Example account with external domain
+
+**Permissions:**
+- Same as other customer accounts
+- Browse and shop catalog
+- Manage cart and checkout
+- View order history
+
+---
+
 ## 🔐 Password Requirements
 
 All sample passwords meet the following criteria:

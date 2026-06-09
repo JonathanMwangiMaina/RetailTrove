@@ -55,6 +55,15 @@ export async function seedSampleUsers() {
       status: "active",
       isApproved: true,
     },
+    {
+      email: "janedoe@example.com",
+      password: "Jane123!",
+      name: "Jane Doe",
+      role: "customer",
+      avatarUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=janedoe",
+      status: "active",
+      isApproved: true,
+    },
   ];
 
   try {
@@ -114,6 +123,11 @@ export const SAMPLE_CREDENTIALS = {
   demo: {
     email: "demo@retailtrove.com",
     password: "Demo123!",
+    role: "customer",
+  },
+  janedoe: {
+    email: "janedoe@example.com",
+    password: "Jane123!",
     role: "customer",
   },
 };
