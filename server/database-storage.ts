@@ -17,9 +17,9 @@ import {
   faqs,
   newsletterSubscribers,
 } from "@shared/schema";
-import { db } from "./db";
+import { db } from "./db.js";
 import { eq, and, ilike, or, desc, asc } from "drizzle-orm";
-import { IStorage } from "./storage";
+import { IStorage } from "./storage.js";
 
 const DEFAULT_SITE_CONTENT: Record<string, string> = {
   about: `About RetailTrove

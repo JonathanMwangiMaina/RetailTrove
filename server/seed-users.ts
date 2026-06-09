@@ -1,6 +1,6 @@
-import { db } from "./db";
+import { db } from "./db.js";
 import { users } from "@shared/schema";
-import { hashPassword } from "./auth";
+import { hashPassword } from "./auth.js";
 
 /**
  * Seeds sample user accounts for testing

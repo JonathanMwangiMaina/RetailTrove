@@ -1,10 +1,10 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import { storage } from "./storage.js";
 import { insertCartItemSchema, insertOrderSchema, insertOrderItemSchema, insertProductSchema, insertFaqSchema, insertNewsletterSubscriberSchema } from "@shared/schema";
 import { z } from "zod";
-import { hashPassword, comparePassword, requireAuth, requireRole } from "./auth";
-import { sendWelcomeEmail } from "./email";
+import { hashPassword, comparePassword, requireAuth, requireRole } from "./auth.js";
+import { sendWelcomeEmail } from "./email.js";
 
 export async function registerRoutes(app: Express): Promise<Server> {
 

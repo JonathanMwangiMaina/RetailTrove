@@ -261,5 +261,5 @@ export class MemStorage implements IStorage {
   async ensureDefaultAdmin(_hashPassword: (pw: string) => Promise<string>) {}
 }
 
-import { DatabaseStorage } from "./database-storage";
+import { DatabaseStorage } from "./database-storage.js";
 export const storage = new DatabaseStorage();
