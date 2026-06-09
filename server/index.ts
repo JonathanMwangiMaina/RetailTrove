@@ -1,6 +1,7 @@
 // Load environment variables first, before any other imports
 // Only load .env in development - Vercel injects env vars automatically
 import dotenv from "dotenv";
+import { createServer } from "http";
 if (process.env.NODE_ENV !== "production") {
   dotenv.config();
 }
@@ -121,7 +122,7 @@ if (!process.env.VERCEL) {
   (async () => {
     await initializeApp();
     const port = parseInt(process.env.PORT || "3000", 10);
-    const server = require('http').createServer(app);
+    const server = createServer(app);
     server.listen(port, "0.0.0.0", () => {
       log(`serving on port ${port}`);
     });
