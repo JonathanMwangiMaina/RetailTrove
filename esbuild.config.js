@@ -12,8 +12,10 @@ await build({
   bundle: true,
   format: 'esm',
   outdir: 'dist',
+  tsconfig: './tsconfig.json',
   alias: {
     '@shared/schema': resolve(__dirname, 'shared/schema.ts'),
-    '@shared': resolve(__dirname, 'shared'),
+    '@shared/types': resolve(__dirname, 'shared/types.ts'),
+    '@shared': resolve(__dirname, 'shared/index.ts'),
   },
 });
