@@ -151,7 +151,7 @@ export class MemStorage implements IStorage {
   }
   async addCartItem(cartItem: InsertCartItem): Promise<CartItem> {
     const id = this.currentCartItemId++;
-    const item = { id, ...cartItem };
+    const item = { id, ...cartItem, quantity: cartItem.quantity ?? 0 };
     this.cartItems.set(id, item);
     return item;
   }
