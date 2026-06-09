@@ -10,10 +10,6 @@ import session from "express-session";
 import MemoryStore from "memorystore";
 import { registerRoutes } from "./routes.js";
 import { setupVite, serveStatic, log } from "./vite.js";
-import { seed } from "./seed-db.js";
-import { seedSampleUsers } from "./seed-users.js";
-import { updateProducts } from "./update-products.js";
-import { updateProducts2 } from "./update-products-2.js";
 import { storage } from "./storage.js";
 import { hashPassword } from "./auth.js";
 
