@@ -15,7 +15,6 @@ await build({
   tsconfig: './tsconfig.json',
   alias: {
     '@shared/schema': resolve(__dirname, 'shared/schema.ts'),
-    '@shared/types': resolve(__dirname, 'shared/types.ts'),
-    '@shared': resolve(__dirname, 'shared/index.ts'),
+    '@shared': resolve(__dirname, 'shared'),
   },
 });
