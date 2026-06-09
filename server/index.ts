@@ -11,6 +11,7 @@ import MemoryStore from "memorystore";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { seed } from "./seed-db";
+import { seedSampleUsers } from "./seed-users";
 import { updateProducts } from "./update-products";
 import { updateProducts2 } from "./update-products-2";
 import { storage } from "./storage";
@@ -74,6 +75,7 @@ async function initializeApp() {
   initPromise = (async () => {
     try {
       await seed();
+      await seedSampleUsers();
       await updateProducts();
       await updateProducts2();
       await storage.ensureBanner();
