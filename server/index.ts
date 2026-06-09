@@ -63,57 +63,68 @@ app.use((req, res, next) => {
   next();
 });
 
-// Initialize the app
+// Initialize the app (lazy initialization for serverless)
 let isInitialized = false;
+let initPromise: Promise<void> | null = null;
 
 async function initializeApp() {
   if (isInitialized) return;
+  if (initPromise) return initPromise;
 
-  try {
-    await seed();
-    await updateProducts();
-    await updateProducts2();
-    await storage.ensureBanner();
-    await storage.ensureDefaultAdmin(hashPassword);
-    await storage.ensureSiteContent();
-    await storage.ensureSiteSettings();
-    await storage.ensureDefaultFaqs();
-    log("Database initialized successfully");
-  } catch (error) {
-    log("⚠️  Warning: Database initialization failed. Server will start but database features will be unavailable.");
-    console.error("Database error:", error instanceof Error ? error.message : error);
-  }
+  initPromise = (async () => {
+    try {
+      await seed();
+      await updateProducts();
+      await updateProducts2();
+      await storage.ensureBanner();
+      await storage.ensureDefaultAdmin(hashPassword);
+      await storage.ensureSiteContent();
+      await storage.ensureSiteSettings();
+      await storage.ensureDefaultFaqs();
+      log("Database initialized successfully");
+    } catch (error) {
+      log("⚠️  Warning: Database initialization failed. Server will start but database features will be unavailable.");
+      console.error("Database error:", error instanceof Error ? error.message : error);
+    }
 
-  const server = await registerRoutes(app);
+    const server = await registerRoutes(app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-    res.status(status).json({ message });
-    throw err;
-  });
+    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+      const status = err.status || err.statusCode || 500;
+      const message = err.message || "Internal Server Error";
+      res.status(status).json({ message });
+      throw err;
+    });
 
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
-  }
+    if (app.get("env") === "development") {
+      await setupVite(app, server);
+    } else {
+      serveStatic(app);
+    }
 
-  isInitialized = true;
-  return server;
+    isInitialized = true;
+  })();
+
+  await initPromise;
 }
 
-// For Vercel serverless deployment
+// Middleware to ensure initialization on first request (for serverless)
 if (process.env.VERCEL) {
-  initializeApp().catch(console.error);
+  app.use(async (req, res, next) => {
+    if (!isInitialized) {
+      await initializeApp();
+    }
+    next();
+  });
 }
 
 // For local development
 if (!process.env.VERCEL) {
   (async () => {
-    const server = await initializeApp();
+    await initializeApp();
     const port = parseInt(process.env.PORT || "3000", 10);
-    server!.listen(port, "0.0.0.0", () => {
+    const server = require('http').createServer(app);
+    server.listen(port, "0.0.0.0", () => {
       log(`serving on port ${port}`);
     });
   })();
