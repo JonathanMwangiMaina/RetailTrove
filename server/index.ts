@@ -74,10 +74,10 @@ async function initializeApp() {
 
   initPromise = (async () => {
     try {
-      await seed();
-      await seedSampleUsers();
-      await updateProducts();
-      await updateProducts2();
+    //  await seed();
+    //  await seedSampleUsers();
+    //  await updateProducts();
+    //  await updateProducts2();
       await storage.ensureBanner();
       await storage.ensureDefaultAdmin(hashPassword);
       await storage.ensureSiteContent();
