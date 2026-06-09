@@ -8,14 +8,14 @@ if (process.env.NODE_ENV !== "production") {
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import MemoryStore from "memorystore";
-import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
-import { seed } from "./seed-db";
-import { seedSampleUsers } from "./seed-users";
-import { updateProducts } from "./update-products";
-import { updateProducts2 } from "./update-products-2";
-import { storage } from "./storage";
-import { hashPassword } from "./auth";
+import { registerRoutes } from "./routes.js";
+import { setupVite, serveStatic, log } from "./vite.js";
+import { seed } from "./seed-db.js";
+import { seedSampleUsers } from "./seed-users.js";
+import { updateProducts } from "./update-products.js";
+import { updateProducts2 } from "./update-products-2.js";
+import { storage } from "./storage.js";
+import { hashPassword } from "./auth.js";
 
 const SessionStore = MemoryStore(session);
 
