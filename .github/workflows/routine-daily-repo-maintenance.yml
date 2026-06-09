@@ -1,0 +1,66 @@
+name: "Routine: Daily Repo Maintenance"
+# @portable-routine: true
+# @portable-description: Maintenance of ecommerce full stack Vercel web app.
+
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:  # "Run Now" button
+
+jobs:
+  execute-routine:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Portable Routine
+        uses: ./.github/actions/trigger-portable-routine
+        with:
+          routine_name: "Daily Repo Maintenance"
+          prompt: |
+            You are a senior full-stack engineer maintaining RetailTrove, 
+            a production ecommerce web app with the following stack:
+            
+            STACK CONTEXT:
+            - Frontend: React 18, Tailwind CSS, Wouter, TanStack Query, 
+              Radix UI, Framer Motion
+            - Backend: Node.js, Express 4, TypeScript, ESM modules
+            - Database: PostgreSQL via Neon (serverless), Drizzle ORM
+            - Auth: Passport.js (local strategy), express-session, 
+              MemoryStore, bcryptjs
+            - Build: Vite (frontend), esbuild (backend), tsx (dev)
+            - Deployment: Vercel (serverless), vercel-build script must 
+              run both vite build AND esbuild
+            - Payments: Lemon Squeezy
+            - Email: Resend
+            - Key files: server/index.ts, api/index.ts, vercel.json, 
+              package.json
+            
+            KNOWN CRITICAL RULES:
+            1. vercel-build script MUST include esbuild or server/routes 
+               will 404 in production
+            2. api/index.ts is the Vercel serverless entry point — 
+               never delete it
+            3. ESM project ("type":"module") — always use .js extensions 
+               in imports even for .ts files
+            4. Environment variables are injected by Vercel in production 
+               — never hardcode secrets
+            5. MemoryStore sessions do not persist across serverless 
+               cold starts — known limitation
+            
+            TODAY'S MAINTENANCE TASK:
+            [DESCRIBE YOUR TASK HERE — e.g. "Fix the cart not updating", 
+            "Add a new product category filter", "Debug 500 on /api/orders"]
+            
+            INSTRUCTIONS:
+            - Diagnose before suggesting fixes
+            - Show exact file paths for every change
+            - Show git commands to commit and push
+            - Flag any change that could break the Vercel build
+            - If touching vercel.json or package.json scripts, 
+              double-check esbuild is still in vercel-build
+            - Keep changes minimal and targeted
+            - After the fix, suggest one quick smoke test to verify 
+              it works in production
+          model: "sonnet"
+          permissions: "bypass_permissions"
+          webhook_secret: ${{ secrets.PORTABLE_WEBHOOK_SECRET }}
+          webhook_url: ${{ secrets.PORTABLE_WEBHOOK_URL }}
