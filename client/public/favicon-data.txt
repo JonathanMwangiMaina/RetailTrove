@@ -1,0 +1,4 @@
+# Favicon created: shopping bag with RT monogram
+# Colors: Primary blue gradient (#1e40af to #1e3a8a)
+# Format: SVG (scalable, modern browsers)
+# Fallback: Will create PNG versions if needed
