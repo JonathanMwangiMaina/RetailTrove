@@ -1,5 +1,9 @@
 import { build } from 'esbuild';
-import { resolve } from 'path';
+import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 await build({
   entryPoints: ['server/index.ts'],
@@ -9,7 +13,7 @@ await build({
   format: 'esm',
   outdir: 'dist',
   alias: {
-    '@shared/schema': resolve('./shared/schema.ts'),
-    '@shared': resolve('./shared'),
+    '@shared/schema': resolve(__dirname, 'shared/schema.ts'),
+    '@shared': resolve(__dirname, 'shared'),
   },
 });
