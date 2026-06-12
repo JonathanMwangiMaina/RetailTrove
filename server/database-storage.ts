@@ -16,7 +16,7 @@ import {
   siteSettings as siteSettingsTable,
   faqs,
   newsletterSubscribers,
-} from "@shared/schema";
+} from "../shared/schema.js";
 import { db } from "./db.js";
 import { eq, and, ilike, or, desc, asc } from "drizzle-orm";
 import { IStorage } from "./storage.js";
