@@ -10,7 +10,7 @@ import {
   SiteSetting,
   Faq, InsertFaq,
   NewsletterSubscriber, InsertNewsletterSubscriber,
-} from "@shared/schema";
+} from "../shared/schema.js";
 
 export interface IStorage {
   // Products
