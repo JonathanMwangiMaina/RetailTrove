@@ -6,23 +6,23 @@ Quick reference checklist for deploying RetailTrove to Vercel.
 
 ## Pre-Deployment
 
-- [ ] Code committed to Git
-- [ ] Repository pushed to GitHub
-- [ ] Supabase database schema imported
-- [ ] Database connection string tested
-- [ ] All secrets documented (not in code)
+- [x] Code committed to Git
+- [x] Repository pushed to GitHub
+- [x] Supabase database schema imported
+- [x] Database connection string tested
+- [x] All secrets documented (not in code)
 
 ---
 
 ## Vercel Setup
 
-- [ ] Vercel account created
-- [ ] GitHub connected to Vercel
-- [ ] Repository imported to Vercel
-- [ ] Framework preset configured
-- [ ] Build command set: `npm run vercel-build`
-- [ ] Output directory set: `dist/public`
-- [ ] Node.js version set: 20.x
+- [x] Vercel account created
+- [x] GitHub connected to Vercel
+- [x] Repository imported to Vercel
+- [x] Framework preset configured
+- [x] Build command set: `npm run vercel-build`
+- [x] Output directory set: `dist/public`
+- [x] Node.js version set: 24.x
 
 ---
 
@@ -30,14 +30,13 @@ Quick reference checklist for deploying RetailTrove to Vercel.
 
 Copy these to Vercel **Settings** → **Environment Variables**:
 
-- [ ] `DATABASE_URL` = `postgresql://postgres:BeMyGuest@2001@db.bdkvujsvyttdzbiwexks.supabase.co:5432/postgres`
-- [ ] `PGHOST` = `db.bdkvujsvyttdzbiwexks.supabase.co`
-- [ ] `PGPORT` = `5432`
-- [ ] `PGDATABASE` = `postgres`
-- [ ] `PGUSER` = `postgres`
-- [ ] `PGPASSWORD` = `BeMyGuest@2001`
-- [ ] `NODE_ENV` = `production`
-- [ ] `SESSION_SECRET` = `LFTUb7/lJDYY65WIFVO/z66Wz6KwnJpio23R/Lfg1KG3GeThH1LF6xJmFN6u96ga0d2qt/1VRTv+EWeHyB/A+w==`
+- [x] `DATABASE_URL` = `postgresql://postgres:@db.bdkvujsvyttdzbiwexks.supabase.co:5432/postgres`
+- [x] `PGHOST` = `db.bdkvujsvyttdzbiwexks.supabase.co`
+- [x] `PGPORT` = `5432`
+- [x] `PGDATABASE` = `postgres`
+- [x] `PGUSER` = `postgres`
+- [x] `PGPASSWORD` = ``
+- [x] `SESSION_SECRET` = ``
 
 **Tip:** Check all three environments (Production, Preview, Development) for each variable.
 
@@ -45,18 +44,18 @@ Copy these to Vercel **Settings** → **Environment Variables**:
 
 ## First Deployment
 
-- [ ] Clicked "Deploy" in Vercel
-- [ ] Build succeeded (green checkmark)
-- [ ] Deployment URL accessible
+- [x] Clicked "Deploy" in Vercel
+- [x] Build succeeded (green checkmark)
+- [x] Deployment URL accessible
 - [ ] No 500 errors on homepage
 
 ---
 
 ## Post-Deployment Testing
 
-- [ ] Homepage loads
+- [x] Homepage loads
 - [ ] Products display (if seeded)
-- [ ] Navigation works (Shop, About, Contact)
+- [x] Navigation works (Shop, About, Contact)
 - [ ] Search functionality works
 - [ ] Cart drawer opens
 - [ ] Add to cart works
@@ -76,7 +75,7 @@ Choose one method:
 
 **Method B: Manual from local machine**
 ```bash
-export DATABASE_URL="postgresql://postgres:BeMyGuest@2001@db.bdkvujsvyttdzbiwexks.supabase.co:5432/postgres"
+export DATABASE_URL="postgresql://postgres:@db.bdkvujsvyttdzbiwexks.supabase.co:5432/postgres"
 node --loader tsx server/seed-db.ts
 ```
 - [ ] Seeding completed successfully
@@ -108,7 +107,7 @@ node --loader tsx server/seed-db.ts
 
 - [ ] Domain purchased/ready
 - [ ] DNS records configured:
-  - [ ] A record: `@` → `76.76.21.21`
+  - [ ] A record: `@` → `8.8.8.8`
   - [ ] CNAME: `www` → `cname.vercel-dns.com`
 - [ ] Domain added in Vercel
 - [ ] SSL certificate provisioned (automatic)
@@ -141,11 +140,11 @@ After successful deployment:
 
 If you encountered issues:
 
-- [ ] Checked Vercel function logs
-- [ ] Verified environment variables
+- [x] Checked Vercel function logs
+- [x] Verified environment variables
 - [ ] Tested database connection locally
-- [ ] Reviewed VERCEL_DEPLOYMENT.md troubleshooting section
-- [ ] Redeployed after fixes
+- [x] Reviewed VERCEL_DEPLOYMENT.md troubleshooting section
+- [x] Redeployed after fixes
 
 ---
 
