@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage.js";
-import { insertCartItemSchema, insertOrderSchema, insertOrderItemSchema, insertProductSchema, insertFaqSchema, insertNewsletterSubscriberSchema } from "@shared/schema";
+import { insertCartItemSchema, insertOrderSchema, insertOrderItemSchema, insertProductSchema, insertFaqSchema, insertNewsletterSubscriberSchema } from "../shared/schema.js";
 import { z } from "zod";
 import { hashPassword, comparePassword, requireAuth, requireRole } from "./auth.js";
 import { sendWelcomeEmail } from "./email.js";
