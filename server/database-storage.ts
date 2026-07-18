@@ -137,6 +137,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getProductsByCategory(category: string): Promise<Product[]> {
+    if (category === "All Products") {
+      return db.select().from(products).where(eq(products.approvalStatus, "approved"));
+    }
     return db.select().from(products).where(
       and(eq(products.approvalStatus, "approved"), eq(products.category, category))
     );
