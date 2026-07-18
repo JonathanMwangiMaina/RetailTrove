@@ -1,6 +1,6 @@
 # RetailTrove — E-Commerce Platform
 
-> **Snapshot document:** This README captures the architecture, codebase structure, and functionality of RetailTrove **as it stood before the planned migration** to Supabase PostgreSQL, role-based authentication, Lemon Squeezy, and M-Pesa. It serves as the authoritative baseline reference for that migration effort.
+> **Status:** Phase 1 (Authentication, RBAC, and Supabase PostgreSQL migration) is complete. Phase 2 (Payments — Lemon Squeezy + M-Pesa) and Phase 3 (Hardening) are planned. This README is current as of **v0.3.0** (2026-07-18).
 
 ---
 
@@ -37,7 +37,7 @@
 |---|---|---|
 | Node.js | 20.x LTS | [nodejs.org](https://nodejs.org) |
 | npm | 10.x | Bundled with Node.js 20 |
-| PostgreSQL | 15+ | Or a provisioned Neon / Replit database |
+| PostgreSQL | 15+ | Supabase Cloud (via Connection Pooler) or local instance |
 | Git | 2.x | For cloning and version control |
 
 ### Local Setup
@@ -52,7 +52,8 @@ npm install
 
 # 3. Configure environment variables
 cp .env.example .env
-# Open .env and fill in your DATABASE_URL and Postgres credentials
+# Open .env and fill in your DATABASE_URL (Supabase pooler connection string)
+# and SESSION_SECRET for secure cookie signing
 
 # 4. Push the database schema
 npm run db:push
@@ -123,20 +124,21 @@ The application is designed as a monorepo where the frontend Vite dev server and
 | tsx | TypeScript execution for Node | 4.22.4 | Current |
 | esbuild | Production bundler for server | 0.28.0 | Current |
 | express-session | Session management | 1.19.0 | Current |
-| connect-pg-simple | PostgreSQL-backed session store | 10.0.0 | Current |
-| memorystore | In-memory session store fallback | 1.6.8 | Current |
-| passport | Authentication middleware (scaffolded, unused) | 0.7.0 | Current |
-| passport-local | Local strategy (scaffolded, unused) | 1.0.0 | Current |
+| connect-pg-simple | PostgreSQL-backed session store (production) | 10.0.0 | Current |
+| bcryptjs | Password hashing (bcrypt) | 2.4.3 | Current |
+| memorystore | In-memory session store (unused — connect-pg-simple is active) | 1.6.8 | ⚠ Deprecated |
+| passport | Authentication middleware (scaffolded, unused — custom auth preferred) | 0.7.0 | ⚠ Deprecated |
+| passport-local | Local strategy (scaffolded, unused) | 1.0.0 | ⚠ Deprecated |
 
 ### Database & ORM
 
 | Technology | Purpose | Installed Version | Status |
 |---|---|---|---|
 | PostgreSQL | Relational database | 15+ (Replit-provisioned) | Current |
-| Neon Serverless | PostgreSQL driver with WebSocket support | 0.10.4 | 🔄 Replacing with Supabase |
-| Drizzle ORM | Type-safe SQL query builder & schema manager | 0.39.1 | 🔄 Replacing with Supabase client |
-| drizzle-zod | Auto-generates Zod schemas from Drizzle tables | 0.7.0 | 🔄 Replacing |
-| drizzle-kit | CLI tool for schema migrations (`db:push`) | 0.30.4 | 🔄 Replacing |
+| `pg` (node-postgres) | PostgreSQL driver — Supabase pooler compatible | 8.13.0 | Current |
+| Drizzle ORM | Type-safe SQL query builder & schema manager | 0.39.1 | Current (retained) |
+| drizzle-zod | Auto-generates Zod schemas from Drizzle tables | 0.7.0 | Current |
+| drizzle-kit | CLI tool for schema push (`db:push`) | 0.30.4 | Current |
 
 ### Developer Experience
 
@@ -204,14 +206,16 @@ retailtrove/
 │           └── utils.ts             # Tailwind class merging utility (cn)
 │
 ├── server/
-│   ├── index.ts                     # Express app bootstrap, middleware, startup sequence
-│   ├── routes.ts                    # All REST API route handlers
-│   ├── db.ts                        # Neon/Drizzle database connection initialisation
+│   ├── index.ts                     # Express bootstrap: session, auth, Vercel serverless support
+│   ├── routes.ts                    # All REST API route handlers (auth, admin, vendor, public)
+│   ├── db.ts                        # Supabase pooler pg Pool + Drizzle ORM connection
 │   ├── storage.ts                   # IStorage interface + MemStorage fallback class
-│   ├── database-storage.ts          # DatabaseStorage: PostgreSQL implementation of IStorage
-│   ├── seed-db.ts                   # Initial product seed (9 base products, idempotent)
-│   ├── update-products.ts           # Post-seed update: image URLs, beauty/jewellery products
-│   ├── update-products-2.ts         # Second wave: sporting goods, footwear, clothing additions
+│   ├── database-storage.ts          # DatabaseStorage: full PostgreSQL IStorage implementation
+│   ├── auth.ts                      # bcrypt password hashing + requireAuth / requireRole middleware
+│   ├── email.ts                     # Email sending utility (Resend/Nodemailer compatible)
+│   ├── seed-db.ts                   # Initial product seed (9 base products, idempotent) — currently unused
+│   ├── update-products.ts           # Post-seed product updater — currently unused
+│   ├── update-products-2.ts         # Second wave product seeder — currently unused
 │   ├── storage-new.ts               # Temporary draft file (scheduled for deletion)
 │   └── vite.ts                      # Vite dev server integration for unified serving
 │
@@ -245,15 +249,18 @@ Configured in `vite.config.ts` and `tsconfig.json`:
 
 ### Connection
 
-`server/db.ts` establishes a connection using **Neon's serverless PostgreSQL driver** with WebSocket support (required for Replit's environment). The connection string is consumed from the `DATABASE_URL` environment variable. Drizzle ORM wraps the connection pool and is injected with the full schema for relational query support.
+`server/db.ts` connects to **Supabase PostgreSQL** via the Connection Pooler (IPv4-compatible) using the standard `pg` (node-postgres) driver. This replaces the previous Neon serverless driver. The connection string is consumed from `DATABASE_URL`. SSL is configured with `rejectUnauthorized: false` for Supabase compatibility.
 
 ```typescript
 // server/db.ts
-import { Pool, neonConfig } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-serverless';
+import { Pool } from 'pg';
+import { drizzle } from 'drizzle-orm/node-postgres';
 
-neonConfig.webSocketConstructor = ws;
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+  max: 10,
+});
 export const db = drizzle(pool, { schema });
 ```
 
@@ -281,8 +288,30 @@ Stores the full product catalogue.
 | `featured` | `boolean` | DEFAULT false | Appears in homepage Featured Products section |
 | `new_arrival` | `boolean` | DEFAULT false | Appears in homepage New Arrivals section |
 | `in_stock` | `boolean` | DEFAULT true | Controls add-to-cart availability |
+| `stock_quantity` | `integer` | DEFAULT 0 | Available inventory units |
 | `rating` | `numeric(3,2)` | DEFAULT 5 | Average product rating (0.00–5.00) |
+| `vendor_id` | `integer` | FK → `users.id` | Creator/vendor of the product |
+| `approval_status` | `text` | DEFAULT "approved" | "approved" | "pending" | "rejected" (vendor products start pending) |
 | `created_at` | `timestamp` | DEFAULT now() | Record creation timestamp |
+
+---
+
+#### Table: `users`
+
+Platform accounts with role-based access control.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | `serial` | PRIMARY KEY | Auto-incrementing user ID |
+| `email` | `text` | NOT NULL, UNIQUE | Login email address |
+| `password_hash` | `text` | NOT NULL | bcrypt-hashed password |
+| `name` | `text` | NOT NULL | Display name |
+| `role` | `text` | DEFAULT "customer" | `"admin"` \| `"vendor"` \| `"customer"` |
+| `avatar_url` | `text` | nullable | Profile image URL |
+| `status` | `text` | DEFAULT "active" | `"active"` \| `"suspended"` |
+| `is_approved` | `boolean` | DEFAULT true | Vendors start `false`; admin must approve |
+| `auth_user_id` | `uuid` | nullable | Supabase Auth linkage (reserved for future migration) |
+| `created_at` | `timestamp` | DEFAULT now() | Account creation timestamp |
 
 ---
 
