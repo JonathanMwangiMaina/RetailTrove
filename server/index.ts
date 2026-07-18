@@ -8,13 +8,14 @@ if (process.env.NODE_ENV !== "production") {
 
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
-import MemoryStore from "memorystore";
+import connectPgSimple from "connect-pg-simple";
+import { pool } from "./db.js";
 import { registerRoutes } from "./routes.js";
 import { setupVite, serveStatic, log } from "./vite.js";
 import { storage } from "./storage.js";
 import { hashPassword } from "./auth.js";
 
-const SessionStore = MemoryStore(session);
+const PgSession = connectPgSimple(session);
 
 const app = express();
 app.use(express.json());
@@ -25,9 +26,14 @@ app.use(
     secret: process.env.SESSION_SECRET || "retailtrove-dev-secret-change-in-production",
     resave: false,
     saveUninitialized: false,
-    store: new SessionStore({ checkPeriod: 86400000 }),
+    store: new PgSession({
+      pool,
+      createTableIfMissing: true,
+      tableName: "user_sessions",
+    }),
     cookie: {
       httpOnly: true,
+      secure: process.env.NODE_ENV === "production" || !!process.env.VERCEL,
       maxAge: 7 * 24 * 60 * 60 * 1000,
     },
   })
