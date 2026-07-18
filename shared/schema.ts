@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, numeric, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, numeric, timestamp, boolean, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { relations } from "drizzle-orm";
 import { z } from "zod";
@@ -14,9 +14,10 @@ export const users = pgTable("users", {
   status: text("status").notNull().default("active"), // active | suspended
   isApproved: boolean("is_approved").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow(),
+  authUserId: uuid("auth_user_id"), // Supabase Auth linkage (nullable for backward compat)
 });
 
-export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
+export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, authUserId: true });
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 
@@ -85,9 +86,10 @@ export const orders = pgTable("orders", {
   country: text("country").notNull(),
   total: numeric("total", { precision: 10, scale: 2 }).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
+  userId: uuid("user_id"), // Supabase Auth user linkage
 });
 
-export const insertOrderSchema = createInsertSchema(orders).omit({ id: true, createdAt: true });
+export const insertOrderSchema = createInsertSchema(orders).omit({ id: true, createdAt: true, userId: true });
 
 // Order Item Schema
 export const orderItems = pgTable("order_items", {

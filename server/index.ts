@@ -3,7 +3,7 @@
 import dotenv from "dotenv";
 import { createServer } from "http";
 if (process.env.NODE_ENV !== "production") {
-  dotenv.config();
+  dotenv.config({ override: true });
 }
 
 import express, { type Request, Response, NextFunction } from "express";
@@ -121,7 +121,7 @@ if (process.env.VERCEL) {
 if (!process.env.VERCEL) {
   (async () => {
     await initializeApp();
-    const port = parseInt(process.env.PORT || "3000", 10);
+    const port = parseInt(process.env.PORT || "5000", 10);
     const server = createServer(app);
     server.listen(port, "0.0.0.0", () => {
       log(`serving on port ${port}`);

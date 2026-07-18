@@ -226,7 +226,7 @@ export default function Checkout() {
                         <FormItem className="sm:col-span-2">
                           <FormLabel>Apartment, suite, etc.</FormLabel>
                           <FormControl>
-                            <Input {...field} className="mt-1" />
+                            <Input {...field} value={field.value ?? ""} className="mt-1" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>

@@ -9,6 +9,8 @@ export interface AuthUser {
   name: string;
   role: UserRole;
   avatarUrl?: string | null;
+  isApproved?: boolean;
+  status?: string;
 }
 
 interface AuthContextType {

@@ -4,7 +4,7 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "dev": "NODE_ENV=development tsx --import ./dotenv-loader.js server/index.ts",
+    "dev": "NODE_ENV=development PORT=5000 tsx --import ./dotenv-loader.js server/index.ts",
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "vercel-build": "vite build && node esbuild.config.js",
     "start": "NODE_ENV=production node dist/index.js",
