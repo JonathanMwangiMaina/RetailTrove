@@ -53,26 +53,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     try {
       const { email, password } = req.body;
-      if (!email || !password) return res.status(400).json({ message: "Email and password are required" });
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email and password are required" });
+      }
 
       const user = await storage.getUserByEmail(email);
-      if (!user) return res.status(401).json({ message: "Invalid email or password" });
+      if (!user) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
 
       if (user.status === "suspended") {
         return res.status(403).json({ message: "Your account has been suspended. Contact support." });
       }
 
+      if (!user.passwordHash) {
+        return res.status(401).json({ message: "Invalid user account configuration" });
+      }
+
       const valid = await comparePassword(password, user.passwordHash);
-      if (!valid) return res.status(401).json({ message: "Invalid email or password" });
+      if (!valid) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
 
       req.session.userId = user.id;
       req.session.role = user.role;
       req.session.name = user.name;
 
-      const { passwordHash: _ph, ...safeUser } = user;
-      res.json(safeUser);
+      // Force save the session to handle store/cookie issues explicitly before responding
+      req.session.save((err) => {
+        if (err) {
+          console.error("Session save error:", err);
+          return res.status(500).json({ message: "Failed to establish session" });
+        }
+
+        const { passwordHash: _ph, ...safeUser } = user;
+        return res.json(safeUser);
+      });
     } catch (error) {
-      console.error("Login error:", error);
+      console.error("Login Error details:", error);
       res.status(500).json({ message: "Login failed" });
     }
   });
@@ -526,49 +544,98 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ── Cart ──────────────────────────────────────────────────────────────────
+  // ── Cart Routes ────────────────────────────────────────────────────────────
 
-  app.get("/api/cart/:cartId", async (req: Request, res: Response) => {
+  // GET /api/cart - Fetch all items in the authenticated user's cart
+  app.get("/api/cart", requireAuth, async (req: Request, res: Response) => {
     try {
-      res.json(await storage.getCartItems(req.params.cartId));
-    } catch {
-      res.status(500).json({ message: "Failed to fetch cart items" });
+      const cartId = String((req.user as any)?.id || req.session?.userId);
+      const items = await storage.getCartItems(cartId);
+      res.json(items);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
     }
   });
 
-  app.post("/api/cart", async (req: Request, res: Response) => {
+  // POST /api/cart - Add an item to the authenticated user's cart
+  app.post("/api/cart", requireAuth, async (req: Request, res: Response) => {
     try {
-      const result = insertCartItemSchema.safeParse(req.body);
-      if (!result.success) return res.status(400).json({ message: "Invalid cart item data", errors: result.error.format() });
-      res.status(201).json(await storage.addCartItem(result.data));
-    } catch {
-      res.status(500).json({ message: "Failed to add item to cart" });
+      const cartId = String((req.user as any)?.id || req.session?.userId);
+
+      const parsed = insertCartItemSchema.parse({
+        ...req.body,
+        cartId,
+      });
+
+      const existing = await storage.getCartItem(cartId, parsed.productId);
+      if (existing) {
+        const updated = await storage.updateCartItem(
+          existing.id,
+          existing.quantity + parsed.quantity
+        );
+        return res.json(updated);
+      }
+
+      const item = await storage.addCartItem(parsed);
+      res.status(201).json(item);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      res.status(500).json({ message: error.message });
     }
   });
 
-  app.put("/api/cart/:id", async (req: Request, res: Response) => {
+  // PUT /api/cart/:id - Update cart item quantity (with ownership check)
+  app.put("/api/cart/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) return res.status(400).json({ message: "Invalid cart item ID" });
+      const id = parseInt(req.params.id, 10);
       const { quantity } = req.body;
-      if (typeof quantity !== "number" || quantity < 0) return res.status(400).json({ message: "Invalid quantity" });
-      const item = await storage.updateCartItem(id, quantity);
-      if (!item) return res.status(404).json({ message: "Cart item not found or removed" });
-      res.json(item);
-    } catch {
-      res.status(500).json({ message: "Failed to update cart item" });
+      const cartId = String((req.user as any)?.id || req.session?.userId);
+
+      if (isNaN(id) || typeof quantity !== "number" || quantity <= 0) {
+        return res.status(400).json({ message: "Invalid item ID or quantity" });
+      }
+
+      const userCartItems = await storage.getCartItems(cartId);
+      const targetItem = userCartItems.find((item) => item.id === id);
+
+      if (!targetItem) {
+        return res.status(403).json({ message: "Forbidden: Cart item does not belong to you" });
+      }
+
+      const updated = await storage.updateCartItem(id, quantity);
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
     }
   });
 
-  app.delete("/api/cart/:id", async (req: Request, res: Response) => {
+  // DELETE /api/cart/:id - Remove item from cart (with ownership check)
+  app.delete("/api/cart/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) return res.status(400).json({ message: "Invalid cart item ID" });
-      const removed = await storage.removeCartItem(id);
-      if (!removed) return res.status(404).json({ message: "Cart item not found" });
-      res.status(204).end();
-    } catch {
-      res.status(500).json({ message: "Failed to remove cart item" });
+      const id = parseInt(req.params.id, 10);
+      const cartId = String((req.user as any)?.id || req.session?.userId);
+
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid item ID" });
+      }
+
+      const userCartItems = await storage.getCartItems(cartId);
+      const targetItem = userCartItems.find((item) => item.id === id);
+
+      if (!targetItem) {
+        return res.status(403).json({ message: "Forbidden: Cart item does not belong to you" });
+      }
+
+      const success = await storage.removeCartItem(id);
+      if (!success) {
+        return res.status(404).json({ message: "Cart item not found" });
+      }
+
+      res.json({ message: "Item removed from cart" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
     }
   });
 
