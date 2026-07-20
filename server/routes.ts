@@ -641,17 +641,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ── Orders ────────────────────────────────────────────────────────────────
 
-  app.post("/api/orders", async (req: Request, res: Response) => {
+  app.post("/api/orders", requireAuth, async (req: Request, res: Response) => {
     try {
       const { order, items } = req.body;
-      const orderResult = insertOrderSchema.safeParse(order);
+
+      // Server-side override: Ensure order is associated with authenticated user
+      const orderDataWithUser = {
+        ...order,
+        userId: req.session.userId,
+      };
+
+      const orderResult = insertOrderSchema.safeParse(orderDataWithUser);
       if (!orderResult.success) return res.status(400).json({ message: "Invalid order data", errors: orderResult.error.format() });
 
       const itemsResult = z.array(insertOrderItemSchema).safeParse(items);
       if (!itemsResult.success) return res.status(400).json({ message: "Invalid order items", errors: itemsResult.error.format() });
 
-      res.status(201).json(await storage.createOrder(orderResult.data, itemsResult.data));
-    } catch {
+      const createdOrder = await storage.createOrder(orderResult.data, itemsResult.data);
+      res.status(201).json(createdOrder);
+    } catch (error) {
+      console.error("Create order error:", error);
       res.status(500).json({ message: "Failed to create order" });
     }
   });
