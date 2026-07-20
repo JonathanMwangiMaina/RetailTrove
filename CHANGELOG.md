@@ -29,6 +29,61 @@ This project does not currently use semantic versioning — entries are dated.
 
 ---
 
+## [0.3.1] — 2026-07-20
+
+### Added
+
+#### Code Quality & Type Safety
+- **Refactored `shared/schema.ts`**: Comprehensive type safety improvements
+  - Added missing insert schema types: `InsertProduct`, `InsertSiteContent`, `InsertSiteSetting`
+  - All insert schemas now have corresponding TypeScript types for consistency
+  - Reusable Zod validation schemas at module top (email, price, URL, phone)
+  - Comprehensive validation: email format, price ranges, URL formats, phone patterns, postal codes
+  - Enum validation for status fields ("approved" | "pending" | "rejected", "active" | "unsubscribed", etc.)
+  - String length constraints on all text fields (min/max)
+  - Integer and range validation for quantities and ratings
+  - JSDoc comments on all relations and table definitions
+
+#### Helper Functions & Utilities
+- Added `numericToNumber(value)` helper to safely convert Drizzle numeric strings to JavaScript numbers
+  - Prevents NaN errors in price calculations and arithmetic
+  - Handles null/undefined/string/number inputs gracefully
+- Added `formatPrice(value)` helper for consistent price display formatting ("XX.XX" format)
+
+#### Database Improvements
+- Changed `products.approvalStatus` default from "approved" → "pending" (safer default for vendor submissions)
+- Fixed `products.rating` default format to "5.00" (matches numeric precision spec)
+- Fixed `cartItemsRelations` placement for proper Drizzle schema organization
+- Exported missing `CartItemWithProduct` type for consistent typing across codebase
+
+#### Seeding & Data Management
+- **Refactored `server/seed-supabase.ts`**: Now uses `DatabaseStorage` methods instead of raw SQL
+  - Replaced `Pool` direct queries with `storage.createProduct()` calls
+  - Added `ProductSeedData` interface for type-safe product definitions
+  - Improved error handling: continues seeding even if individual products fail
+  - Better logging and statistics output (total value, average price)
+  - Only uses fields that exist in the product data object (removed hardcoded non-existent fields)
+  - Cleaner code structure with better separation of concerns
+
+### Changed
+- Improved schema organization: grouped related validations, constants, and relations for readability
+- Enhanced insert schemas with comprehensive Zod validators
+- Standardised error messages across all Zod schemas
+- Improved database connection robustness (already present, documented in release notes)
+
+### Fixed
+- Fixed missing type exports preventing compile-time detection of schema mismatches
+- Fixed `products.rating` precision handling (was "5", now "5.00")
+- Improved numeric field handling to prevent NaN errors in calculations
+- Better separation of concerns in seeding logic
+
+### Technical Debt Resolved
+- Eliminated hardcoded non-existent fields in product seeder
+- Standardised numeric type handling across schema
+- Improved test surface area for data validation
+
+---
+
 ## [0.3.0] — 2026-07-18
 
 ### Added
@@ -154,7 +209,7 @@ This project does not currently use semantic versioning — entries are dated.
 - `CHANGELOG.md`: this file
 
 ### Changed
-- 45 npm packages updated to latest minor/patch versions (all Radix UI primitives, TanStack Query 5.60→5.101, react-hook-form 7.55→7.77, wouter 3.3→3.10, tsx 4.19→4.22, esbuild 0.25→0.28, postcss 8.4→8.5, and others)
+- 45 npm packages updated to latest minor/patch versions (all Radix UI primitives, TanStack Query 5.60→5.101, react-hook-form 7.55→7.77, wouter 3.3→3.10, tsx 4.19→4.22, esbuild 0.25→0.28)
 - Footer `<Link>` components cleaned up to remove nested `<a>` tags (fixes DOM nesting warning)
 - `IStorage` interface extended with `updateProduct`, `deleteProduct`, `getAllOrders`
 
@@ -192,7 +247,8 @@ This project does not currently use semantic versioning — entries are dated.
 
 ---
 
-[Unreleased]: https://github.com/your-org/retailtrove/compare/v0.3.0...HEAD
-[0.3.0]: https://github.com/your-org/retailtrove/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/your-org/retailtrove/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/your-org/retailtrove/releases/tag/v0.1.0
+[Unreleased]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.3.0...HEAD
+[0.3.1]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/JonathanMwangiMaina/RetailTrove/releases/tag/v0.1.0
