@@ -171,12 +171,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createProduct(product: InsertProduct): Promise<Product> {
-    const [p] = await db.insert(products).values(product).returning();
+    const formattedProduct = {
+      ...product,
+      price: String(product.price),
+      originalPrice: product.originalPrice !== undefined && product.originalPrice !== null
+        ? String(product.originalPrice)
+        : null,
+    };
+    const [p] = await db.insert(products).values(formattedProduct as any).returning();
     return p;
   }
 
   async updateProduct(id: number, data: Partial<Product>): Promise<Product | undefined> {
     const { id: _id, createdAt: _ca, ...updateData } = data as any;
+    if (updateData.price !== undefined) {
+      updateData.price = String(updateData.price);
+    }
+    if (updateData.originalPrice !== undefined && updateData.originalPrice !== null) {
+      updateData.originalPrice = String(updateData.originalPrice);
+    }
     const [p] = await db.update(products).set(updateData).where(eq(products.id, id)).returning();
     return p;
   }
@@ -233,10 +246,20 @@ export class DatabaseStorage implements IStorage {
 
   // ── Orders ──────────────────────────────────────────────────────────────────
   async createOrder(orderData: InsertOrder, items: InsertOrderItem[]): Promise<Order> {
+    const formattedOrderData = {
+      ...orderData,
+      total: String(orderData.total),
+    };
+
     return db.transaction(async (tx) => {
-      const [newOrder] = await tx.insert(orders).values(orderData).returning();
+      const [newOrder] = await tx.insert(orders).values(formattedOrderData as any).returning();
       for (const item of items) {
-        await tx.insert(orderItems).values({ ...item, orderId: newOrder.id });
+        const formattedItem = {
+          ...item,
+          price: String(item.price),
+          orderId: newOrder.id,
+        };
+        await tx.insert(orderItems).values(formattedItem as any);
       }
       return newOrder;
     });
