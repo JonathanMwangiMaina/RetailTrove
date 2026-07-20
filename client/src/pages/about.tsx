@@ -200,7 +200,7 @@ export default function About() {
             </div>
             <div className="ml-3 inline-flex rounded-md shadow">
               <Link href="/contact">
-                <Button variant="outline" size="lg" className="text-white border-white hover:bg-white/10">
+                <Button size="lg" className="bg-white text-secondary-600 hover:bg-gray-50">
                   Contact Us
                 </Button>
               </Link>
