@@ -48,10 +48,10 @@ export default function About() {
             ) : (
               <>
                 <p className="mt-4 text-lg text-gray-500">
-                  ModernRetail began with a simple idea: to create a shopping experience that prioritizes quality, design, and customer satisfaction. Founded in 2018, we've grown from a small star[...]
+                  ModernRetail began with a simple idea: to create a shopping experience that prioritizes quality, design, and customer satisfaction. Founded in 2018, we've grown from a small start-up to a trusted destination for design-conscious shoppers.
                 </p>
                 <p className="mt-4 text-lg text-gray-500">
-                  Our team of passionate designers and curators search the globe for exceptional products that combine functionality with beautiful aesthetics. We believe that everyday items shoul[...]
+                  Our team of passionate designers and curators search the globe for exceptional products that combine functionality with beautiful aesthetics. We believe that everyday items should bring joy and inspire thoughtful living.
                 </p>
                 <p className="mt-4 text-lg text-gray-500">
                   From premium watches to minimalist home goods, every item in our collection is carefully selected to ensure it meets our high standards for quality and design excellence.
@@ -97,7 +97,7 @@ export default function About() {
             <div className="bg-white rounded-lg shadow-sm p-6">
               <div className="h-12 w-12 rounded-md bg-secondary-600 flex items-center justify-center">
                 <svg className="h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m[...]
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4" />
                 </svg>
               </div>
               <h3 className="mt-4 text-lg font-medium text-primary-900">Thoughtful Design</h3>
@@ -109,7 +109,7 @@ export default function About() {
             <div className="bg-white rounded-lg shadow-sm p-6">
               <div className="h-12 w-12 rounded-md bg-secondary-600 flex items-center justify-center">
                 <svg className="h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 [...]
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9" />
                 </svg>
               </div>
               <h3 className="mt-4 text-lg font-medium text-primary-900">Ethical Sourcing</h3>
