@@ -122,14 +122,35 @@ export class MemStorage implements IStorage {
   }
   async createProduct(product: InsertProduct): Promise<Product> {
     const id = this.currentProductId++;
-    const p = { id, ...product, createdAt: new Date() } as Product;
+    const p = {
+      id,
+      ...product,
+      price: String(product.price),
+      originalPrice: product.originalPrice !== undefined && product.originalPrice !== null 
+        ? String(product.originalPrice) 
+        : null,
+      subcategory: product.subcategory ?? null,
+      badge: product.badge ?? null,
+      featured: product.featured ?? false,
+      newArrival: product.newArrival ?? false,
+      approvalStatus: product.approvalStatus ?? "approved",
+      vendorId: product.vendorId ?? null,
+      createdAt: new Date(),
+    } as Product;
     this.products.set(id, p);
     return p;
   }
   async updateProduct(id: number, data: Partial<Product>) {
     const p = this.products.get(id);
     if (!p) return undefined;
-    const updated = { ...p, ...data };
+    const updatedData = { ...data };
+    if (updatedData.price !== undefined) {
+      updatedData.price = String(updatedData.price);
+    }
+    if (updatedData.originalPrice !== undefined && updatedData.originalPrice !== null) {
+      updatedData.originalPrice = String(updatedData.originalPrice);
+    }
+    const updated = { ...p, ...updatedData };
     this.products.set(id, updated);
     return updated;
   }
@@ -167,11 +188,23 @@ export class MemStorage implements IStorage {
 
   async createOrder(orderData: InsertOrder, items: InsertOrderItem[]): Promise<Order> {
     const id = this.currentOrderId++;
-    const order = { id, ...orderData, createdAt: new Date() } as Order;
+    const order = {
+      id,
+      ...orderData,
+      total: String(orderData.total),
+      userId: (orderData as any).userId ?? null,
+      apartment: orderData.apartment ?? null,
+      createdAt: new Date(),
+    } as Order;
     this.orders.set(id, order);
     items.forEach(item => {
       const oid = this.currentOrderItemId++;
-      this.orderItems.set(oid, { id: oid, ...item, orderId: id } as OrderItem);
+      this.orderItems.set(oid, {
+        id: oid,
+        ...item,
+        price: String(item.price),
+        orderId: id,
+      } as OrderItem);
     });
     return order;
   }
