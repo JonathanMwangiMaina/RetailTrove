@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import bcrypt from "bcryptjs";
 
+// ── Session Type Declaration ──────────────────────────────────────────────────
 declare module "express-session" {
   interface SessionData {
     userId: number;
@@ -9,6 +10,7 @@ declare module "express-session" {
   }
 }
 
+// ── Password Utilities ────────────────────────────────────────────────────────
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 10);
 }
@@ -17,6 +19,7 @@ export async function comparePassword(password: string, hash: string): Promise<b
   return bcrypt.compare(password, hash);
 }
 
+// ── Middleware Guards ─────────────────────────────────────────────────────────
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.userId) {
     return res.status(401).json({ message: "Authentication required" });
