@@ -549,7 +549,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // GET /api/cart - Fetch all items in the authenticated user's cart
   app.get("/api/cart", requireAuth, async (req: Request, res: Response) => {
     try {
-      const cartId = String((req.user as any)?.id || req.session?.userId);
+      const cartId = String((req as any).user?.id || req.session?.userId);
       const items = await storage.getCartItems(cartId);
       res.json(items);
     } catch (error: any) {
@@ -560,7 +560,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // POST /api/cart - Add an item to the authenticated user's cart
   app.post("/api/cart", requireAuth, async (req: Request, res: Response) => {
     try {
-      const cartId = String((req.user as any)?.id || req.session?.userId);
+      const cartId = String((req as any).user?.id || req.session?.userId);
 
       const parsed = insertCartItemSchema.parse({
         ...req.body,
@@ -591,7 +591,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id, 10);
       const { quantity } = req.body;
-      const cartId = String((req.user as any)?.id || req.session?.userId);
+      const cartId = String((req as any).user?.id || req.session?.userId);
 
       if (isNaN(id) || typeof quantity !== "number" || quantity <= 0) {
         return res.status(400).json({ message: "Invalid item ID or quantity" });
@@ -615,7 +615,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/cart/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id, 10);
-      const cartId = String((req.user as any)?.id || req.session?.userId);
+      const cartId = String((req as any).user?.id || req.session?.userId);
 
       if (isNaN(id)) {
         return res.status(400).json({ message: "Invalid item ID" });
