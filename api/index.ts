@@ -1,7 +1,8 @@
 // Vercel Serverless Function Entry Point
-// This imports and exports the Express app for Vercel's serverless runtime
+// This wraps the Express app with serverless-http for Vercel's serverless runtime
 
+import serverless from 'serverless-http';
 import app from '../server/index.js';
 
-// Export the Express app as the default handler for Vercel
-export default app;
+// Wrap the Express app with serverless-http and export as the default handler
+export default serverless(app);
