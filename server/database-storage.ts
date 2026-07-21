@@ -1,10 +1,17 @@
 import { db } from "./db";
-import { products, users, type Product, type InsertProduct, type User, type InsertUser } from "./schema";
-import { eq, and, or, gte } from "drizzle-orm";
+import {
+  products,
+  users,
+  type Product,
+  type InsertProduct,
+  type User,
+  type InsertUser,
+} from "../shared/schema";
+import { eq, and, or } from "drizzle-orm";
 import { IStorage } from "./storage";
 
 export class DatabaseStorage implements IStorage {
-  // User operations
+  // ── User Operations ────────────────────────────────────────────────────────
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
@@ -15,9 +22,8 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  // Product operations aligned with Supabase DB columns
+  // ── Product Operations (Supabase DDL Parity) ────────────────────────────────
   async getAllProducts(): Promise<Product[]> {
-    // Ensures approved products are returned regardless of stock zero-default issues[cite: 1]
     return await db
       .select()
       .from(products)
@@ -30,7 +36,6 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getFeaturedProducts(): Promise<Product[]> {
-    // Queries database explicitly matching featured = true and approval_status = approved[cite: 1]
     return await db
       .select()
       .from(products)
@@ -46,7 +51,6 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getNewArrivals(): Promise<Product[]> {
-    // Queries database explicitly matching new_arrival = true and approval_status = approved[cite: 1]
     return await db
       .select()
       .from(products)
