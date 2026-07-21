@@ -1,6 +1,6 @@
 import dotenv from "dotenv";
 import { db } from "./db";
-import { products } from "./schema";
+import { products } from "../shared/schema";
 
 dotenv.config({ override: true });
 
