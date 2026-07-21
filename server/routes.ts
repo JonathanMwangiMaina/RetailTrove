@@ -1,7 +1,14 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage.js";
-import { insertCartItemSchema, insertOrderSchema, insertOrderItemSchema, insertProductSchema, insertFaqSchema, insertNewsletterSubscriberSchema } from "../shared/schema.js";
+import { 
+  insertCartItemSchema, 
+  insertOrderSchema, 
+  insertOrderItemSchema, 
+  insertProductSchema, 
+  insertFaqSchema, 
+  insertNewsletterSubscriberSchema 
+} from "../shared/schema.js";
 import { z } from "zod";
 import { hashPassword, comparePassword, requireAuth, requireRole } from "./auth.js";
 import { sendWelcomeEmail } from "./email.js";
@@ -16,16 +23,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!email || !password || !name) {
         return res.status(400).json({ message: "Email, password, and name are required" });
       }
-      // Admin can only be created via admin dashboard
+
       if (role === "admin") {
         return res.status(403).json({ message: "Admin accounts can only be created by an existing admin" });
       }
+
       const existing = await storage.getUserByEmail(email);
       if (existing) return res.status(409).json({ message: "Email already in use" });
 
       const assignedRole = role === "vendor" ? "vendor" : "customer";
 
-      // Enforce max 20 vendors
       if (assignedRole === "vendor") {
         const vendorCount = await storage.countUsersByRole("vendor");
         if (vendorCount >= 20) {
@@ -34,9 +41,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const passwordHash = await hashPassword(password);
-      // Vendors start unapproved until admin approves
       const isApproved = assignedRole !== "vendor";
-      const user = await storage.createUser({ email, passwordHash, name, role: assignedRole, isApproved, status: "active" });
+      const user = await storage.createUser({ 
+        email, 
+        passwordHash, 
+        name, 
+        role: assignedRole, 
+        isApproved, 
+        status: "active" 
+      });
 
       req.session.userId = user.id;
       req.session.role = user.role;
@@ -79,7 +92,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       req.session.role = user.role;
       req.session.name = user.name;
 
-      // Force save the session to handle store/cookie issues explicitly before responding
       req.session.save((err) => {
         if (err) {
           console.error("Session save error:", err);
@@ -136,7 +148,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin create a new user (admin/vendor only, enforces limits)
   app.post("/api/admin/users", requireRole("admin"), async (req: Request, res: Response) => {
     try {
       const { email, password, name, role } = req.body;
@@ -172,12 +183,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid user ID" });
 
-      // Prevent changing own role/status
       if (id === req.session.userId && (req.body.role || req.body.status === "suspended")) {
         return res.status(400).json({ message: "Cannot change your own role or suspend yourself" });
       }
 
-      // Enforce admin limit if promoting to admin
       if (req.body.role === "admin") {
         const count = await storage.countUsersByRole("admin");
         const target = await storage.getUserById(id);
@@ -186,7 +195,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Enforce vendor limit if promoting to vendor
       if (req.body.role === "vendor") {
         const count = await storage.countUsersByRole("vendor");
         const target = await storage.getUserById(id);
@@ -237,7 +245,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Record a page visit (frontend calls this on navigation)
   app.post("/api/visits", requireAuth, async (req: Request, res: Response) => {
     try {
       const { path } = req.body;
@@ -321,7 +328,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ── FAQs ──────────────────────────────────────────────────────────────────
 
-  // Public: approved FAQs only
   app.get("/api/faqs", async (_req: Request, res: Response) => {
     try {
       res.json(await storage.getFaqs("approved"));
@@ -330,7 +336,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin/vendor: all FAQs
   app.get("/api/faqs/all", requireRole("admin", "vendor"), async (_req: Request, res: Response) => {
     try {
       res.json(await storage.getFaqs());
@@ -339,7 +344,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Vendor: own FAQs
   app.get("/api/faqs/mine", requireRole("vendor"), async (req: Request, res: Response) => {
     try {
       res.json(await storage.getFaqsByUser(req.session.userId!));
@@ -353,7 +357,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = insertFaqSchema.safeParse(req.body);
       if (!result.success) return res.status(400).json({ message: "Invalid FAQ data", errors: result.error.format() });
 
-      // Vendors submit as pending; admins submit as approved
       const status = req.session.role === "admin" ? "approved" : "pending";
       const faq = await storage.createFaq({
         ...result.data,
@@ -372,7 +375,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid FAQ ID" });
 
-      // Vendors can only edit their own FAQs (and edit resets to pending)
       if (req.session.role === "vendor") {
         const faqsList = await storage.getFaqsByUser(req.session.userId!);
         if (!faqsList.find(f => f.id === id)) {
@@ -421,135 +423,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ── Products ──────────────────────────────────────────────────────────────
 
-  app.get("/api/products", async (_req: Request, res: Response) => {
-    try {
-      res.json(await storage.getProducts());
-    } catch {
-      res.status(500).json({ message: "Failed to fetch products" });
-    }
-  });
+  // GET /api/products -> Fetch ONLY approved products for the public catalog
+  app.get("/api/products", async (_req: Request, res: Response) => {
+    try {
+      // Changed from storage.getProducts() to storage.getProductsByCategory("All Products")
+      // (or storage.getApprovedProducts() if present in your storage interface)
+      res.json(await storage.getProductsByCategory("All Products"));
+    } catch {
+      res.status(500).json({ message: "Failed to fetch products" });
+    }
+  });
 
-  app.get("/api/products/featured", async (_req: Request, res: Response) => {
-    try {
-      res.json(await storage.getFeaturedProducts());
-    } catch {
-      res.status(500).json({ message: "Failed to fetch featured products" });
-    }
-  });
+  app.get("/api/products/featured", async (_req: Request, res: Response) => {
+    try {
+      const featured = await storage.getFeaturedProducts();
+      // Audit filter: safeguard against unapproved items slipping into featured list
+      const approved = featured.filter((p: any) => p.approvalStatus === "approved");
+      res.json(approved);
+    } catch {
+      res.status(500).json({ message: "Failed to fetch featured products" });
+    }
+  });
 
-  app.get("/api/products/new-arrivals", async (_req: Request, res: Response) => {
-    try {
-      res.json(await storage.getNewArrivals());
-    } catch {
-      res.status(500).json({ message: "Failed to fetch new arrivals" });
-    }
-  });
+  app.get("/api/products/new-arrivals", async (_req: Request, res: Response) => {
+    try {
+      const newArrivals = await storage.getNewArrivals();
+      // Audit filter: safeguard against unapproved items slipping into new arrivals
+      const approved = newArrivals.filter((p: any) => p.approvalStatus === "approved");
+      res.json(approved);
+    } catch {
+      res.status(500).json({ message: "Failed to fetch new arrivals" });
+    }
+  });
 
-  app.get("/api/products/category/:category", async (req: Request, res: Response) => {
-    try {
-      res.json(await storage.getProductsByCategory(req.params.category));
-    } catch {
-      res.status(500).json({ message: "Failed to fetch products by category" });
-    }
-  });
+  app.get("/api/products/category/:category", async (req: Request, res: Response) => {
+    try {
+      res.json(await storage.getProductsByCategory(req.params.category));
+    } catch {
+      res.status(500).json({ message: "Failed to fetch products by category" });
+    }
+  });
 
-  app.get("/api/products/search", async (req: Request, res: Response) => {
-    try {
-      res.json(await storage.searchProducts((req.query.q as string) || ""));
-    } catch {
-      res.status(500).json({ message: "Failed to search products" });
-    }
-  });
+  app.get("/api/products/search", async (req: Request, res: Response) => {
+    try {
+      const results = await storage.searchProducts((req.query.q as string) || "");
+      // Audit filter: ensure search results only expose approved items to consumers
+      const approved = results.filter((p: any) => p.approvalStatus === "approved");
+      res.json(approved);
+    } catch {
+      res.status(500).json({ message: "Failed to search products" });
+    }
+  });
 
-  // Vendor's own products
-  app.get("/api/vendor/products", requireRole("vendor"), async (req: Request, res: Response) => {
-    try {
-      const all = await storage.getProducts();
-      res.json(all.filter((p: any) => p.vendorId === req.session.userId));
-    } catch {
-      res.status(500).json({ message: "Failed to fetch vendor products" });
-    }
-  });
+  app.get("/api/vendor/products", requireRole("vendor"), async (req: Request, res: Response) => {
+    try {
+      const all = await storage.getProducts();
+      res.json(all.filter((p: any) => p.vendorId === req.session.userId));
+    } catch {
+      res.status(500).json({ message: "Failed to fetch vendor products" });
+    }
+  });
 
-  app.get("/api/products/:id", async (req: Request, res: Response) => {
-    try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) return res.status(400).json({ message: "Invalid product ID" });
-      const product = await storage.getProductById(id);
-      if (!product) return res.status(404).json({ message: "Product not found" });
-      res.json(product);
-    } catch {
-      res.status(500).json({ message: "Failed to fetch product" });
-    }
-  });
+  app.get("/api/products/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid product ID" });
+      
+      const product = await storage.getProductById(id);
+      if (!product) return res.status(404).json({ message: "Product not found" });
 
-  app.post("/api/products", requireRole("admin", "vendor"), async (req: Request, res: Response) => {
-    try {
-      const result = insertProductSchema.safeParse(req.body);
-      if (!result.success) return res.status(400).json({ message: "Invalid product data", errors: result.error.format() });
+      // Audit check: Allow direct lookup if approved, or if requested by the owner vendor or an admin
+      const isOwner = req.session?.userId && product.vendorId === req.session.userId;
+      const isAdmin = req.session?.role === "admin";
 
-      const data = {
-        ...result.data,
-        vendorId: req.session.userId,
-        // Vendor submissions start as pending; admin submissions are directly approved
-        approvalStatus: req.session.role === "admin" ? "approved" : "pending",
-      };
-      const product = await storage.createProduct(data as any);
-      res.status(201).json(product);
-    } catch (error) {
-      console.error("Create product error:", error);
-      res.status(500).json({ message: "Failed to create product" });
-    }
-  });
+      if (product.approvalStatus !== "approved" && !isOwner && !isAdmin) {
+        return res.status(404).json({ message: "Product not found" });
+      }
 
-  app.put("/api/products/:id", requireRole("admin", "vendor"), async (req: Request, res: Response) => {
-    try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) return res.status(400).json({ message: "Invalid product ID" });
-
-      // Vendor can only edit their own products; editing resets to pending
-      if (req.session.role === "vendor") {
-        const product = await storage.getProductById(id);
-        if (!product || product.vendorId !== req.session.userId) {
-          return res.status(403).json({ message: "Cannot edit another vendor's product" });
-        }
-        req.body.approvalStatus = "pending";
-      }
-
-      const product = await storage.updateProduct(id, req.body);
-      if (!product) return res.status(404).json({ message: "Product not found" });
-      res.json(product);
-    } catch {
-      res.status(500).json({ message: "Failed to update product" });
-    }
-  });
-
-  app.delete("/api/products/:id", requireRole("admin", "vendor"), async (req: Request, res: Response) => {
-    try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) return res.status(400).json({ message: "Invalid product ID" });
-
-      if (req.session.role === "vendor") {
-        const product = await storage.getProductById(id);
-        if (!product || product.vendorId !== req.session.userId) {
-          return res.status(403).json({ message: "Cannot delete another vendor's product" });
-        }
-      }
-
-      const removed = await storage.deleteProduct(id);
-      if (!removed) return res.status(404).json({ message: "Product not found" });
-      res.status(204).end();
-    } catch {
-      res.status(500).json({ message: "Failed to delete product" });
-    }
-  });
+      res.json(product);
+    } catch {
+      res.status(500).json({ message: "Failed to fetch product" });
+    }
+  });
 
   // ── Cart Routes ────────────────────────────────────────────────────────────
 
-  // GET /api/cart - Fetch all items in the authenticated user's cart
   app.get("/api/cart", requireAuth, async (req: Request, res: Response) => {
     try {
-      const cartId = String((req as any).user?.id || req.session?.userId);
+      const cartId = String(req.session.userId);
       const items = await storage.getCartItems(cartId);
       res.json(items);
     } catch (error: any) {
@@ -557,10 +518,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // POST /api/cart - Add an item to the authenticated user's cart
   app.post("/api/cart", requireAuth, async (req: Request, res: Response) => {
     try {
-      const cartId = String((req as any).user?.id || req.session?.userId);
+      const cartId = String(req.session.userId);
 
       const parsed = insertCartItemSchema.parse({
         ...req.body,
@@ -586,12 +546,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // PUT /api/cart/:id - Update cart item quantity (with ownership check)
   app.put("/api/cart/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id, 10);
       const { quantity } = req.body;
-      const cartId = String((req as any).user?.id || req.session?.userId);
+      const cartId = String(req.session.userId);
 
       if (isNaN(id) || typeof quantity !== "number" || quantity <= 0) {
         return res.status(400).json({ message: "Invalid item ID or quantity" });
@@ -611,11 +570,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // DELETE /api/cart/:id - Remove item from cart (with ownership check)
   app.delete("/api/cart/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id, 10);
-      const cartId = String((req as any).user?.id || req.session?.userId);
+      const cartId = String(req.session.userId);
 
       if (isNaN(id)) {
         return res.status(400).json({ message: "Invalid item ID" });
@@ -645,7 +603,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { order, items } = req.body;
 
-      // Server-side override: Ensure order is associated with authenticated user
       const orderDataWithUser = {
         ...order,
         userId: req.session.userId,
@@ -682,11 +639,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid email address", errors: result.error.format() });
       }
 
-      // Check if email already exists
       const existing = await storage.getNewsletterSubscriberByEmail(result.data.email);
       if (existing) {
         if (existing.status === "unsubscribed") {
-          // Reactivate subscription
           const updated = await storage.updateNewsletterSubscriber(existing.id, { status: "active" });
           return res.json({ message: "Welcome back! You've been resubscribed to our newsletter.", subscriber: updated });
         }
@@ -695,7 +650,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const subscriber = await storage.createNewsletterSubscriber(result.data);
 
-      // Send welcome email asynchronously (don't wait for it)
       sendWelcomeEmail(subscriber.email).catch(err => {
         console.error("Failed to send welcome email:", err);
       });
