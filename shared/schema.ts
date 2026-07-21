@@ -3,7 +3,6 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // ── Users Table ──────────────────────────────────────────────────────────────
-// Aligned with Supabase Auth (UUID string keys)
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
   email: text("email").notNull().unique(),
@@ -13,7 +12,6 @@ export const users = pgTable("users", {
 });
 
 // ── Products Table ───────────────────────────────────────────────────────────
-// Aligned with Supabase DDL column definitions & snake_case naming
 export const products = pgTable("products", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -31,6 +29,18 @@ export const products = pgTable("products", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// ── Orders Table (Supabase DDL Parity) ─────────────────────────────────────────
+export const orders = pgTable("orders", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").references(() => users.id),
+  customerName: text("customer_name").notNull(),
+  customerEmail: text("customer_email").notNull(),
+  shippingAddress: text("shipping_address").notNull(),
+  totalAmount: numeric("total_amount", { precision: 10, scale: 2 }).notNull(),
+  status: text("status").default("pending").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // ── Zod Validation Schemas ───────────────────────────────────────────────────
 export const insertUserSchema = createInsertSchema(users);
 export const selectUserSchema = createSelectSchema(users);
@@ -41,8 +51,18 @@ export const insertProductSchema = createInsertSchema(products, {
 });
 export const selectProductSchema = createSelectSchema(products);
 
+export const insertOrderSchema = createInsertSchema(orders, {
+  totalAmount: z.string().or(z.number()),
+  customerEmail: z.string().email(),
+});
+export const selectOrderSchema = createSelectSchema(orders);
+
 // ── TypeScript Types ─────────────────────────────────────────────────────────
 export type User = z.infer<typeof selectUserSchema>;
 export type InsertUser = z.infer<typeof insertUserSchema>;
+
 export type Product = z.infer<typeof selectProductSchema>;
 export type InsertProduct = z.infer<typeof insertProductSchema>;
+
+export type Order = z.infer<typeof selectOrderSchema>;
+export type InsertOrder = z.infer<typeof insertOrderSchema>;
