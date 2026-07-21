@@ -1,12 +1,17 @@
-import { type User, type InsertUser, type Product, type InsertProduct } from "./schema";
+import type {
+  User,
+  InsertUser,
+  Product,
+  InsertProduct,
+} from "../shared/schema";
 import { databaseStorage } from "./database-storage";
 
 export interface IStorage {
-  // User operations
+  // ── User Operations ────────────────────────────────────────────────────────
   getUser(id: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
 
-  // Product operations
+  // ── Product Operations ─────────────────────────────────────────────────────
   getAllProducts(): Promise<Product[]>;
   getFeaturedProducts(): Promise<Product[]>;
   getNewArrivals(): Promise<Product[]>;
