@@ -107,19 +107,33 @@ export class MemStorage implements IStorage {
   private currentVisitId = 1;
   private currentFaqId = 1;
 
+  // Unfiltered accessor (for admin queries or raw internal operations)
   async getProducts() { return Array.from(this.products.values()); }
+  
   async getProductById(id: number) { return this.products.get(id); }
+  
   async getProductsByCategory(category: string) {
-    return Array.from(this.products.values()).filter(p => p.category === category || category === "All Products");
+    return Array.from(this.products.values()).filter(p => 
+      p.approvalStatus === "approved" && (p.category === category || category === "All Products")
+    );
   }
-  async getFeaturedProducts() { return Array.from(this.products.values()).filter(p => p.featured); }
-  async getNewArrivals() { return Array.from(this.products.values()).filter(p => p.newArrival); }
+
+  async getFeaturedProducts() { 
+    return Array.from(this.products.values()).filter(p => p.featured && p.approvalStatus === "approved"); 
+  }
+
+  async getNewArrivals() { 
+    return Array.from(this.products.values()).filter(p => p.newArrival && p.approvalStatus === "approved"); 
+  }
+
   async searchProducts(query: string) {
     const q = query.toLowerCase();
     return Array.from(this.products.values()).filter(p =>
-      p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q) || p.category.toLowerCase().includes(q)
+      p.approvalStatus === "approved" &&
+      (p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q) || p.category.toLowerCase().includes(q))
     );
   }
+
   async createProduct(product: InsertProduct): Promise<Product> {
     const id = this.currentProductId++;
     const p = {
@@ -140,6 +154,7 @@ export class MemStorage implements IStorage {
     this.products.set(id, p);
     return p;
   }
+
   async updateProduct(id: number, data: Partial<Product>) {
     const p = this.products.get(id);
     if (!p) return undefined;
@@ -154,6 +169,7 @@ export class MemStorage implements IStorage {
     this.products.set(id, updated);
     return updated;
   }
+
   async deleteProduct(id: number) { return this.products.delete(id); }
   async getPendingProducts() { return Array.from(this.products.values()).filter(p => p.approvalStatus === "pending"); }
   async approveProduct(id: number, status: string) { return this.updateProduct(id, { approvalStatus: status } as any); }
@@ -163,6 +179,7 @@ export class MemStorage implements IStorage {
       .filter(i => i.cartId === cartId)
       .map(i => { const product = this.products.get(i.productId)!; return { ...i, product }; });
   }
+
   async getCartItem(cartId: string, productId: number) {
     const item = Array.from(this.cartItems.values()).find(i => i.cartId === cartId && i.productId === productId);
     if (!item) return undefined;
@@ -170,12 +187,14 @@ export class MemStorage implements IStorage {
     if (!product) return undefined;
     return { ...item, product };
   }
+
   async addCartItem(cartItem: InsertCartItem): Promise<CartItem> {
     const id = this.currentCartItemId++;
     const item = { id, ...cartItem, quantity: cartItem.quantity ?? 0 };
     this.cartItems.set(id, item);
     return item;
   }
+
   async updateCartItem(id: number, quantity: number) {
     const item = this.cartItems.get(id);
     if (!item) return undefined;
@@ -184,6 +203,7 @@ export class MemStorage implements IStorage {
     this.cartItems.set(id, item);
     return item;
   }
+
   async removeCartItem(id: number) { return this.cartItems.delete(id); }
 
   async createOrder(orderData: InsertOrder, items: InsertOrderItem[]): Promise<Order> {
@@ -208,19 +228,23 @@ export class MemStorage implements IStorage {
     });
     return order;
   }
+
   async getOrderById(id: number) { return this.orders.get(id); }
   async getAllOrders() { return Array.from(this.orders.values()); }
 
   async getUserByEmail(email: string) { return Array.from(this.users.values()).find(u => u.email === email); }
   async getUserById(id: number) { return this.users.get(id); }
+
   async createUser(user: InsertUser): Promise<User> {
     const id = this.currentUserId++;
     const u = { id, ...user, createdAt: new Date() } as User;
     this.users.set(id, u);
     return u;
   }
+
   async getAllUsers() { return Array.from(this.users.values()); }
   async getUsersByRole(role: string) { return Array.from(this.users.values()).filter(u => u.role === role); }
+
   async updateUser(id: number, data: Partial<User>) {
     const u = this.users.get(id);
     if (!u) return undefined;
@@ -228,6 +252,7 @@ export class MemStorage implements IStorage {
     this.users.set(id, updated);
     return updated;
   }
+
   async deleteUser(id: number) { return this.users.delete(id); }
   async countUsersByRole(role: string) { return Array.from(this.users.values()).filter(u => u.role === role).length; }
 
@@ -235,7 +260,9 @@ export class MemStorage implements IStorage {
     const id = this.currentVisitId++;
     this.visits.set(id, { id, userId, path, visitedAt: new Date() });
   }
+
   async getVisitsByUser(userId: number) { return Array.from(this.visits.values()).filter(v => v.userId === userId); }
+
   async getAllVisits() {
     return Array.from(this.visits.values()).map(v => {
       const u = this.users.get(v.userId);
@@ -244,35 +271,44 @@ export class MemStorage implements IStorage {
   }
 
   async getBanner() { return this.banner; }
+
   async updateBanner(data: Partial<BannerSettings>) {
     this.banner = { ...this.banner, ...data, updatedAt: new Date() };
     return this.banner;
   }
+
   async ensureBanner() {}
 
   async getSiteContent(_type: string) { return undefined; }
+
   async updateSiteContent(type: string, content: string): Promise<SiteContent> {
     return { id: 1, type, content, updatedAt: new Date() };
   }
+
   async ensureSiteContent() {}
 
   async getAllSiteSettings() { return []; }
+
   async updateSiteSetting(key: string, value: string): Promise<SiteSetting> {
     return { id: 1, key, value, updatedAt: new Date() };
   }
+
   async ensureSiteSettings() {}
 
   async getFaqs(status?: string) {
     const all = Array.from(this.faqsMap.values());
     return status ? all.filter(f => f.status === status) : all;
   }
+
   async getFaqsByUser(userId: number) { return Array.from(this.faqsMap.values()).filter(f => f.submittedBy === userId); }
+
   async createFaq(data: InsertFaq): Promise<Faq> {
     const id = this.currentFaqId++;
     const faq = { id, ...data, createdAt: new Date() } as Faq;
     this.faqsMap.set(id, faq);
     return faq;
   }
+
   async updateFaq(id: number, data: Partial<Faq>) {
     const f = this.faqsMap.get(id);
     if (!f) return undefined;
@@ -280,14 +316,17 @@ export class MemStorage implements IStorage {
     this.faqsMap.set(id, updated);
     return updated;
   }
+
   async deleteFaq(id: number) { return this.faqsMap.delete(id); }
   async ensureDefaultFaqs() {}
 
   async getAllNewsletterSubscribers() { return []; }
   async getNewsletterSubscriberByEmail(_email: string) { return undefined; }
+
   async createNewsletterSubscriber(data: InsertNewsletterSubscriber): Promise<NewsletterSubscriber> {
     return { id: 1, ...data, status: "active", subscribedAt: new Date() };
   }
+
   async updateNewsletterSubscriber(_id: number, _data: Partial<NewsletterSubscriber>) { return undefined; }
   async deleteNewsletterSubscriber(_id: number) { return false; }
 
