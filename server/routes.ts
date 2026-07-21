@@ -1,11 +1,13 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertProductSchema } from "./schema";
+import { insertProductSchema } from "../shared/schema";
 import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Get all products (Expected: 33 products)[cite: 1]
+  // ── Product Routes ──────────────────────────────────────────────────────────
+
+  // Get all products (Approved products)
   app.get("/api/products", async (_req: Request, res: Response) => {
     try {
       const products = await storage.getAllProducts();
@@ -16,7 +18,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get featured products (Expected: 5 products)[cite: 1]
+  // Get featured products
   app.get("/api/products/featured", async (_req: Request, res: Response) => {
     try {
       const products = await storage.getFeaturedProducts();
@@ -27,7 +29,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get new arrival products (Expected: 15 products)[cite: 1]
+  // Get new arrival products
   app.get("/api/products/new-arrivals", async (_req: Request, res: Response) => {
     try {
       const products = await storage.getNewArrivals();
