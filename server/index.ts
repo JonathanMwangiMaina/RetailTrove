@@ -81,11 +81,12 @@ async function initializeApp() {
     //  await seedSampleUsers();
     //  await updateProducts();
     //  await updateProducts2();
-      await storage.ensureBanner();
-      await storage.ensureDefaultAdmin(hashPassword);
-      await storage.ensureSiteContent();
-      await storage.ensureSiteSettings();
-      await storage.ensureDefaultFaqs();
+    // Replace lines 84-88 in server/index.ts with optional chaining calls:
+      await storage.ensureBanner?.();
+      await storage.ensureDefaultAdmin?.();
+      await storage.ensureSiteContent?.();
+      await storage.ensureSiteSettings?.();
+      await storage.ensureDefaultFaqs?.();
       log("Database initialized successfully");
     } catch (error) {
       log("⚠️  Warning: Database initialization failed. Server will start but database features will be unavailable.");
