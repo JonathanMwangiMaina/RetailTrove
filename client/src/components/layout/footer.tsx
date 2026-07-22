@@ -168,89 +168,96 @@ export default function Footer() {
             </div>
 
             {/* Accepted Payment Provider Badges */}
-            <div className="flex flex-wrap items-center justify-center gap-2.5">
-              {/* Lemon Squeezy */}
-              <div
-                className="h-7 px-2.5 bg-slate-800 border border-slate-700 rounded flex items-center justify-center text-[11px] font-medium text-amber-300"
-                title="Lemon Squeezy"
-              >
-                <svg
-                  className="w-3.5 h-3.5 mr-1 fill-current"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14.5h-2v-2h2v2zm0-4h-2V7h2v5.5z" />
-                </svg>
-                Lemon Squeezy
-              </div>
+<div className="flex flex-wrap items-center justify-center gap-2.5">
+  {/* Lemon Squeezy */}
+  <div
+    className="h-7 px-2.5 bg-slate-800 border border-slate-700 rounded flex items-center justify-center"
+    title="Lemon Squeezy"
+  >
+    <img
+      src="https://cdn.prod.website-files.com/6347244ba8d63489ba51c08e/6a30261d7c3d5620431187e0_ls-logo-stripe-company.svg"
+      alt="Lemon Squeezy"
+      className="h-4 w-auto object-contain"
+      loading="lazy"
+    />
+  </div>
 
-              {/* Stripe */}
-              <div
-                className="h-7 px-2.5 bg-[#635BFF]/10 border border-[#635BFF]/30 rounded flex items-center justify-center text-xs font-semibold text-[#8F88FF]"
-                title="Stripe"
-              >
-                Stripe
-              </div>
+  {/* Stripe */}
+  <div
+    className="h-7 px-2.5 bg-[#635BFF]/10 border border-[#635BFF]/30 rounded flex items-center justify-center text-xs font-semibold text-[#8F88FF]"
+    title="Stripe"
+  >
+    Stripe
+  </div>
 
-              {/* Visa */}
-              <div
-                className="h-7 px-2 bg-slate-800 border border-slate-700 rounded flex items-center justify-center"
-                title="Visa"
-              >
-                <svg
-                  viewBox="0 0 38 24"
-                  className="h-4 w-auto"
-                  aria-label="Visa"
-                >
-                  <path
-                    d="M15 19h2v-9h-2v9zm-5.8-9L6.6 15c-.3.7-.6 1.3-.9 1.5H9.2L13 10h-3.8zm21.5 9h2l-5-9h-1.6l-5 9h1.8l1.1-2.3h5.6l1.1 2.3zm-4.7-3.7l2.3-4.9 2.3 4.9h-4.6z"
-                    fill="#1A1F71"
-                  />
-                  <path
-                    d="M35 0H3C1.3 0 0 1.3 0 3v18c0 1.7 1.4 3 3 3h32c1.7 0 3-1.3 3-3V3c0-1.7-1.4-3-3-3z"
-                    fill="none"
-                  />
-                </svg>
-                <span className="text-xs font-bold text-white tracking-wider ml-1">
-                  VISA
-                </span>
-              </div>
+  {/* Visa */}
+  <div
+    className="h-7 px-2 bg-slate-800 border border-slate-700 rounded flex items-center justify-center"
+    title="Visa"
+  >
+    <svg
+      viewBox="0 0 38 24"
+      className="h-4 w-auto"
+      aria-label="Visa"
+    >
+      <path
+        d="M15 19h2v-9h-2v9zm-5.8-9L6.6 15c-.3.7-.6 1.3-.9 1.5H9.2L13 10h-3.8zm21.5 9h2l-5-9h-1.6l-5 9h1.8l1.1-2.3h5.6l1.1 2.3zm-4.7-3.7l2.3-4.9 2.3 4.9h-4.6z"
+        fill="#1A1F71"
+      />
+      <path
+        d="M35 0H3C1.3 0 0 1.3 0 3v18c0 1.7 1.4 3 3 3h32c1.7 0 3-1.3 3-3V3c0-1.7-1.4-3-3-3z"
+        fill="none"
+      />
+    </svg>
+    <span className="text-xs font-bold text-white tracking-wider ml-1">
+      VISA
+    </span>
+  </div>
 
-              {/* Mastercard */}
-              <div
-                className="h-7 px-2 bg-slate-800 border border-slate-700 rounded flex items-center justify-center space-x-1"
-                title="Mastercard"
-              >
-                <svg
-                  viewBox="0 0 38 24"
-                  className="h-4 w-auto"
-                  aria-label="Mastercard"
-                >
-                  <circle cx="15" cy="12" r="6" fill="#EB001B" />
-                  <circle cx="23" cy="12" r="6" fill="#F79E1B" fillOpacity="0.8" />
-                </svg>
-                <span className="text-[10px] font-semibold text-slate-200">
-                  Mastercard
-                </span>
-              </div>
+  {/* Mastercard */}
+  <div
+    className="h-7 px-2 bg-slate-800 border border-slate-700 rounded flex items-center justify-center space-x-1"
+    title="Mastercard"
+  >
+    <svg
+      viewBox="0 0 38 24"
+      className="h-4 w-auto"
+      aria-label="Mastercard"
+    >
+      <circle cx="15" cy="12" r="6" fill="#EB001B" />
+      <circle cx="23" cy="12" r="6" fill="#F79E1B" fillOpacity="0.8" />
+    </svg>
+    <span className="text-[10px] font-semibold text-slate-200">
+      Mastercard
+    </span>
+  </div>
 
-              {/* Safaricom */}
-              <div
-                className="h-7 px-2.5 bg-emerald-950/40 border border-emerald-600/40 rounded flex items-center justify-center text-xs font-semibold text-emerald-400"
-                title="Safaricom"
-              >
-                Safaricom
-              </div>
+  {/* Safaricom */}
+  <div
+    className="h-7 px-2.5 bg-white border border-slate-700 rounded flex items-center justify-center"
+    title="Safaricom"
+  >
+    <img
+      src="https://upload.wikimedia.org/wikipedia/commons/1/12/Safaricom_logo.svg"
+      alt="Safaricom"
+      className="h-4 w-auto object-contain"
+      loading="lazy"
+    />
+  </div>
 
-              {/* M-Pesa */}
-              <div
-                className="h-7 px-2.5 bg-emerald-600 border border-emerald-500 rounded flex items-center justify-center text-xs font-bold text-white tracking-wide shadow-sm"
-                title="M-Pesa"
-              >
-                M-PESA
-              </div>
-            </div>
-          </div>
-        </div>
+  {/* M-Pesa */}
+  <div
+    className="h-7 px-2.5 bg-white border border-slate-700 rounded flex items-center justify-center"
+    title="M-Pesa"
+  >
+    <img
+      src="https://upload.wikimedia.org/wikipedia/commons/1/15/M-PESA_LOGO-01.svg"
+      alt="M-Pesa"
+      className="h-4 w-auto object-contain"
+      loading="lazy"
+    />
+  </div>
+</div>
 
         {/* Bottom Copyright */}
         <div className="border-t border-slate-800 mt-6 pt-6 flex flex-col sm:flex-row justify-between items-center text-slate-400 text-xs">
