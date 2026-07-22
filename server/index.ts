@@ -2,13 +2,13 @@ import express from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import pg from "pg";
-import { registerRoutes } from "./routes.ts";
+// ✅ Fix 1: Remove .ts extension (esbuild resolves this at build time)
+import { registerRoutes } from "./routes";
 import { storage } from "./storage";
 
 const app = express();
 
 // ── Database Connection Pool for Session Store ──────────────────────────────
-// Instantiate standard pg.Pool required by connect-pg-simple
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   ssl:
@@ -28,15 +28,15 @@ app.use(
   session({
     store: new PgSessionStore({
       pool,
-      tableName: "session", // Default table name
-      createTableIfMissing: true, // Automatically auto-creates session table if missing
+      tableName: "session",
+      createTableIfMissing: true,
     }),
     secret: process.env.SESSION_SECRET || "retail_trove_default_session_secret",
     resave: false,
     saveUninitialized: false,
     cookie: {
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-      secure: process.env.NODE_ENV === "production", // Enforce HTTPS in Vercel production
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
     },
   })
@@ -45,7 +45,6 @@ app.use(
 // ── Storage Bootstrap Initialization ─────────────────────────────────────────
 async function bootstrapStorage(): Promise<void> {
   try {
-    // Safe optional chaining execution for schema/storage seeding
     await storage.ensureBanner?.();
     await storage.ensureDefaultAdmin?.();
     await storage.ensureSiteContent?.();
@@ -56,14 +55,17 @@ async function bootstrapStorage(): Promise<void> {
   }
 }
 
-(async () => {
-  // Run bootstrap tasks during startup
-  await bootstrapStorage();
+// ✅ Fix 2: Initialize server synchronously for Vercel Serverless
+bootstrapStorage();
+registerRoutes(app);
 
-  const server = await registerRoutes(app);
+// ✅ Export app for Vercel serverless integration
+export default app;
 
+// ✅ Listen only in local development
+if (process.env.NODE_ENV !== "production") {
   const PORT = process.env.PORT || 5000;
-  server.listen(PORT, () => {
+  app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
   });
-})();
+}
