@@ -1,8 +1,16 @@
 // Vercel Serverless Function Entry Point
 // This wraps the Express app with serverless-http for Vercel's serverless runtime
+import express from 'express';
+import {registerRoutes} from '..server/routes';
 
-import serverless from 'serverless-http';
-import app from '../server/index.js';
+const app = express();
 
-// Wrap the Express app with serverless-http and export as the default handler
-export default serverless(app);
+//Middleware for parsing JSON and URL-encoded bodies
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+
+//Register API routes
+registerRoutes(app);
+
+// Export Express instance directly for Vercel Serverless Function runtime
+export default app;
