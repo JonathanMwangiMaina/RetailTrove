@@ -90,7 +90,7 @@ export class DatabaseStorage implements IStorage {
       .insert(products)
       .values({
         ...product,
-        price: String(product.price), // Coerce to string for Drizzle numeric column
+        price: String(product.price), // Coerce to string to strictly match Drizzle numeric type
       })
       .returning();
     return newProduct;
