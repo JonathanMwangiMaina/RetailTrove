@@ -1,16 +1,39 @@
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { FacebookIcon, InstagramIcon, TwitterIcon, LinkedinIcon, YoutubeIcon } from "lucide-react";
+import {
+  FacebookIcon,
+  InstagramIcon,
+  TwitterIcon,
+  LinkedinIcon,
+  YoutubeIcon,
+  ShieldCheck,
+} from "lucide-react";
+
+interface SiteSetting {
+  key: string;
+  value: string;
+}
+
+interface SiteContent {
+  content: string;
+}
 
 export default function Footer() {
-  const { data: settings = [] } = useQuery<any[]>({ queryKey: ["/api/site-settings"] });
-  const { data: footerAboutData } = useQuery<any>({
+  const { data: settings = [] } = useQuery<SiteSetting[]>({
+    queryKey: ["/api/site-settings"],
+  });
+
+  const { data: footerAboutData } = useQuery<SiteContent>({
     queryKey: ["/api/site-content/footer_about"],
     retry: false,
   });
 
-  const getSetting = (key: string) => (settings as any[]).find(s => s.key === key)?.value ?? "";
-  const footerAbout = footerAboutData?.content ?? "Your one-stop shop for premium products with exceptional quality and design.";
+  const getSetting = (key: string) =>
+    settings.find((s) => s.key === key)?.value ?? "";
+
+  const footerAbout =
+    footerAboutData?.content ??
+    "Your one-stop shop for premium products with exceptional quality, fast delivery, and secure payments.";
 
   const socials = [
     { key: "facebook_url", icon: FacebookIcon, label: "Facebook" },
@@ -18,75 +41,223 @@ export default function Footer() {
     { key: "twitter_url", icon: TwitterIcon, label: "Twitter" },
     { key: "linkedin_url", icon: LinkedinIcon, label: "LinkedIn" },
     { key: "youtube_url", icon: YoutubeIcon, label: "YouTube" },
-  ].filter(s => getSetting(s.key));
+  ].filter((s) => getSetting(s.key));
 
   return (
-    <footer className="bg-primary-900 text-white">
+    <footer className="bg-slate-900 text-slate-200 border-t border-slate-800">
       <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-          <div>
-            <h3 className="text-white font-bold text-lg mb-4">
-              Modern<span className="text-accent-500">Retail</span>
+        {/* Main Footer Links */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8">
+          {/* Brand Info */}
+          <div className="space-y-4">
+            <h3 className="text-white font-bold text-xl tracking-tight">
+              Retail<span className="text-emerald-500">Trove</span>
             </h3>
-            <p className="text-primary-300 text-sm">{footerAbout}</p>
+            <p className="text-slate-400 text-sm leading-relaxed">
+              {footerAbout}
+            </p>
+
             {socials.length > 0 && (
-              <div className="mt-4 flex space-x-4">
+              <div className="flex space-x-3 pt-2">
                 {socials.map(({ key, icon: Icon, label }) => (
-                  <a key={key} href={getSetting(key)} target="_blank" rel="noopener noreferrer" className="text-primary-300 hover:text-white">
-                    <span className="sr-only">{label}</span>
-                    <Icon className="h-6 w-6" />
+                  <a
+                    key={key}
+                    href={getSetting(key)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-2 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+                    aria-label={label}
+                  >
+                    <Icon className="h-4 w-4" />
                   </a>
                 ))}
               </div>
             )}
           </div>
 
+          {/* Shop Category Links */}
           <div>
-            <h3 className="text-white font-semibold text-base mb-4">Shop</h3>
-            <ul className="space-y-3">
-              <li><a className="text-primary-300 hover:text-white text-sm" href="/shop" target="_blank" rel="noopener noreferrer">All Products</a></li>
-              <li><a className="text-primary-300 hover:text-white text-sm" href="/shop?category=New%20Arrivals" target="_blank" rel="noopener noreferrer">New Arrivals</a></li>
-              <li><a className="text-primary-300 hover:text-white text-sm" href="/shop?featured=true" target="_blank" rel="noopener noreferrer">Featured</a></li>
-              <li><a className="text-primary-300 hover:text-white text-sm" href="/shop?sale=true" target="_blank" rel="noopener noreferrer">Sales &amp; Discounts</a></li>
-            </ul>
+            <h4 className="text-white font-semibold text-base mb-4">Shop</h4>
+            <nav className="flex flex-col space-y-2.5">
+              <Link
+                href="/shop"
+                className="text-slate-400 hover:text-white text-sm transition-colors"
+              >
+                All Products
+              </Link>
+              <Link
+                href="/shop?category=New%20Arrivals"
+                className="text-slate-400 hover:text-white text-sm transition-colors"
+              >
+                New Arrivals
+              </Link>
+              <Link
+                href="/shop?featured=true"
+                className="text-slate-400 hover:text-white text-sm transition-colors"
+              >
+                Featured Collections
+              </Link>
+              <Link
+                href="/shop?sale=true"
+                className="text-slate-400 hover:text-white text-sm transition-colors"
+              >
+                Sales & Discounts
+              </Link>
+            </nav>
           </div>
 
+          {/* Company Links */}
           <div>
-            <h3 className="text-white font-semibold text-base mb-4">About</h3>
-            <ul className="space-y-3">
-              <li><a className="text-primary-300 hover:text-white text-sm" href="/about" target="_blank" rel="noopener noreferrer">Our Story</a></li>
-              <li><a className="text-primary-300 hover:text-white text-sm" href="/faq" target="_blank" rel="noopener noreferrer">FAQ</a></li>
-              <li><a className="text-primary-300 hover:text-white text-sm" href="/contact" target="_blank" rel="noopener noreferrer">Contact Us</a></li>
-            </ul>
+            <h4 className="text-white font-semibold text-base mb-4">Company</h4>
+            <nav className="flex flex-col space-y-2.5">
+              <Link
+                href="/about"
+                className="text-slate-400 hover:text-white text-sm transition-colors"
+              >
+                About Us
+              </Link>
+              <Link
+                href="/contact"
+                className="text-slate-400 hover:text-white text-sm transition-colors"
+              >
+                Contact Us
+              </Link>
+              <Link
+                href="/faq"
+                className="text-slate-400 hover:text-white text-sm transition-colors"
+              >
+                Frequently Asked Questions
+              </Link>
+            </nav>
           </div>
 
+          {/* Support & Legal Links */}
           <div>
-            <h3 className="text-white font-semibold text-base mb-4">Customer Service</h3>
-            <ul className="space-y-3">
-              <li><a className="text-primary-300 hover:text-white text-sm" href="/contact" target="_blank" rel="noopener noreferrer">Contact Us</a></li>
-              <li><a className="text-primary-300 hover:text-white text-sm" href="/faq" target="_blank" rel="noopener noreferrer">FAQ</a></li>
-              <li><a className="text-primary-300 hover:text-white text-sm" href="/faq" target="_blank" rel="noopener noreferrer">Shipping &amp; Returns</a></li>
-              <li><a className="text-primary-300 hover:text-white text-sm" href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a></li>
-              <li><a className="text-primary-300 hover:text-white text-sm" href="/faq" target="_blank" rel="noopener noreferrer">Terms &amp; Conditions</a></li>
-            </ul>
+            <h4 className="text-white font-semibold text-base mb-4">
+              Customer Support
+            </h4>
+            <nav className="flex flex-col space-y-2.5">
+              <Link
+                href="/faq"
+                className="text-slate-400 hover:text-white text-sm transition-colors"
+              >
+                Shipping & Returns
+              </Link>
+              <Link
+                href="/privacy"
+                className="text-slate-400 hover:text-white text-sm transition-colors"
+              >
+                Privacy Policy
+              </Link>
+              <Link
+                href="/faq"
+                className="text-slate-400 hover:text-white text-sm transition-colors"
+              >
+                Terms & Conditions
+              </Link>
+            </nav>
           </div>
         </div>
 
-        <div className="border-t border-primary-700 mt-8 pt-8 flex flex-col md:flex-row justify-between items-center">
-          <p className="text-primary-300 text-sm">© {new Date().getFullYear()} ModernRetail. All rights reserved.</p>
-          <div className="mt-4 md:mt-0 flex items-center space-x-4">
-            <svg viewBox="0 0 38 24" xmlns="http://www.w3.org/2000/svg" className="h-8 w-auto">
-              <path d="M35 0H3C1.3 0 0 1.3 0 3v18c0 1.7 1.4 3 3 3h32c1.7 0 3-1.3 3-3V3c0-1.7-1.4-3-3-3z" fill="#0E4595"/>
-              <path d="M35 1c1.1 0 2 .9 2 2v18c0 1.1-.9 2-2 2H3c-1.1 0-2-.9-2-2V3c0-1.1.9-2 2-2h32" fill="#FFF"/>
-              <path d="M15 19h2v-9h-2v9zm-5.8-9L6.6 15c-.3.7-.6 1.3-.9 1.5H9.2L13 10h-3.8zm21.5 9h2l-5-9h-1.6l-5 9h1.8l1.1-2.3h5.6l1.1 2.3zm-4.7-3.7l2.3-4.9 2.3 4.9h-4.6z" fill="#0E4595"/>
-            </svg>
-            <svg viewBox="0 0 38 24" xmlns="http://www.w3.org/2000/svg" className="h-8 w-auto">
-              <path d="M35 0H3C1.3 0 0 1.3 0 3v18c0 1.7 1.4 3 3 3h32c1.7 0 3-1.3 3-3V3c0-1.7-1.4-3-3-3z" fill="#000"/>
-              <path d="M35 1c1.1 0 2 .9 2 2v18c0 1.1-.9 2-2 2H3c-1.1 0-2-.9-2-2V3c0-1.1.9-2 2-2h32" fill="#FFF"/>
-              <circle cx="15" cy="12" r="5" fill="#EB001B"/>
-              <circle cx="23" cy="12" r="5" fill="#F79E1B"/>
-            </svg>
+        {/* Payment Methods Section */}
+        <div className="border-t border-slate-800 mt-10 pt-8">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex items-center space-x-2 text-slate-400 text-xs">
+              <ShieldCheck className="h-4 w-4 text-emerald-500" />
+              <span>Guaranteed 256-bit Encrypted & Secure Checkout</span>
+            </div>
+
+            {/* Accepted Payment Provider Badges */}
+            <div className="flex flex-wrap items-center justify-center gap-2.5">
+              {/* Lemon Squeezy */}
+              <div
+                className="h-7 px-2.5 bg-slate-800 border border-slate-700 rounded flex items-center justify-center text-[11px] font-medium text-amber-300"
+                title="Lemon Squeezy"
+              >
+                <svg
+                  className="w-3.5 h-3.5 mr-1 fill-current"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14.5h-2v-2h2v2zm0-4h-2V7h2v5.5z" />
+                </svg>
+                Lemon Squeezy
+              </div>
+
+              {/* Stripe */}
+              <div
+                className="h-7 px-2.5 bg-[#635BFF]/10 border border-[#635BFF]/30 rounded flex items-center justify-center text-xs font-semibold text-[#8F88FF]"
+                title="Stripe"
+              >
+                Stripe
+              </div>
+
+              {/* Visa */}
+              <div
+                className="h-7 px-2 bg-slate-800 border border-slate-700 rounded flex items-center justify-center"
+                title="Visa"
+              >
+                <svg
+                  viewBox="0 0 38 24"
+                  className="h-4 w-auto"
+                  aria-label="Visa"
+                >
+                  <path
+                    d="M15 19h2v-9h-2v9zm-5.8-9L6.6 15c-.3.7-.6 1.3-.9 1.5H9.2L13 10h-3.8zm21.5 9h2l-5-9h-1.6l-5 9h1.8l1.1-2.3h5.6l1.1 2.3zm-4.7-3.7l2.3-4.9 2.3 4.9h-4.6z"
+                    fill="#1A1F71"
+                  />
+                  <path
+                    d="M35 0H3C1.3 0 0 1.3 0 3v18c0 1.7 1.4 3 3 3h32c1.7 0 3-1.3 3-3V3c0-1.7-1.4-3-3-3z"
+                    fill="none"
+                  />
+                </svg>
+                <span className="text-xs font-bold text-white tracking-wider ml-1">
+                  VISA
+                </span>
+              </div>
+
+              {/* Mastercard */}
+              <div
+                className="h-7 px-2 bg-slate-800 border border-slate-700 rounded flex items-center justify-center space-x-1"
+                title="Mastercard"
+              >
+                <svg
+                  viewBox="0 0 38 24"
+                  className="h-4 w-auto"
+                  aria-label="Mastercard"
+                >
+                  <circle cx="15" cy="12" r="6" fill="#EB001B" />
+                  <circle cx="23" cy="12" r="6" fill="#F79E1B" fillOpacity="0.8" />
+                </svg>
+                <span className="text-[10px] font-semibold text-slate-200">
+                  Mastercard
+                </span>
+              </div>
+
+              {/* Safaricom */}
+              <div
+                className="h-7 px-2.5 bg-emerald-950/40 border border-emerald-600/40 rounded flex items-center justify-center text-xs font-semibold text-emerald-400"
+                title="Safaricom"
+              >
+                Safaricom
+              </div>
+
+              {/* M-Pesa */}
+              <div
+                className="h-7 px-2.5 bg-emerald-600 border border-emerald-500 rounded flex items-center justify-center text-xs font-bold text-white tracking-wide shadow-sm"
+                title="M-Pesa"
+              >
+                M-PESA
+              </div>
+            </div>
           </div>
+        </div>
+
+        {/* Bottom Copyright */}
+        <div className="border-t border-slate-800 mt-6 pt-6 flex flex-col sm:flex-row justify-between items-center text-slate-400 text-xs">
+          <p>© {new Date().getFullYear()} RetailTrove. All rights reserved.</p>
+          <p className="mt-2 sm:mt-0">
+            Engineered for speed, security, and reliability.
+          </p>
         </div>
       </div>
     </footer>
