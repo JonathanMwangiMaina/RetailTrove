@@ -21,7 +21,7 @@ export interface IStorage {
   getProductById(id: number): Promise<Product | undefined>;
   createProduct(product: InsertProduct): Promise<Product>;
 
-  // ── Bootstrap / Initialization Methods ─────────────────────────────────────
+  // ── Optional Bootstrap / Initialization Methods ─────────────────────────────
   ensureBanner?(): Promise<void>;
   ensureDefaultAdmin?(): Promise<void>;
   ensureSiteContent?(): Promise<void>;
