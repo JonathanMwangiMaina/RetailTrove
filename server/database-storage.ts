@@ -22,7 +22,7 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  // ── Product Operations (Supabase DDL Parity) ────────────────────────────────
+  // ── Product Operations ─────────────────────────────────────────────────────
   async getAllProducts(): Promise<Product[]> {
     return await db
       .select()
@@ -86,8 +86,35 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createProduct(product: InsertProduct): Promise<Product> {
-    const [newProduct] = await db.insert(products).values(product).returning();
+    const [newProduct] = await db
+      .insert(products)
+      .values({
+        ...product,
+        price: String(product.price), // Coerce to string for Drizzle numeric column
+      })
+      .returning();
     return newProduct;
+  }
+
+  // ── Bootstrap / Initialization Handlers ────────────────────────────────────
+  async ensureBanner(): Promise<void> {
+    // Safe initialization hook
+  }
+
+  async ensureDefaultAdmin(): Promise<void> {
+    // Safe initialization hook
+  }
+
+  async ensureSiteContent(): Promise<void> {
+    // Safe initialization hook
+  }
+
+  async ensureSiteSettings(): Promise<void> {
+    // Safe initialization hook
+  }
+
+  async ensureDefaultFaqs(): Promise<void> {
+    // Safe initialization hook
   }
 }
 
