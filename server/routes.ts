@@ -87,6 +87,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ── Missing API Endpoints (Fixes Vercel 404 Logs) ─────────────────────────
+
+  // Site Settings
+  app.get("/api/site-settings", async (_req: Request, res: Response) => {
+    try {
+      const settings = await storage.getSiteSettings();
+      res.json(settings);
+    } catch (error) {
+      console.error("Error fetching site settings:", error);
+      res.status(500).json({ message: "Failed to fetch site settings" });
+    }
+  });
+
+  // Banner
+  app.get("/api/banner", async (_req: Request, res: Response) => {
+    try {
+      const banner = await storage.getBanner();
+      res.json(banner);
+    } catch (error) {
+      console.error("Error fetching banner:", error);
+      res.status(500).json({ message: "Failed to fetch banner" });
+    }
+  });
+
+  // Site Content (e.g. /api/site-content/footer_about)
+  app.get("/api/site-content/:key", async (req: Request, res: Response) => {
+    try {
+      const key = req.params.key;
+      const content = await storage.getSiteContent(key);
+      res.json(content);
+    } catch (error) {
+      console.error(`Error fetching site content for ${req.params.key}:`, error);
+      res.status(500).json({ message: "Failed to fetch site content" });
+    }
+  });
+
+  // Cart Endpoint
+  app.get("/api/cart/:cartId", async (req: Request, res: Response) => {
+    try {
+      const cartId = req.params.cartId;
+      const cart = await storage.getCart(cartId);
+      res.json(cart);
+    } catch (error) {
+      console.error(`Error fetching cart ${req.params.cartId}:`, error);
+      res.status(500).json({ message: "Failed to fetch cart" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
