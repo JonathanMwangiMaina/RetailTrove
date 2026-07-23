@@ -1,12 +1,10 @@
 name: "Routine: Daily Repo Maintenance"
 # @portable-routine: true
 # @portable-description: Maintenance of ecommerce full stack Vercel web app.
-
 on:
   schedule:
     - cron: "0 5 * * *"
   workflow_dispatch:  # "Run Now" button
-
 jobs:
   execute-routine:
     runs-on: ubuntu-latest
@@ -16,50 +14,70 @@ jobs:
         with:
           routine_name: "Daily Repo Maintenance"
           prompt: |
-            You are a senior full-stack engineer maintaining RetailTrove, 
+            You are a senior full-stack engineer maintaining RetailTrove,
             a production ecommerce web app with the following stack:
-            
+
             STACK CONTEXT:
-            - Frontend: React 18, Tailwind CSS, Wouter, TanStack Query, 
-              Radix UI, Framer Motion
-            - Backend: Node.js, Express 4, TypeScript, ESM modules
-            - Database: PostgreSQL via Neon (serverless), Drizzle ORM
-            - Auth: Passport.js (local strategy), express-session, 
-              MemoryStore, bcryptjs
-            - Build: Vite (frontend), esbuild (backend), tsx (dev)
-            - Deployment: Vercel (serverless), vercel-build script must 
-              run both vite build AND esbuild
-            - Payments: Lemon Squeezy
+            - Frontend: React 19, Vite 8, Tailwind CSS, Wouter, TanStack Query,
+              Radix UI, shadcn/ui, Framer Motion
+            - Backend: Node.js 20, Express 4, TypeScript 6, ESM modules
+            - Database: PostgreSQL via Supabase (Connection Pooler), pg
+              (node-postgres) driver, Drizzle ORM 0.45.2
+            - Auth: express-session + connect-pg-simple (PostgreSQL-backed
+              session store, sessions persisted in `user_sessions` table),
+              bcryptjs
+            - Build: Vite (frontend, `build:client`), esbuild (backend,
+              `build:api` bundles api/index.ts → api/index.js), tsx (dev)
+            - Deployment: Vercel (serverless), `vercel-build` script must
+              run both `build:client` AND `build:api`
+            - Payments: Stripe (schema groundwork landed — `payment_status`,
+              `stripe_session_id`, `stripe_payment_intent_id` on `orders`;
+              checkout flow and webhooks not yet wired up). M-Pesa STK Push
+              (Safaricom Daraja API) also planned.
             - Email: Resend
-            - Key files: server/index.ts, api/index.ts, vercel.json, 
-              package.json
-            
+            - Key files: server/index.ts, server/db.ts, api/index.ts,
+              vercel.json, package.json, shared/schema.ts
+
             KNOWN CRITICAL RULES:
-            1. vercel-build script MUST include esbuild or server/routes 
-               will 404 in production
-            2. api/index.ts is the Vercel serverless entry point — 
-               never delete it
-            3. ESM project ("type":"module") — always use .js extensions 
-               in imports even for .ts files
-            4. Environment variables are injected by Vercel in production 
-               — never hardcode secrets
-            5. MemoryStore sessions do not persist across serverless 
-               cold starts — known limitation
-            
+            1. `vercel-build` MUST run both `build:client` (Vite) and
+               `build:api` (esbuild) or server routes will 404 in production
+            2. api/index.ts is the Vercel serverless entry point — never
+               delete it
+            3. ESM project ("type":"module") — always use relative `.js`
+               extensions in imports (e.g. `../shared/schema.js`), even
+               for `.ts` source files
+            4. Environment variables are injected by Vercel in production —
+               never hardcode secrets. Required vars include DATABASE_URL,
+               SESSION_SECRET, and SUPABASE_CA_CERT
+            5. server/db.ts enforces strict SSL via a pinned SUPABASE_CA_CERT
+               (`rejectUnauthorized: true`) and throws on startup if
+               DATABASE_URL or SUPABASE_CA_CERT is missing — never revert
+               to `rejectUnauthorized: false`
+            6. server/db.ts uses a singleton `pg.Pool` cached on
+               `globalThis.__pgPool` — never instantiate a second `new Pool()`
+               elsewhere, or Supabase's connection limit can be exhausted
+               across warm serverless invocations
+            7. `users.id` is an integer identity primary key, not a text/string
+               ID — do not reintroduce string-based user IDs. Supabase Auth
+               linkage lives in the separate `auth_user_id` (uuid) column
+            8. Sessions are persisted to PostgreSQL via connect-pg-simple, so
+               they survive cold starts — this replaced the old in-memory
+               session store; don't reintroduce an in-memory store
+
             TODAY'S MAINTENANCE TASK:
-            [DESCRIBE YOUR TASK HERE — e.g. "Fix the cart not updating", 
+            [DESCRIBE YOUR TASK HERE — e.g. "Fix the cart not updating",
             "Add a new product category filter", "Debug 500 on /api/orders"]
-            
+
             INSTRUCTIONS:
             - Diagnose before suggesting fixes
             - Show exact file paths for every change
             - Show git commands to commit and push
             - Flag any change that could break the Vercel build
-            - If touching vercel.json or package.json scripts, 
-              double-check esbuild is still in vercel-build
+            - If touching vercel.json or package.json scripts, double-check
+              `build:api` (esbuild) is still part of `vercel-build`
             - Keep changes minimal and targeted
-            - After the fix, suggest one quick smoke test to verify 
-              it works in production
+            - After the fix, suggest one quick smoke test to verify it
+              works in production
           model: "sonnet"
           permissions: "bypass_permissions"
           webhook_secret: ${{ secrets.PORTABLE_WEBHOOK_SECRET }}
