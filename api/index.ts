@@ -1,7 +1,7 @@
 // Vercel Serverless Function Entry Point
 // This wraps the Express app with serverless-http for Vercel's serverless runtime
 import express from 'express';
-import {registerRoutes} from '../server/routes.ts';
+import {registerRoutes} from '../server/routes.js';
 
 const app = express();
 
