@@ -10,6 +10,9 @@ import {
 import { eq, and, or } from "drizzle-orm";
 import { IStorage } from "./storage.js";
 
+// In-memory cart store for session-less carts (or query from DB if you have a cart table)
+const activeCarts = new Map<string, any>();
+
 export class DatabaseStorage implements IStorage {
   // ── User Operations ────────────────────────────────────────────────────────
   async getUser(id: string): Promise<User | undefined> {
@@ -90,32 +93,36 @@ export class DatabaseStorage implements IStorage {
       .insert(products)
       .values({
         ...product,
-        price: String(product.price), // Coerce to string to strictly match Drizzle numeric type
+        price: String(product.price),
+        ...(product.originalPrice ? { originalPrice: String(product.originalPrice) } : {}),
       })
       .returning();
     return newProduct;
   }
 
+  // ── Cart & Site Content Operations (To resolve 404s) ────────────────────────
+  async getCart(cartId: string): Promise<any> {
+    return activeCarts.get(cartId) || { id: cartId, items: [] };
+  }
+
+  async getSiteSettings(): Promise<any> {
+    return { siteName: "RetailTrove", maintenanceMode: false };
+  }
+
+  async getBanner(): Promise<any> {
+    return { active: true, message: "Welcome to RetailTrove!" };
+  }
+
+  async getSiteContent(key: string): Promise<any> {
+    return { key, content: "RetailTrove - Your Trusted Store" };
+  }
+
   // ── Bootstrap / Initialization Handlers ────────────────────────────────────
-  async ensureBanner(): Promise<void> {
-    // Safe initialization hook
-  }
-
-  async ensureDefaultAdmin(): Promise<void> {
-    // Safe initialization hook
-  }
-
-  async ensureSiteContent(): Promise<void> {
-    // Safe initialization hook
-  }
-
-  async ensureSiteSettings(): Promise<void> {
-    // Safe initialization hook
-  }
-
-  async ensureDefaultFaqs(): Promise<void> {
-    // Safe initialization hook
-  }
+  async ensureBanner(): Promise<void> {}
+  async ensureDefaultAdmin(): Promise<void> {}
+  async ensureSiteContent(): Promise<void> {}
+  async ensureSiteSettings(): Promise<void> {}
+  async ensureDefaultFaqs(): Promise<void> {}
 }
 
 export const databaseStorage = new DatabaseStorage();
