@@ -1,29 +1,28 @@
-// Vercel Serverless Function Entry Point
-import express from 'express';
-import session from 'express-session';
-import connectPgSimple from 'connect-pg-simple';
-import pg from 'pg';
-import { registerRoutes } from '../server/routes.js';
-import { setupAuth } from '../server/auth.js';
+import express from "express";
+import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
+import pg from "pg";
+import { registerRoutes } from "./routes.js";
+import { setupAuth } from "./auth.js";
+import { storage } from "./storage.js";
 
 const app = express();
 
-// ── Database Connection Pool for Session Store ──────────────────────────────
+// ── Trust Vercel Reverse Proxies ─────────────────────────────────────────────
+app.set("trust proxy", 1);
+
+// ── Database Connection Pool for Sessions ────────────────────────────────────
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl:
-    process.env.NODE_ENV === "production"
-      ? { rejectUnauthorized: false }
-      : false,
+  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
 });
 
 const PgSessionStore = connectPgSimple(session);
 
-// Middleware for parsing JSON and URL-encoded bodies
+// ── Middleware Configuration ──────────────────────────────────────────────────
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// ── Session Middleware Setup ───────────────────────────────────────────────
 app.use(
   session({
     store: new PgSessionStore({
@@ -42,9 +41,26 @@ app.use(
   })
 );
 
-// Register Auth & API routes
+// ── Safe Storage Bootstrap Middleware (Serverless Friendly) ──────────────────
+let isBootstrapped = false;
+app.use(async (_req, _res, next) => {
+  if (!isBootstrapped) {
+    try {
+      await storage.ensureBanner?.();
+      await storage.ensureDefaultAdmin?.();
+      await storage.ensureSiteContent?.();
+      await storage.ensureSiteSettings?.();
+      await storage.ensureDefaultFaqs?.();
+      isBootstrapped = true;
+    } catch (error) {
+      console.error("Failed to execute storage bootstrap methods:", error);
+    }
+  }
+  next();
+});
+
+// ── Register Routes ──────────────────────────────────────────────────────────
 setupAuth(app);
 registerRoutes(app);
 
-// Export Express instance directly for Vercel Serverless Function runtime
 export default app;
