@@ -1,12 +1,13 @@
-import { Request, Response, NextFunction } from "express";
+import { Express, Request, Response, NextFunction } from "express";
 import bcrypt from "bcryptjs";
+import { storage } from "./storage.js";
 
 // ── Session Type Declaration ──────────────────────────────────────────────────
 declare module "express-session" {
   interface SessionData {
-    userId: number;
+    userId: string;
     role: string;
-    name: string;
+    name?: string;
   }
 }
 
@@ -37,4 +38,38 @@ export function requireRole(...roles: string[]) {
     }
     next();
   };
+}
+
+// ── Auth Route Setup ──────────────────────────────────────────────────────────
+export function setupAuth(app: Express) {
+  // Get Current Authenticated User (/api/auth/me)
+  app.get("/api/auth/me", async (req: Request, res: Response) => {
+    try {
+      if (!req.session || !req.session.userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
+      const user = await storage.getUser(req.session.userId);
+      if (!user) {
+        req.session.destroy(() => {});
+        return res.status(401).json({ message: "User session invalid" });
+      }
+
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching active user session:", error);
+      res.status(500).json({ message: "Failed to retrieve user session" });
+    }
+  });
+
+  // Logout Route
+  app.post("/api/auth/logout", (req: Request, res: Response) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ message: "Failed to log out" });
+      }
+      res.clearCookie("connect.sid");
+      res.json({ message: "Logged out successfully" });
+    });
+  });
 }
