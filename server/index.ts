@@ -3,8 +3,8 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import pg from "pg";
 // ✅ Fix 1: Remove .ts extension (esbuild resolves this at build time)
-import { registerRoutes } from "./routes";
-import { storage } from "./storage";
+import { registerRoutes } from "./routes.js";
+import { storage } from "./storage.js";
 
 const app = express();
 
