@@ -63,8 +63,8 @@ registerRoutes(app);  // Registers product, banner, site-settings, cart routes
 // ── Export App for Vercel Serverless Integration ────────────────────────────
 export default app;
 
-// ── Listen Only in Local Development ───────────────────────────────────────
-  const PORT = process.env.PORT || 5000;
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-  }); do you guarantee it will work properly for both Render and Vercel now?
+// ── Start Server ────────────────────────────────────────────────────────────
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});
