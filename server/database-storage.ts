@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { db } from "./db.js";
 import {
   products,
   users,
@@ -6,9 +6,9 @@ import {
   type InsertProduct,
   type User,
   type InsertUser,
-} from "../shared/schema";
+} from "../shared/schema.js";
 import { eq, and, or } from "drizzle-orm";
-import { IStorage } from "./storage";
+import { IStorage } from "./storage.js";
 
 export class DatabaseStorage implements IStorage {
   // ── User Operations ────────────────────────────────────────────────────────
