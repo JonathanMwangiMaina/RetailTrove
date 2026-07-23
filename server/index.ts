@@ -8,6 +8,9 @@ import { storage } from "./storage.js";
 
 const app = express();
 
+// ── Trust Vercel / Reverse Proxies for Secure Session Cookies ────────────────
+app.set("trust proxy", 1);
+
 // ── Database Connection Pool for Session Store ──────────────────────────────
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
