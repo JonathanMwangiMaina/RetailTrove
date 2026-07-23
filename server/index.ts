@@ -2,14 +2,9 @@ import express from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import pg from "pg";
-import path from "path";
-import { fileURLToPath } from "url";
 import { registerRoutes } from "./routes.js";
 import { setupAuth } from "./auth.js";
 import { storage } from "./storage.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 
@@ -65,28 +60,13 @@ bootstrapStorage();
 setupAuth(app);       // Registers /api/auth/me and logout
 registerRoutes(app);  // Registers product, banner, site-settings, cart routes
 
-// ── Serve Static Assets & SPA Fallback (Render & Local Production) ─────────
-// Skipped on Vercel, as Vercel's Edge CDN handles static asset serving directly.
-if (process.env.NODE_ENV === "production" && !process.env.VERCEL) {
-  const publicDir = path.join(__dirname, "public");
-
-  // Serve static JS/CSS/image files from dist/public
-  app.use(express.static(publicDir));
-
-  // Serve index.html for non-API requests (React Router SPA fallback)
-  app.get("*", (req, res, next) => {
-    if (req.path.startsWith("/api")) {
-      return next();
-    }
-    res.sendFile(path.join(publicDir, "index.html"));
-  });
-}
-
 // ── Export App for Vercel Serverless Integration ────────────────────────────
 export default app;
 
-// ── Start Server for Render & Local Development ─────────────────────────────
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+// ── Listen Only in Local Development ───────────────────────────────────────
+if (process.env.NODE_ENV !== "production") {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+  });
+}
