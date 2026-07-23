@@ -11,10 +11,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/products", async (_req: Request, res: Response) => {
     try {
       const products = await storage.getAllProducts();
-      res.json(products);
+      res.json(Array.isArray(products) ? products : []);
     } catch (error) {
       console.error("Error fetching all products:", error);
-      res.status(500).json({ message: "Failed to fetch products" });
+      res.json([]); // Return empty array instead of error object to avoid .reduce() crashes
     }
   });
 
@@ -22,10 +22,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/products/featured", async (_req: Request, res: Response) => {
     try {
       const products = await storage.getFeaturedProducts();
-      res.json(products);
+      res.json(Array.isArray(products) ? products : []);
     } catch (error) {
       console.error("Error fetching featured products:", error);
-      res.status(500).json({ message: "Failed to fetch featured products" });
+      res.json([]);
     }
   });
 
@@ -33,10 +33,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/products/new-arrivals", async (_req: Request, res: Response) => {
     try {
       const products = await storage.getNewArrivals();
-      res.json(products);
+      res.json(Array.isArray(products) ? products : []);
     } catch (error) {
       console.error("Error fetching new arrivals:", error);
-      res.status(500).json({ message: "Failed to fetch new arrivals" });
+      res.json([]);
     }
   });
 
@@ -45,10 +45,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const category = req.params.category;
       const products = await storage.getProductsByCategory(category);
-      res.json(products);
+      res.json(Array.isArray(products) ? products : []);
     } catch (error) {
       console.error(`Error fetching products for category ${req.params.category}:`, error);
-      res.status(500).json({ message: "Failed to fetch products by category" });
+      res.json([]);
     }
   });
 
@@ -87,13 +87,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ── Missing API Endpoints (Fixes Vercel 404 Logs) ─────────────────────────
+  // ── Site Metadata & Settings ──────────────────────────────────────────────
 
   // Site Settings
   app.get("/api/site-settings", async (_req: Request, res: Response) => {
     try {
       const settings = await storage.getSiteSettings();
-      res.json(settings);
+      res.json(settings || { siteName: "RetailTrove", maintenanceMode: false });
     } catch (error) {
       console.error("Error fetching site settings:", error);
       res.status(500).json({ message: "Failed to fetch site settings" });
@@ -104,7 +104,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/banner", async (_req: Request, res: Response) => {
     try {
       const banner = await storage.getBanner();
-      res.json(banner);
+      res.json(banner || { active: false, message: "" });
     } catch (error) {
       console.error("Error fetching banner:", error);
       res.status(500).json({ message: "Failed to fetch banner" });
@@ -116,22 +116,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const key = req.params.key;
       const content = await storage.getSiteContent(key);
-      res.json(content);
+      res.json(content || { key, content: "" });
     } catch (error) {
       console.error(`Error fetching site content for ${req.params.key}:`, error);
       res.status(500).json({ message: "Failed to fetch site content" });
     }
   });
 
-  // Cart Endpoint
+  // Cart Endpoint — Enforces array output for client calculations
   app.get("/api/cart/:cartId", async (req: Request, res: Response) => {
     try {
       const cartId = req.params.cartId;
       const cart = await storage.getCart(cartId);
-      res.json(cart);
+      res.json(Array.isArray(cart) ? cart : []);
     } catch (error) {
       console.error(`Error fetching cart ${req.params.cartId}:`, error);
-      res.status(500).json({ message: "Failed to fetch cart" });
+      res.json([]); // Return empty array so frontend .reduce() / .map() does not crash
     }
   });
 
