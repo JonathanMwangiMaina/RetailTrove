@@ -22,7 +22,7 @@ export async function comparePassword(password: string, hash: string): Promise<b
 
 // ── Middleware Guards ─────────────────────────────────────────────────────────
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (!req.session.userId) {
+  if (!req.session?.userId) {
     return res.status(401).json({ message: "Authentication required" });
   }
   next();
@@ -30,7 +30,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
 
 export function requireRole(...roles: string[]) {
   return (req: Request, res: Response, next: NextFunction) => {
-    if (!req.session.userId) {
+    if (!req.session?.userId) {
       return res.status(401).json({ message: "Authentication required" });
     }
     if (!roles.includes(req.session.role || "")) {
@@ -45,7 +45,7 @@ export function setupAuth(app: Express) {
   // Get Current Authenticated User (/api/auth/me)
   app.get("/api/auth/me", async (req: Request, res: Response) => {
     try {
-      if (!req.session || !req.session.userId) {
+      if (!req.session?.userId) {
         return res.status(401).json({ message: "Not authenticated" });
       }
 
@@ -55,7 +55,9 @@ export function setupAuth(app: Express) {
         return res.status(401).json({ message: "User session invalid" });
       }
 
-      res.json(user);
+      // Return sanitized user without sensitive password hash
+      const { passwordHash, ...sanitizedUser } = user as any;
+      res.json(sanitizedUser);
     } catch (error) {
       console.error("Error fetching active user session:", error);
       res.status(500).json({ message: "Failed to retrieve user session" });
@@ -64,8 +66,13 @@ export function setupAuth(app: Express) {
 
   // Logout Route
   app.post("/api/auth/logout", (req: Request, res: Response) => {
+    if (!req.session) {
+      return res.json({ message: "Logged out successfully" });
+    }
+
     req.session.destroy((err) => {
       if (err) {
+        console.error("Error destroying session:", err);
         return res.status(500).json({ message: "Failed to log out" });
       }
       res.clearCookie("connect.sid");
