@@ -10,13 +10,16 @@ import {
 import { eq, and, or } from "drizzle-orm";
 import { IStorage } from "./storage.js";
 
-// In-memory cart store for session-less carts
-const activeCarts = new Map<string, any>();
+// In-memory cart store for session/guest carts
+const activeCarts = new Map<string, any[]>();
 
 export class DatabaseStorage implements IStorage {
   // ── User Operations ────────────────────────────────────────────────────────
-  async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
+  async getUser(id: number | string): Promise<User | undefined> {
+    const numericId = typeof id === "string" ? parseInt(id, 10) : id;
+    if (isNaN(numericId)) return undefined;
+
+    const [user] = await db.select().from(users).where(eq(users.id, numericId));
     return user;
   }
 
@@ -116,8 +119,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ── Cart & Site Settings Operations ────────────────────────────────────────
-  async getCart(cartId: string): Promise<any> {
-    return activeCarts.get(cartId) || { id: cartId, items: [] };
+  async getCart(cartId: string): Promise<any[]> {
+    return activeCarts.get(cartId) || [];
   }
 
   async getSiteSettings(): Promise<any> {
@@ -132,7 +135,7 @@ export class DatabaseStorage implements IStorage {
     return { key, content: "RetailTrove - Your Trusted Store" };
   }
 
-  // ── Bootstrap / Initialization Handlers ────────────────────────────────────
+  // ── Bootstrap Handlers ─────────────────────────────────────────────────────
   async ensureBanner(): Promise<void> {}
   async ensureDefaultAdmin(): Promise<void> {}
   async ensureSiteContent(): Promise<void> {}
