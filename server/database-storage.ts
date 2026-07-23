@@ -10,7 +10,7 @@ import {
 import { eq, and, or } from "drizzle-orm";
 import { IStorage } from "./storage.js";
 
-// In-memory cart store for session-less carts (or query from DB if you have a cart table)
+// In-memory cart store for session-less carts
 const activeCarts = new Map<string, any>();
 
 export class DatabaseStorage implements IStorage {
@@ -89,18 +89,33 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createProduct(product: InsertProduct): Promise<Product> {
+    const valuesToInsert: typeof products.$inferInsert = {
+      name: product.name,
+      description: product.description,
+      price: String(product.price),
+      imageUrl: product.imageUrl,
+      category: product.category,
+      subcategory: product.subcategory ?? null,
+      badge: product.badge ?? null,
+      featured: product.featured ?? false,
+      newArrival: product.newArrival ?? false,
+      inStock: product.inStock ?? true,
+      stockQuantity: product.stockQuantity ?? 0,
+      rating: product.rating ? String(product.rating) : "5",
+      vendorId: product.vendorId ?? null,
+      approvalStatus: product.approvalStatus ?? "approved",
+      ...(product.originalPrice ? { originalPrice: String(product.originalPrice) } : {}),
+    };
+
     const [newProduct] = await db
       .insert(products)
-      .values({
-        ...product,
-        price: String(product.price),
-        ...(product.originalPrice ? { originalPrice: String(product.originalPrice) } : {}),
-      })
+      .values(valuesToInsert)
       .returning();
+
     return newProduct;
   }
 
-  // ── Cart & Site Content Operations (To resolve 404s) ────────────────────────
+  // ── Cart & Site Settings Operations ────────────────────────────────────────
   async getCart(cartId: string): Promise<any> {
     return activeCarts.get(cartId) || { id: cartId, items: [] };
   }
