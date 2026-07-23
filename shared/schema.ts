@@ -11,25 +11,28 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// ── Products Table ───────────────────────────────────────────────────────────
+// ── Products Table (Aligned with Supabase public.products) ────────────────────
 export const products = pgTable("products", {
   id: serial("id").primaryKey(),
-  title: text("title").notNull(),
-  description: text("description"),
-  price: numeric("price", { precision: 10, scale: 2 }).notNull(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  price: numeric("price").notNull(),
+  originalPrice: numeric("original_price"),
+  imageUrl: text("image_url").notNull(),
   category: text("category").notNull(),
   subcategory: text("subcategory"),
-  imageUrl: text("image_url"),
-  inStock: boolean("in_stock").default(true),
-  stockQuantity: integer("stock_quantity").default(0),
+  badge: text("badge"),
   featured: boolean("featured").default(false),
   newArrival: boolean("new_arrival").default(false),
-  approvalStatus: text("approval_status").default("approved"),
-  vendorId: text("vendor_id").references(() => users.id),
+  inStock: boolean("in_stock").default(true),
+  stockQuantity: integer("stock_quantity").default(0),
+  rating: numeric("rating").default("5"),
+  vendorId: integer("vendor_id"),
+  approvalStatus: text("approval_status").default("approved").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// ── Orders Table (Supabase DDL Parity) ─────────────────────────────────────────
+// ── Orders Table ─────────────────────────────────────────────────────────────
 export const orders = pgTable("orders", {
   id: serial("id").primaryKey(),
   userId: text("user_id").references(() => users.id),
@@ -47,6 +50,8 @@ export const selectUserSchema = createSelectSchema(users);
 
 export const insertProductSchema = createInsertSchema(products, {
   price: z.string().or(z.number()),
+  originalPrice: z.string().or(z.number()).optional(),
+  rating: z.string().or(z.number()).optional(),
   stockQuantity: z.number().int().nonnegative().optional(),
 });
 export const selectProductSchema = createSelectSchema(products);
