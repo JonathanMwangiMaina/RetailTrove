@@ -20,8 +20,8 @@ export default function About() {
         <div className="absolute inset-0 bg-gradient-to-r from-primary-900/90 to-primary-800/70 overflow-hidden">
           <div className="absolute inset-0">
             <img 
-              src="https://images.unsplash.com/photo-1581075653353-85200216e351?ixlib=rb-1.2.1&auto=format&fit=crop&w=1950&q=80" 
-              alt="Team working together" 
+              src="https://images.unsplash.com/photo-ABVE1cyT7hk?auto=format&fit=crop&w=1950&q=80" 
+              alt="People with hands gathered in the middle"
               className="h-full w-full object-cover opacity-30"
             />
           </div>
