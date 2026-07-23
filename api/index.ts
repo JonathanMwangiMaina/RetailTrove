@@ -2,9 +2,10 @@ import express from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import pg from "pg";
-import { registerRoutes } from "./routes.js";
-import { setupAuth } from "./auth.js";
-import { storage } from "./storage.js";
+import serverless from "serverless-http";
+import { registerRoutes } from "../server/routes.js";
+import { setupAuth } from "../server/auth.js";
+import { storage } from "../server/storage.js";
 
 const app = express();
 
@@ -63,4 +64,5 @@ app.use(async (_req, _res, next) => {
 setupAuth(app);
 registerRoutes(app);
 
-export default app;
+// ── Export Serverless Handler ─────────────────────────────────────────
+export default serverless(app);
