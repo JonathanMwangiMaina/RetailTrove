@@ -11,11 +11,11 @@ This project does not currently use semantic versioning — entries are dated.
 
 ### Planned — Phase 2 (Payments)
 - Remove PayPal simulation
-- Lemon Squeezy hosted checkout for card payments
+- Stripe hosted checkout for card payments (schema groundwork landed in v0.3.2 — see below; checkout flow and webhook handlers still pending)
 - M-Pesa STK Push via Safaricom Daraja API
 - Server-side order total verification
 - African countries added to checkout country dropdown
-- Payment webhook handlers (Lemon Squeezy, M-Pesa)
+- Payment webhook handlers (Stripe, M-Pesa)
 
 ### Planned — Phase 3 (Hardening & Quality)
 - `helmet` security headers (CSP, HSTS, X-Frame-Options)
@@ -26,6 +26,51 @@ This project does not currently use semantic versioning — entries are dated.
 - Vitest unit + integration test suite
 - Cursor-based pagination on `/api/products`
 - Sentry error monitoring
+- Upgrade Express 4.21 → 5.x
+
+---
+
+## [0.3.2] — 2026-07-23
+
+### Added
+
+#### Serverless Connection Hardening
+- Singleton `pg.Pool` instance cached on `globalThis.__pgPool` in `server/db.ts`, reused across warm serverless invocations instead of being recreated per request
+- Strict SSL enforcement for the Supabase connection: `ssl.ca` pinned via a required `SUPABASE_CA_CERT` environment variable with `rejectUnauthorized: true`, replacing the previous permissive `rejectUnauthorized: false`
+- Explicit pool tuning: `max: 5`, `idleTimeoutMillis: 30000`, `connectionTimeoutMillis: 5000`
+- Fail-fast startup checks: `server/db.ts` now throws immediately if `DATABASE_URL` or `SUPABASE_CA_CERT` is missing
+
+#### Build & Deployment
+- `vercel-build` script now chains `build:client` (Vite) and `build:api` (esbuild bundling `api/index.ts` → `api/index.js`, ESM format, `--packages=external`, Node 20 target)
+- `check` script (`tsc`) added for standalone type-checking outside the build pipeline
+- `db:seed` script wired to `server/seed-supabase.ts`
+
+#### Schema — Payments Groundwork
+- Added `payment_status` (text, default `'pending'`), `stripe_session_id` (nullable text), and `stripe_payment_intent_id` (nullable text) columns to `orders`, laying schema groundwork ahead of full Stripe checkout integration
+- Added `user_id` (uuid, nullable) to `orders` and `cart_items`, linking session-scoped cart/order activity to authenticated Supabase Auth users where available
+
+#### Schema — Documented Defaults
+- Explicit column defaults now documented for `banner_settings` (`text`, `bg_color`, `is_active`), `site_content`, and `site_settings` (`value` defaults to `''`)
+
+### Changed
+- `server/db.ts` import path changed from the `@shared/schema` TypeScript alias to a relative ESM import (`../shared/schema.js`), matching the compiled esbuild output
+- `users.id` changed from a text (string) primary key to an `integer` identity primary key (`nextval('users_id_seq'::regclass)`); Supabase Auth linkage is now handled exclusively via the separate `auth_user_id` uuid column
+- `users.role` default set to `'customer'`; `users.is_approved` default set to `true`; `users.status` default set to `'active'`
+- Upgraded TypeScript 5.6.3 → 6.0.0
+- Upgraded React 18.3.1 → 19.1.0
+- Upgraded Vite 5.4.14 → 8.1.0
+- Upgraded Drizzle ORM 0.39.1 → 0.45.2
+- Upgraded bcryptjs 2.4.3 → 3.0.3
+
+### Removed / Deprecated Resolved
+- Fully removed `memorystore`, `passport`, and `@neondatabase/serverless` from `package.json` (previously left in place pending cleanup as of v0.3.0)
+- Removed legacy seed files: `server/seed-db.ts`, `server/update-products.ts`, `server/update-products-2.ts`
+- Removed `server/storage-new.ts` draft file
+
+### Technical Debt Resolved
+- TypeScript, React, and Vite major-version upgrades completed
+- All previously-flagged deprecated packages removed from `package.json`
+- Legacy/draft server files fully deleted from the repository
 
 ---
 
@@ -190,9 +235,9 @@ This project does not currently use semantic versioning — entries are dated.
 - Database pool error handling added (`pool.on('error', ...)`)
 
 ### Removed / Deprecated
-- `memorystore` dependency is no longer imported or used (still in `package.json` for removal in next cleanup)
-- Neon serverless driver references removed from active code (still referenced in `package.json`)
-- `server/update-products.ts` and `server/update-products-2.ts` seeders no longer run on startup (commented out in `server/index.ts`)
+- `memorystore` dependency is no longer imported or used (still in `package.json` for removal in next cleanup — fully removed in v0.3.2)
+- Neon serverless driver references removed from active code (still referenced in `package.json` — fully removed in v0.3.2)
+- `server/update-products.ts` and `server/update-products-2.ts` seeders no longer run on startup (commented out in `server/index.ts` — files fully removed in v0.3.2)
 
 ---
 
@@ -247,7 +292,8 @@ This project does not currently use semantic versioning — entries are dated.
 
 ---
 
-[Unreleased]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.1.0...v0.2.0
