@@ -8,25 +8,21 @@ import { storage } from "./storage.js";
 
 const app = express();
 
-// ── Trust Vercel / Reverse Proxies for Secure Session Cookies ────────────────
+// ── Trust Vercel Reverse Proxies ─────────────────────────────────────────────
 app.set("trust proxy", 1);
 
-// ── Database Connection Pool for Session Store ──────────────────────────────
+// ── Database Connection Pool for Sessions ────────────────────────────────────
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl:
-    process.env.NODE_ENV === "production"
-      ? { rejectUnauthorized: false }
-      : false,
+  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
 });
 
 const PgSessionStore = connectPgSimple(session);
 
-// ── Body Parsing Middleware ──────────────────────────────────────────────────
+// ── Middleware Configuration ──────────────────────────────────────────────────
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// ── Session Middleware Setup ───────────────────────────────────────────────
 app.use(
   session({
     store: new PgSessionStore({
@@ -45,31 +41,26 @@ app.use(
   })
 );
 
-// ── Storage Bootstrap Initialization ─────────────────────────────────────────
-async function bootstrapStorage(): Promise<void> {
-  try {
-    await storage.ensureBanner?.();
-    await storage.ensureDefaultAdmin?.();
-    await storage.ensureSiteContent?.();
-    await storage.ensureSiteSettings?.();
-    await storage.ensureDefaultFaqs?.();
-  } catch (error) {
-    console.error("Failed to execute storage bootstrap methods:", error);
+// ── Safe Storage Bootstrap Middleware (Serverless Friendly) ──────────────────
+let isBootstrapped = false;
+app.use(async (_req, _res, next) => {
+  if (!isBootstrapped) {
+    try {
+      await storage.ensureBanner?.();
+      await storage.ensureDefaultAdmin?.();
+      await storage.ensureSiteContent?.();
+      await storage.ensureSiteSettings?.();
+      await storage.ensureDefaultFaqs?.();
+      isBootstrapped = true;
+    } catch (error) {
+      console.error("Failed to execute storage bootstrap methods:", error);
+    }
   }
-}
+  next();
+});
 
-// ── Register Auth & API Routes ─────────────────────────────────────────────
-bootstrapStorage();
-setupAuth(app);       // Registers /api/auth/me and logout
-registerRoutes(app);  // Registers product, banner, site-settings, cart routes
+// ── Register Routes ──────────────────────────────────────────────────────────
+setupAuth(app);
+registerRoutes(app);
 
-// ── Export App for Vercel Serverless Integration ────────────────────────────
 export default app;
-
-// ── Listen Only in Local Development ───────────────────────────────────────
-if (process.env.NODE_ENV !== "production") {
-  const PORT = process.env.PORT || 5000;
-  app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-  });
-}
