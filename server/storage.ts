@@ -21,6 +21,12 @@ export interface IStorage {
   getProductById(id: number): Promise<Product | undefined>;
   createProduct(product: InsertProduct): Promise<Product>;
 
+  // ── Cart & Site Settings Operations ─────────────────────────────────────────
+  getCart(cartId: string): Promise<any>;
+  getSiteSettings(): Promise<any>;
+  getBanner(): Promise<any>;
+  getSiteContent(key: string): Promise<any>;
+
   // ── Optional Bootstrap / Initialization Methods ─────────────────────────────
   ensureBanner?(): Promise<void>;
   ensureDefaultAdmin?(): Promise<void>;
