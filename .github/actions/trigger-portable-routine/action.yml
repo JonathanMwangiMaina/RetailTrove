@@ -1,6 +1,5 @@
 name: 'Trigger Portable Routine'
 description: 'Triggers a Portable routine via webhook with JWT authentication'
-
 inputs:
   routine_name:
     description: 'Name of the routine'
@@ -22,7 +21,6 @@ inputs:
   webhook_url:
     description: 'Webhook URL for this repository'
     required: true
-
 runs:
   using: 'composite'
   steps:
@@ -43,25 +41,35 @@ runs:
         SHA: ${{ github.sha }}
         WORKFLOW: ${{ github.workflow }}
       run: |
-        # Build JSON payload
-        PAYLOAD=$(cat <<EOF
-        {
-          "routine_id": "$WORKFLOW",
-          "routine_name": "$ROUTINE_NAME",
-          "prompt": "$PROMPT",
-          "model": "$MODEL",
-          "permissions": "$PERMISSIONS",
-          "trigger_context": {
-            "event": "$EVENT_NAME",
-            "workflow_run_id": "$RUN_ID",
-            "workflow_run_number": "$RUN_NUMBER",
-            "actor": "$ACTOR",
-            "ref": "$REF",
-            "sha": "$SHA"
-          }
-        }
-        EOF
-        )
+        # Build JSON payload safely with jq (handles newlines, quotes,
+        # backticks, etc. in ROUTINE_NAME/PROMPT without corrupting the JSON)
+        PAYLOAD=$(jq -n \
+          --arg routine_id "$WORKFLOW" \
+          --arg routine_name "$ROUTINE_NAME" \
+          --arg prompt "$PROMPT" \
+          --arg model "$MODEL" \
+          --arg permissions "$PERMISSIONS" \
+          --arg event "$EVENT_NAME" \
+          --arg run_id "$RUN_ID" \
+          --arg run_number "$RUN_NUMBER" \
+          --arg actor "$ACTOR" \
+          --arg ref "$REF" \
+          --arg sha "$SHA" \
+          '{
+            routine_id: $routine_id,
+            routine_name: $routine_name,
+            prompt: $prompt,
+            model: $model,
+            permissions: $permissions,
+            trigger_context: {
+              event: $event,
+              workflow_run_id: $run_id,
+              workflow_run_number: $run_number,
+              actor: $actor,
+              ref: $ref,
+              sha: $sha
+            }
+          }')
 
         # Send webhook with JWT Bearer token authentication
         RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$WEBHOOK_URL" \
@@ -78,5 +86,4 @@ runs:
           exit 1
         fi
 
-        echo "✅ Routine triggered successfully"
-        echo "$BODY"
+        echo "✅
