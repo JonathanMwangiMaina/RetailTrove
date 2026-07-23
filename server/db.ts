@@ -9,7 +9,7 @@ if (!DATABASE_URL) throw new Error("Missing DATABASE_URL");
 const CA_CERT = process.env.SUPABASE_CA_CERT;
 if (!CA_CERT) throw new Error("Missing SUPABASE_CA_CERT");
 
-// Singleton per warm instance
+// Singleton pool instance per warm serverless container
 const globalForDb = globalThis as unknown as { __pgPool?: Pool };
 
 export const pool =
@@ -18,11 +18,15 @@ export const pool =
     connectionString: DATABASE_URL,
     ssl: {
       ca: CA_CERT,
-      // keep verification on
+      rejectUnauthorized: true, // Strict SSL enforcement
     },
     max: 5,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,
   });
 
-globalForDb.__pgPool = pool;
+if (process.env.NODE_ENV !== "production") {
+  globalForDb.__pgPool = pool;
+}
 
 export const db = drizzle(pool, { schema });
