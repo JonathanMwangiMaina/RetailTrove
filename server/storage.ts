@@ -5,8 +5,8 @@ import type {
   InsertProduct,
   Order,
   InsertOrder,
-} from "../shared/schema";
-import { databaseStorage } from "./database-storage";
+} from "../shared/schema.js";
+import { databaseStorage } from "./database-storage.js";
 
 export interface IStorage {
   // ── User Operations ────────────────────────────────────────────────────────
