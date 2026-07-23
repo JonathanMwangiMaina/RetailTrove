@@ -2,8 +2,8 @@ import express from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import pg from "pg";
-// ✅ Fix 1: Remove .ts extension (esbuild resolves this at build time)
 import { registerRoutes } from "./routes.js";
+import { setupAuth } from "./auth.js";
 import { storage } from "./storage.js";
 
 const app = express();
@@ -55,14 +55,15 @@ async function bootstrapStorage(): Promise<void> {
   }
 }
 
-// ✅ Fix 2: Initialize server synchronously for Vercel Serverless
+// ── Register Auth & API Routes ─────────────────────────────────────────────
 bootstrapStorage();
-registerRoutes(app);
+setupAuth(app);       // Registers /api/auth/me and logout
+registerRoutes(app);  // Registers product, banner, site-settings, cart routes
 
-// ✅ Export app for Vercel serverless integration
+// ── Export App for Vercel Serverless Integration ────────────────────────────
 export default app;
 
-// ✅ Listen only in local development
+// ── Listen Only in Local Development ───────────────────────────────────────
 if (process.env.NODE_ENV !== "production") {
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => {
