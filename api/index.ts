@@ -64,5 +64,5 @@ app.use(async (_req, _res, next) => {
 setupAuth(app);
 registerRoutes(app);
 
-// ── Export Serverless Handler ─────────────────────────────────────────
+// ── Export Single Serverless Handler ─────────────────────────────────────────
 export default serverless(app);
