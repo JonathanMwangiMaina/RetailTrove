@@ -1,25 +1,32 @@
-import type { Express, Request, Response } from "express";
+import express, { type Express, type Request, type Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage.js";
 import { insertProductSchema } from "../shared/schema.js";
 import { z } from "zod";
 
+/**
+ * Creates and registers API routes.
+ * Using Express Router ensures clean separation of concerns and compatibility
+ * with serverless wrappers (Vercel) as well as traditional Node.js servers.
+ */
 export async function registerRoutes(app: Express): Promise<Server> {
+  const router = express.Router();
+
   // ── Product Routes ──────────────────────────────────────────────────────────
 
   // Get all products (Approved products)
-  app.get("/api/products", async (_req: Request, res: Response) => {
+  router.get("/products", async (_req: Request, res: Response) => {
     try {
       const products = await storage.getAllProducts();
       res.json(Array.isArray(products) ? products : []);
     } catch (error) {
       console.error("Error fetching all products:", error);
-      res.json([]); // Return empty array instead of error object to avoid .reduce() crashes
+      res.json([]); // Return empty array to avoid frontend .reduce() crashes
     }
   });
 
   // Get featured products
-  app.get("/api/products/featured", async (_req: Request, res: Response) => {
+  router.get("/products/featured", async (_req: Request, res: Response) => {
     try {
       const products = await storage.getFeaturedProducts();
       res.json(Array.isArray(products) ? products : []);
@@ -30,7 +37,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get new arrival products
-  app.get("/api/products/new-arrivals", async (_req: Request, res: Response) => {
+  router.get("/products/new-arrivals", async (_req: Request, res: Response) => {
     try {
       const products = await storage.getNewArrivals();
       res.json(Array.isArray(products) ? products : []);
@@ -41,7 +48,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get products by category
-  app.get("/api/products/category/:category", async (req: Request, res: Response) => {
+  router.get("/products/category/:category", async (req: Request, res: Response) => {
     try {
       const category = req.params.category;
       const products = await storage.getProductsByCategory(category);
@@ -53,7 +60,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get product by ID
-  app.get("/api/products/:id", async (req: Request, res: Response) => {
+  router.get("/products/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id, 10);
       if (isNaN(id)) {
@@ -73,7 +80,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create new product
-  app.post("/api/products", async (req: Request, res: Response) => {
+  router.post("/products", async (req: Request, res: Response) => {
     try {
       const validatedData = insertProductSchema.parse(req.body);
       const newProduct = await storage.createProduct(validatedData);
@@ -90,7 +97,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ── Site Metadata & Settings ──────────────────────────────────────────────
 
   // Site Settings
-  app.get("/api/site-settings", async (_req: Request, res: Response) => {
+  router.get("/site-settings", async (_req: Request, res: Response) => {
     try {
       const settings = await storage.getSiteSettings();
       res.json(settings || { siteName: "RetailTrove", maintenanceMode: false });
@@ -101,7 +108,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Banner
-  app.get("/api/banner", async (_req: Request, res: Response) => {
+  router.get("/banner", async (_req: Request, res: Response) => {
     try {
       const banner = await storage.getBanner();
       res.json(banner || { active: false, message: "" });
@@ -111,8 +118,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Site Content (e.g. /api/site-content/footer_about)
-  app.get("/api/site-content/:key", async (req: Request, res: Response) => {
+  // Site Content
+  router.get("/site-content/:key", async (req: Request, res: Response) => {
     try {
       const key = req.params.key;
       const content = await storage.getSiteContent(key);
@@ -123,8 +130,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Cart Endpoint — Enforces array output for client calculations
-  app.get("/api/cart/:cartId", async (req: Request, res: Response) => {
+  // ── Cart Endpoints ─────────────────────────────────────────────────────────
+
+  // Default Cart Endpoint (Matches /api/cart calls without ID)
+  router.get("/cart", async (_req: Request, res: Response) => {
+    res.json([]);
+  });
+
+  // Cart Endpoint with Cart ID
+  router.get("/cart/:cartId", async (req: Request, res: Response) => {
     try {
       const cartId = req.params.cartId;
       const cart = await storage.getCart(cartId);
@@ -134,6 +148,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json([]); // Return empty array so frontend .reduce() / .map() does not crash
     }
   });
+
+  // ── Mount Sub-router to Express App ────────────────────────────────────────
+  app.use("/api", router);
 
   const httpServer = createServer(app);
   return httpServer;
