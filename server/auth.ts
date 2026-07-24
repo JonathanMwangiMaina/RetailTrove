@@ -1,4 +1,4 @@
-import { Express, Request, Response, NextFunction } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage.js";
 
@@ -42,8 +42,13 @@ export function requireRole(...roles: string[]) {
 
 // ── Auth Route Setup ──────────────────────────────────────────────────────────
 export function setupAuth(app: Express) {
-  // Get Current Authenticated User (/api/auth/me)
-  app.get("/api/auth/me", async (req: Request, res: Response) => {
+  const router = express.Router();
+
+  /**
+   * Get Current Authenticated User Session
+   * Handles GET /api/auth/me and GET /api/user for full frontend parity
+   */
+  const handleGetCurrentUser = async (req: Request, res: Response) => {
     try {
       if (!req.session?.userId) {
         return res.status(401).json({ message: "Not authenticated" });
@@ -52,20 +57,24 @@ export function setupAuth(app: Express) {
       const user = await storage.getUser(req.session.userId);
       if (!user) {
         req.session.destroy(() => {});
+        res.clearCookie("connect.sid");
         return res.status(401).json({ message: "User session invalid" });
       }
 
-      // Return sanitized user without sensitive password hash
-      const { passwordHash, ...sanitizedUser } = user as any;
+      // Sanitize user object (omit sensitive password hash)
+      const { passwordHash, password, ...sanitizedUser } = user as Record<string, any>;
       res.json(sanitizedUser);
     } catch (error) {
       console.error("Error fetching active user session:", error);
       res.status(500).json({ message: "Failed to retrieve user session" });
     }
-  });
+  };
 
-  // Logout Route
-  app.post("/api/auth/logout", (req: Request, res: Response) => {
+  /**
+   * User Logout Handler
+   * Destroys session and clears session cookie cleanly
+   */
+  const handleLogout = (req: Request, res: Response) => {
     if (!req.session) {
       return res.json({ message: "Logged out successfully" });
     }
@@ -78,5 +87,16 @@ export function setupAuth(app: Express) {
       res.clearCookie("connect.sid");
       res.json({ message: "Logged out successfully" });
     });
-  });
+  };
+
+  // ── Router Endpoint Declarations ──────────────────────────────────────────
+  router.get("/me", handleGetCurrentUser);
+  router.post("/logout", handleLogout);
+
+  // Mount Auth Router under /api/auth
+  app.use("/api/auth", router);
+
+  // ── Standalone Fallback Aliases (Prevents 404 HTML on legacy routes) ────────
+  app.get("/api/user", handleGetCurrentUser);
+  app.post("/api/logout", handleLogout);
 }
