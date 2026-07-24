@@ -1,4 +1,4 @@
-import express from "express";
+import express, { type Request, type Response, type NextFunction } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import pg from "pg";
@@ -42,27 +42,46 @@ app.use(
   })
 );
 
-// ── Safe Storage Bootstrap Middleware (Serverless Friendly) ──────────────────
-let isBootstrapped = false;
-app.use(async (_req, _res, next) => {
-  if (!isBootstrapped) {
+// ── Cold Start Initialization (Database Bootstrap & Route Registration) ──────
+let isInitialized = false;
+
+app.use(async (_req: Request, _res: Response, next: NextFunction) => {
+  if (!isInitialized) {
     try {
-      await storage.ensureBanner?.();
-      await storage.ensureDefaultAdmin?.();
-      await storage.ensureSiteContent?.();
-      await storage.ensureSiteSettings?.();
-      await storage.ensureDefaultFaqs?.();
-      isBootstrapped = true;
+      // 1. Run Storage Bootstrap Checks
+      await Promise.allSettled([
+        storage.ensureBanner?.(),
+        storage.ensureDefaultAdmin?.(),
+        storage.ensureSiteContent?.(),
+        storage.ensureSiteSettings?.(),
+        storage.ensureDefaultFaqs?.(),
+      ]);
+
+      isInitialized = true;
     } catch (error) {
-      console.error("Failed to execute storage bootstrap methods:", error);
+      console.error("Failed during serverless initialization:", error);
     }
   }
   next();
 });
 
-// ── Register Routes ──────────────────────────────────────────────────────────
+// ── Register Auth & Routes ───────────────────────────────────────────────────
 setupAuth(app);
-registerRoutes(app);
+await registerRoutes(app);
+
+// ── Catch-All JSON 404 Handler for Unmatched API Routes ──────────────────────
+// Prevents Express from falling through to HTML 404s when frontend queries missing /api routes
+app.use("/api/*", (_req: Request, res: Response) => {
+  res.status(404).json({ message: "API endpoint not found" });
+});
+
+// ── Global JSON Error Handler ────────────────────────────────────────────────
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  console.error("Unhandled API Error:", err);
+  res.status(500).json({
+    message: err.message || "Internal Server Error",
+  });
+});
 
 // ── Export Single Serverless Handler ─────────────────────────────────────────
 export default serverless(app);
