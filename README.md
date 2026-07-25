@@ -1,6 +1,6 @@
 # RetailTrove — Full-Stack E-Commerce Platform
 
-> **Status:** Phase 1 (Authentication, RBAC, and Supabase PostgreSQL migration) is complete. Phase 2 (Payments — Lemon Squeezy + M-Pesa) and Phase 3 (Hardening & Security) are in development. Latest: **v0.3.2** with Vercel serverless optimizations and strict type safety.
+> **Status:** Phase 1 (Authentication, RBAC, Supabase PostgreSQL) and Phase 3 (Security Hardening & Quality) are complete. Phase 2 (Payments — Lemon Squeezy + M-Pesa) is in development. Latest: **v0.4.0** with helmet headers, CSRF, rate limiting, audit logging, multi-currency support, and Vitest test suite.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-18.3-61dafb)](https://react.dev/)
@@ -567,7 +567,7 @@ Built with `react-hook-form` + Zod validation:
 
 1. **Contact Info** — Email, phone
 2. **Shipping Address** — Address, city, state, postal code, country
-3. **Payment Method** — Currently PayPal simulation (Phase 2: Lemon Squeezy + M-Pesa)
+3. **Payment Method** — Lemon Squeezy (hosted card checkout) or M-Pesa (STK Push via Safaricom Daraja API)
 4. **Order Summary** — Items list, subtotal, tax (10%), total
 
 ### Order Creation
@@ -575,10 +575,11 @@ Built with `react-hook-form` + Zod validation:
 `POST /api/orders` atomically:
 
 1. Validates order + all line items via Zod
-2. Creates order record
-3. Creates order_items records (denormalizes product snapshot)
-4. Clears cart
-5. Returns order ID for confirmation page
+2. Verifies total server-side: recalculates from DB product prices + 10% tax, rejects if client total deviates by more than \$0.02
+3. Creates order record
+4. Creates order_items records (denormalizes product snapshot)
+5. Clears cart
+6. Returns order ID for confirmation page
 
 ---
 
@@ -727,7 +728,7 @@ Copy `.env.example` to `.env` and populate:
 
 ### Phase 2 — In Development 🔄
 
-- [ ] Lemon Squeezy checkout integration
+- [x] Lemon Squeezy checkout integration
 - [ ] M-Pesa STK Push (Safaricom Daraja API)
 - [ ] Payment webhook handlers
 - [ ] Order verification (server-side total check)

@@ -2,7 +2,7 @@
  * @file server/storage.ts
  * @description Storage repository interface abstraction and singleton export.
  * Defines contract signatures for database storage implementations across domain entities.
- * 
+ *
  * @module Server/Storage
  */
 
@@ -13,6 +13,28 @@ import type {
   InsertProduct,
   Order,
   InsertOrder,
+  OrderItem,
+  InsertOrderItem,
+  CartItem,
+  InsertCartItem,
+  CartItemWithProduct,
+  BannerSettings,
+  InsertBannerSettings,
+  SiteContent,
+  InsertSiteContent,
+  SiteSettings,
+  InsertSiteSettings,
+  Faq,
+  InsertFaq,
+  UserVisit,
+  InsertUserVisit,
+  NewsletterSubscriber,
+  InsertNewsletterSubscriber,
+  PasswordResetToken,
+  LoyaltyAccount,
+  LoyaltyTransaction,
+  AuditLog,
+  InsertAuditLog,
 } from "../shared/schema.js";
 import { databaseStorage } from "./database-storage.js";
 
@@ -20,81 +42,112 @@ import { databaseStorage } from "./database-storage.js";
  * 1. STORAGE REPOSITORY INTERFACE CONTRACT
  * ============================================================================ */
 
-/**
- * Interface contract defining all asynchronous data persistence operations.
- */
 export interface IStorage {
   // ── User Operations ────────────────────────────────────────────────────────
-  
-  /** Retrieve a single user record by their auto-incrementing integer ID */
+
   getUser(id: number): Promise<User | undefined>;
-  
-  /** Retrieve a single user record by their unique email address */
-  getUserByEmail?(email: string): Promise<User | undefined>;
-
-  /** Retrieve a single user record by their external auth UUID */
-  getUserByAuthUserId?(authUserId: string): Promise<User | undefined>;
-
-  /** Insert a new user record into storage */
+  getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByAuthUserId(authUserId: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  getAllUsers(): Promise<User[]>;
+  updateUser(id: number, data: Partial<InsertUser>): Promise<User | undefined>;
+  deleteUser(id: number): Promise<boolean>;
 
   // ── Product Operations ─────────────────────────────────────────────────────
 
-  /** Retrieve all active products */
   getAllProducts(): Promise<Product[]>;
-
-  /** Retrieve products flagged as featured */
+  getProductsPaginated(params: { cursor?: number; limit?: number; category?: string; q?: string }): Promise<{ data: Product[]; nextCursor: number | null }>;
   getFeaturedProducts(): Promise<Product[]>;
-
-  /** Retrieve products flagged as new arrivals */
   getNewArrivals(): Promise<Product[]>;
-
-  /** Retrieve products matching a specific category slug or name */
   getProductsByCategory(category: string): Promise<Product[]>;
-
-  /** Retrieve a single product record by primary key ID */
   getProductById(id: number): Promise<Product | undefined>;
-
-  /** Insert a new product item into inventory */
   createProduct(product: InsertProduct): Promise<Product>;
+  updateProduct(id: number, data: Partial<InsertProduct>): Promise<Product | undefined>;
+  deleteProduct(id: number): Promise<boolean>;
+  getPendingProducts(): Promise<Product[]>;
+  approveProduct(id: number, status: string): Promise<Product | undefined>;
+  getVendorProducts(vendorId: number): Promise<Product[]>;
 
-  // ── Cart & Site Settings Operations ─────────────────────────────────────────
+  // ── Cart Operations ────────────────────────────────────────────────────────
 
-  /** Retrieve active shopping cart items by session cart key */
-  getCart(cartId: string): Promise<any>;
+  getCart(cartId: string): Promise<CartItemWithProduct[]>;
+  addToCart(item: InsertCartItem): Promise<CartItem>;
+  updateCartItem(id: number, quantity: number): Promise<CartItem | undefined>;
+  deleteCartItem(id: number): Promise<boolean>;
+  clearCart(cartId: string): Promise<void>;
 
-  /** Retrieve global site settings key-value object */
-  getSiteSettings(): Promise<any>;
+  // ── Order Operations ───────────────────────────────────────────────────────
 
-  /** Retrieve storewide active banner configurations */
-  getBanner(): Promise<any>;
+  createOrder(order: InsertOrder, items: InsertOrderItem[]): Promise<Order>;
+  getAllOrders(): Promise<Order[]>;
+  getOrderById(id: number): Promise<Order | undefined>;
+  updateOrderPayment(id: number, data: {
+    paymentStatus?: string;
+    paymentProvider?: string;
+    stripeSessionId?: string;
+    stripePaymentIntentId?: string;
+    mpesaReceiptNumber?: string;
+  }): Promise<Order | undefined>;
 
-  /** Retrieve CMS site content block by content type/key */
-  getSiteContent(key: string): Promise<any>;
+  // ── CMS & Settings Operations ──────────────────────────────────────────────
 
-  // ── Initialization & Seed Handlers ──────────────────────────────────────────
+  getSiteSettings(): Promise<SiteSettings[]>;
+  updateSiteSetting(key: string, value: string): Promise<SiteSettings | undefined>;
+  getBanner(): Promise<BannerSettings | undefined>;
+  updateBanner(data: Partial<InsertBannerSettings>): Promise<BannerSettings | undefined>;
+  getSiteContent(key: string): Promise<SiteContent | undefined>;
+  updateSiteContent(type: string, content: string): Promise<SiteContent | undefined>;
 
-  /** Seeds global banner configuration if not initialized */
-  ensureBanner?(): Promise<void>;
+  // ── FAQ Operations ─────────────────────────────────────────────────────────
 
-  /** Seeds default system administrator account if missing */
-  ensureDefaultAdmin?(): Promise<void>;
+  getAllFaqs(): Promise<Faq[]>;
+  getPublicFaqs(): Promise<Faq[]>;
+  getVendorFaqs(vendorId: number): Promise<Faq[]>;
+  createFaq(faq: InsertFaq): Promise<Faq>;
+  updateFaq(id: number, data: Partial<InsertFaq>): Promise<Faq | undefined>;
+  deleteFaq(id: number): Promise<boolean>;
 
-  /** Seeds default CMS page content blocks if missing */
-  ensureSiteContent?(): Promise<void>;
+  // ── Visit Operations ───────────────────────────────────────────────────────
 
-  /** Seeds system settings default key-value pairs if missing */
-  ensureSiteSettings?(): Promise<void>;
+  recordVisit(userId: number, path: string): Promise<void>;
+  getAllVisits(): Promise<(UserVisit & { userName: string; userEmail: string })[]>;
 
-  /** Seeds default FAQ content blocks if missing */
-  ensureDefaultFaqs?(): Promise<void>;
+  // ── Newsletter Operations ──────────────────────────────────────────────────
+
+  subscribeNewsletter(email: string): Promise<NewsletterSubscriber>;
+  getNewsletterSubscribers(): Promise<NewsletterSubscriber[]>;
+  deleteNewsletterSubscriber(id: number): Promise<boolean>;
+
+  // ── Password Reset Token Operations ───────────────────────────────────────
+
+  createResetToken(userId: number, token: string, expiresAt: Date): Promise<PasswordResetToken>;
+  getResetToken(token: string): Promise<PasswordResetToken | undefined>;
+  useResetToken(token: string): Promise<boolean>;
+
+  // ── Loyalty Operations ────────────────────────────────────────────────────
+
+  getLoyaltyAccount(userId: number): Promise<LoyaltyAccount>;
+  addLoyaltyPoints(userId: number, points: number, description: string, orderId?: number): Promise<LoyaltyTransaction>;
+  redeemLoyaltyPoints(userId: number, points: number, description: string): Promise<LoyaltyTransaction>;
+  getLoyaltyTransactions(userId: number, limit?: number): Promise<LoyaltyTransaction[]>;
+  getAllLoyaltyAccounts(): Promise<(LoyaltyAccount & { userName: string; userEmail: string })[]>;
+
+  // ── Audit Log Operations ──────────────────────────────────────────────────
+
+  createAuditLog(entry: InsertAuditLog): Promise<void>;
+  getAuditLogs(filters: { userId?: number; entityType?: string; limit?: number; offset?: number }): Promise<AuditLog[]>;
+
+  // ── Bootstrap & Seed Handlers ──────────────────────────────────────────────
+
+  ensureBanner(): Promise<void>;
+  ensureDefaultAdmin(): Promise<void>;
+  ensureSiteContent(): Promise<void>;
+  ensureSiteSettings(): Promise<void>;
+  ensureDefaultFaqs(): Promise<void>;
 }
 
 /* ============================================================================
  * 2. SINGLETON STORAGE INSTANCE EXPORT
  * ============================================================================ */
 
-/**
- * Concrete storage instance backed by PostgreSQL & Drizzle ORM.
- */
 export const storage: IStorage = databaseStorage;

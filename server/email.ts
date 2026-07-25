@@ -123,3 +123,77 @@ export async function sendNewsletterEmail(
     throw error;
   }
 }
+
+export async function sendPasswordResetEmail(email: string, resetUrl: string): Promise<void> {
+  try {
+    await resend.emails.send({
+      from: 'RetailTrove <onboarding@resend.dev>',
+      to: email,
+      subject: 'Reset Your Password — RetailTrove',
+      html: `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Reset Your Password</title>
+          </head>
+          <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f3f4f6; padding: 40px 0;">
+              <tr>
+                <td align="center">
+                  <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+                    <tr>
+                      <td style="background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%); padding: 40px 30px; text-align: center;">
+                        <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">
+                          Password Reset Request
+                        </h1>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 40px 30px;">
+                        <p style="margin: 0 0 16px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
+                          We received a request to reset the password for your RetailTrove account.
+                        </p>
+                        <p style="margin: 0 0 24px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
+                          Click the button below to set a new password. This link will expire in <strong>1 hour</strong>.
+                        </p>
+                        <table cellpadding="0" cellspacing="0" style="margin: 30px 0;">
+                          <tr>
+                            <td style="background-color: #1e40af; border-radius: 6px; text-align: center;">
+                              <a href="${resetUrl}" style="display: inline-block; padding: 14px 32px; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 16px;">
+                                Reset My Password
+                              </a>
+                            </td>
+                          </tr>
+                        </table>
+                        <p style="margin: 24px 0 0 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
+                          If you didn't request a password reset, you can safely ignore this email. Your password will remain unchanged.
+                        </p>
+                        <p style="margin: 12px 0 0 0; color: #9ca3af; font-size: 13px; line-height: 1.6;">
+                          If the button doesn't work, copy and paste this URL into your browser:<br>
+                          <a href="${resetUrl}" style="color: #3b82f6; word-break: break-all;">${resetUrl}</a>
+                        </p>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="background-color: #f9fafb; padding: 30px; text-align: center; border-top: 1px solid #e5e7eb;">
+                        <p style="margin: 0; color: #9ca3af; font-size: 12px;">
+                          RetailTrove - Your premium shopping destination
+                        </p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </body>
+        </html>
+      `,
+    });
+    console.log(`Password reset email sent to: ${email}`);
+  } catch (error) {
+    console.error('Failed to send password reset email:', error);
+    // Don't throw — we don't want email failure to block the flow
+  }
+}

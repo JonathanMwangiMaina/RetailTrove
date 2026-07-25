@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { Product } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/hooks/use-cart";
+import { useCurrency } from "@/hooks/use-currency";
 import { PlusIcon } from "lucide-react";
 
 interface ProductCardProps {
@@ -10,6 +11,7 @@ interface ProductCardProps {
 
 export function ProductCard({ product }: ProductCardProps) {
   const { addToCart } = useCart();
+  const { formatPrice } = useCurrency();
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden group">
@@ -43,11 +45,11 @@ export function ProductCard({ product }: ProductCardProps) {
         <div className="flex items-center justify-between mt-3">
           <div className="flex items-center">
             <p className="text-lg font-medium text-primary-900">
-              ${Number(product.price).toFixed(2)}
+              {formatPrice(Number(product.price))}
             </p>
             {product.originalPrice && (
               <p className="ml-2 text-sm text-gray-500 line-through">
-                ${Number(product.originalPrice).toFixed(2)}
+                {formatPrice(Number(product.originalPrice))}
               </p>
             )}
           </div>

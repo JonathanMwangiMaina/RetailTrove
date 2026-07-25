@@ -5,8 +5,10 @@
 
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { storage } from "./storage.js";
 import { insertUserSchema } from "../shared/schema.js";
+import { sendPasswordResetEmail } from "./email.js";
 
 /* ============================================================================
  * 1. SESSION TYPE DECLARATION
@@ -14,8 +16,8 @@ import { insertUserSchema } from "../shared/schema.js";
 
 declare module "express-session" {
   interface SessionData {
-    userId: number;       // Links directly to public.users.id
-    authUserId?: string;  // Stores Supabase auth.users.id (UUID)
+    userId: number;
+    authUserId?: string;
     role: string;
     name?: string;
   }
@@ -63,10 +65,6 @@ export function requireRole(...roles: string[]) {
 export function setupAuth(app: Express) {
   const router = express.Router();
 
-  /**
-   * User Registration Handler
-   * Creates public user profile and preserves authUserId payload if supplied from frontend/Supabase Auth.
-   */
   const handleRegister = async (req: Request, res: Response) => {
     try {
       const parsedInput = insertUserSchema.parse(req.body);
@@ -76,16 +74,18 @@ export function setupAuth(app: Express) {
         return res.status(400).json({ message: "An account with this email already exists" });
       }
 
-      const passwordHash = parsedInput.password 
-        ? await hashPassword(parsedInput.password) 
-        : undefined;
+      if (!parsedInput.password) {
+        return res.status(400).json({ message: "Password is required" });
+      }
+
+      const passwordHash = await hashPassword(parsedInput.password);
 
       const newUser = await storage.createUser({
         email: parsedInput.email,
         name: parsedInput.name || "",
         passwordHash,
         role: "customer",
-        authUserId: req.body.authUserId || undefined, // Binds Supabase auth.users UUID
+        authUserId: req.body.authUserId || undefined,
       });
 
       req.session.userId = newUser.id;
@@ -96,19 +96,22 @@ export function setupAuth(app: Express) {
       res.status(201).json(sanitizedUser);
     } catch (error: any) {
       console.error("Error during registration:", error);
-      res.status(400).json({ message: error.message || "Failed to register user" });
+      if (error instanceof Error && error.message.includes("duplicate key")) {
+        return res.status(400).json({ message: "An account with this email already exists" });
+      }
+      res.status(400).json({ message: "Failed to register user" });
     }
   };
 
-  /**
-   * User Login Handler
-   * Authenticates user against public.users (or syncs by authUserId / email).
-   */
   const handleLogin = async (req: Request, res: Response) => {
     try {
       const { email, password, authUserId } = req.body;
 
-      let user = authUserId 
+      if (!password) {
+        return res.status(400).json({ message: "Password is required" });
+      }
+
+      let user = authUserId
         ? await storage.getUserByAuthUserId(authUserId)
         : await storage.getUserByEmail(email);
 
@@ -116,12 +119,13 @@ export function setupAuth(app: Express) {
         return res.status(401).json({ message: "Invalid credentials" });
       }
 
-      // If authenticating via application password hash
-      if (password && user.passwordHash) {
-        const isPasswordValid = await comparePassword(password, user.passwordHash);
-        if (!isPasswordValid) {
-          return res.status(401).json({ message: "Invalid credentials" });
-        }
+      if (!user.passwordHash) {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      const isPasswordValid = await comparePassword(password, user.passwordHash);
+      if (!isPasswordValid) {
+        return res.status(401).json({ message: "Invalid credentials" });
       }
 
       req.session.userId = user.id;
@@ -136,9 +140,6 @@ export function setupAuth(app: Express) {
     }
   };
 
-  /**
-   * Get Active User Session Handler
-   */
   const handleGetCurrentUser = async (req: Request, res: Response) => {
     try {
       if (!req.session?.userId) {
@@ -160,9 +161,6 @@ export function setupAuth(app: Express) {
     }
   };
 
-  /**
-   * Logout Handler
-   */
   const handleLogout = (req: Request, res: Response) => {
     if (!req.session) {
       return res.json({ message: "Logged out successfully" });
@@ -178,20 +176,82 @@ export function setupAuth(app: Express) {
     });
   };
 
-  /* ============================================================================
-   * 5. ROUTER DECLARATIONS
-   * ============================================================================ */
+  const handleForgotPassword = async (req: Request, res: Response) => {
+    try {
+      const { email } = req.body;
+      if (!email || typeof email !== "string") {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      const user = await storage.getUserByEmail(email);
+
+      // Always return success to prevent email enumeration
+      if (!user) {
+        return res.json({ message: "If an account with that email exists, a reset link has been sent." });
+      }
+
+      const token = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+      await storage.createResetToken(user.id, token, expiresAt);
+
+      const baseUrl = process.env.APP_URL || process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : "http://localhost:5000";
+      const resetUrl = `${baseUrl}/reset-password?token=${token}`;
+
+      await sendPasswordResetEmail(email, resetUrl);
+
+      res.json({ message: "If an account with that email exists, a reset link has been sent." });
+    } catch (error) {
+      console.error("Error in forgot password:", error);
+      res.json({ message: "If an account with that email exists, a reset link has been sent." });
+    }
+  };
+
+  const handleResetPassword = async (req: Request, res: Response) => {
+    try {
+      const { token, password } = req.body;
+
+      if (!token || !password) {
+        return res.status(400).json({ message: "Token and password are required" });
+      }
+
+      if (password.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+
+      const resetToken = await storage.getResetToken(token);
+
+      if (!resetToken) {
+        return res.status(400).json({ message: "Invalid or expired reset token" });
+      }
+
+      if (resetToken.used) {
+        return res.status(400).json({ message: "This reset token has already been used" });
+      }
+
+      if (new Date() > new Date(resetToken.expiresAt)) {
+        return res.status(400).json({ message: "Reset token has expired" });
+      }
+
+      const passwordHash = await hashPassword(password);
+      await storage.updateUser(resetToken.userId, { passwordHash });
+      await storage.useResetToken(token);
+
+      res.json({ message: "Password has been reset successfully" });
+    } catch (error) {
+      console.error("Error in reset password:", error);
+      res.status(500).json({ message: "Failed to reset password" });
+    }
+  };
 
   router.post("/register", handleRegister);
   router.post("/login", handleLogin);
   router.get("/me", handleGetCurrentUser);
   router.post("/logout", handleLogout);
+  router.post("/forgot-password", handleForgotPassword);
+  router.post("/reset-password", handleResetPassword);
 
   app.use("/api/auth", router);
-
-  // Legacy fallback aliases
-  app.post("/api/register", handleRegister);
-  app.post("/api/login", handleLogin);
-  app.get("/api/user", handleGetCurrentUser);
-  app.post("/api/logout", handleLogout);
 }

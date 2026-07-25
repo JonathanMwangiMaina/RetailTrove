@@ -4,12 +4,14 @@ import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCart } from "@/hooks/use-cart";
+import { useCurrency } from "@/hooks/use-currency";
 import { Product as ProductType } from "@shared/schema";
 import { StarIcon, CheckIcon, GlobeIcon, HeartIcon } from "lucide-react";
 
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
   const { addToCart } = useCart();
+  const { formatPrice } = useCurrency();
   const [selectedImage, setSelectedImage] = useState(0);
   
   // Mock additional product images (in a real app, these would come from the product data)
@@ -116,17 +118,17 @@ export default function ProductPage() {
                 />
               ))}
             </div>
-            <p className="ml-2 text-sm text-gray-500">42 reviews</p>
+            <p className="ml-2 text-sm text-gray-500">{Math.floor(Number(product.rating) * 8 + 4)} reviews</p>
           </div>
 
           <div className="mt-6">
             <h1 className="text-3xl font-bold text-primary-900">{product.name}</h1>
             <h2 className="sr-only">Product information</h2>
             <div className="mt-2 flex items-center">
-              <p className="text-3xl text-primary-900">${Number(product.price).toFixed(2)}</p>
+              <p className="text-3xl text-primary-900">{formatPrice(Number(product.price))}</p>
               {product.originalPrice && (
                 <p className="ml-2 text-lg text-gray-500 line-through">
-                  ${Number(product.originalPrice).toFixed(2)}
+                  {formatPrice(Number(product.originalPrice))}
                 </p>
               )}
             </div>

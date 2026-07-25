@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { useCurrency } from "@/hooks/use-currency";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -40,6 +41,7 @@ export default function VendorPage() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { formatPrice } = useCurrency();
 
   const [activeTab, setActiveTab] = useState("products");
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
@@ -171,9 +173,9 @@ export default function VendorPage() {
         <Input name="imageUrl" value={data.imageUrl} onChange={handleInput(setData, data)} /></div>
       <Separator />
       <div className="grid grid-cols-3 gap-4">
-        <div className="space-y-1"><Label>Price ($)</Label>
+        <div className="space-y-1"><Label>Price</Label>
           <Input name="price" value={data.price} onChange={handleInput(setData, data)} /></div>
-        <div className="space-y-1"><Label>Original Price ($)</Label>
+        <div className="space-y-1"><Label>Original Price</Label>
           <Input name="originalPrice" value={data.originalPrice ?? ""} onChange={handleInput(setData, data)} /></div>
         <div className="space-y-1"><Label>Stock Qty</Label>
           <Input type="number" min={0} value={data.stockQuantity ?? 0}
@@ -279,7 +281,7 @@ export default function VendorPage() {
                         <TableCell className="text-center">
                           <Badge variant={statusColor(p.approvalStatus) as any} className="text-xs capitalize">{p.approvalStatus}</Badge>
                         </TableCell>
-                        <TableCell className="text-right font-semibold">${p.price}</TableCell>
+                        <TableCell className="text-right font-semibold">{formatPrice(Number(p.price))}</TableCell>
                         <TableCell className="text-center text-sm">{p.stockQuantity ?? 0}</TableCell>
                         <TableCell className="text-right">
                           <Button variant="ghost" size="icon" onClick={() => { setEditingProduct({ ...p }); setIsEditProductOpen(true); }}>

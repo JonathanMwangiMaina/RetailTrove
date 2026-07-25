@@ -1,13 +1,14 @@
 /**
  * @file shared/schema.ts
- * @description Central Drizzle ORM database schema definitions, Zod validation schemas, 
+ * @description Central Drizzle ORM database schema definitions, Zod validation schemas,
  * and inferred TypeScript types across the application stack.
- * 
+ *
  * @module Schema
  */
 
-import { pgTable, text, serial, integer, boolean, numeric, timestamp, uuid } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, numeric, timestamp, uuid, varchar, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
+import { relations } from "drizzle-orm";
 import { z } from "zod";
 
 /* ============================================================================
@@ -28,7 +29,7 @@ export const users = pgTable("users", {
   status: text("status").default("active"),
   isApproved: boolean("is_approved").default(true),
   createdAt: timestamp("created_at").defaultNow(),
-  authUserId: uuid("auth_user_id"), // Native UUID mapping to external auth providers (e.g., Supabase Auth)
+  authUserId: uuid("auth_user_id"),
 });
 
 /**
@@ -57,7 +58,7 @@ export const products = pgTable("products", {
 
 /**
  * Customer Orders Table (`orders`)
- * Contains checkout details, customer contact info, shipping addresses, and Stripe payment metadata.
+ * Contains checkout details, customer contact info, shipping addresses, and Lemon Squeezy payment metadata.
  */
 export const orders = pgTable("orders", {
   id: serial("id").primaryKey(),
@@ -75,8 +76,10 @@ export const orders = pgTable("orders", {
   createdAt: timestamp("created_at").defaultNow(),
   userId: uuid("user_id"),
   paymentStatus: text("payment_status").default("pending"),
-  stripeSessionId: text("stripe_session_id"),
-  stripePaymentIntentId: text("stripe_payment_intent_id"),
+  paymentProvider: text("payment_provider"),           // "lemonsqueezy" | "mpesa" | null
+  stripeSessionId: text("stripe_session_id"),          // Lemon Squeezy checkout ID / M-Pesa CheckoutRequestID
+  stripePaymentIntentId: text("stripe_payment_intent_id"), // Lemon Squeezy order ID / M-Pesa MerchantRequestID
+  mpesaReceiptNumber: text("mpesa_receipt_number"),    // M-Pesa receipt (e.g. "QHJ7A1BCDE")
 });
 
 /**
@@ -138,23 +141,164 @@ export const siteSettings = pgTable("site_settings", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+/**
+ * Frequently Asked Questions Table (`faqs`)
+ * FAQ entries with approval workflow (approved/pending/rejected).
+ */
+export const faqs = pgTable("faqs", {
+  id: serial("id").primaryKey(),
+  question: text("question").notNull(),
+  answer: text("answer").notNull(),
+  status: text("status").default("approved").notNull(),
+  submittedBy: integer("submitted_by").references(() => users.id),
+  displayOrder: integer("display_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+/**
+ * Page Visit Tracking Table (`user_visits`)
+ * Records authenticated user navigation events for analytics.
+ */
+export const userVisits = pgTable("user_visits", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  path: text("path").notNull(),
+  visitedAt: timestamp("visited_at").defaultNow(),
+});
+
+/**
+ * Newsletter Subscribers Table (`newsletter_subscribers`)
+ * Email subscriber list with active/unsubscribed status.
+ */
+export const newsletterSubscribers = pgTable("newsletter_subscribers", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  status: text("status").default("active").notNull(),
+  subscribedAt: timestamp("subscribed_at").defaultNow(),
+});
+
+
+/**
+ * Password Reset Tokens Table (`password_reset_tokens`)
+ * Stores one-time tokens for the forgot-password flow. Tokens expire after 1 hour.
+ */
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  used: boolean("used").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+
+/**
+ * Loyalty Accounts Table (`loyalty_accounts`)
+ * Tracks each user's cumulative loyalty point balance and tier level.
+ */
+export const loyaltyAccounts = pgTable("loyalty_accounts", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull().unique(),
+  points: integer("points").default(0).notNull(),
+  tier: text("tier").default("bronze").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+/**
+ * Loyalty Transactions Table (`loyalty_transactions`)
+ * Immutable audit log of every point earning, redemption, or adjustment.
+ */
+export const loyaltyTransactions = pgTable("loyalty_transactions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  type: text("type").notNull(), // 'earned' | 'redeemed' | 'adjusted'
+  points: integer("points").notNull(),
+  description: text("description").notNull(),
+  orderId: integer("order_id").references(() => orders.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const auditLogs = pgTable("audit_logs", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id),
+  action: text("action").notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: integer("entity_id"),
+  changes: jsonb("changes"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 
 /* ============================================================================
- * 2. ZOD VALIDATION SCHEMAS (MUTATION & SELECTION)
+ * 2. DRIZZLE RELATIONS
+ * ============================================================================ */
+
+export const usersRelations = relations(users, ({ many, one }) => ({
+  products: many(products),
+  visits: many(userVisits),
+  faqs: many(faqs),
+  passwordResetTokens: many(passwordResetTokens),
+  loyaltyAccount: one(loyaltyAccounts, { fields: [users.id], references: [loyaltyAccounts.userId] }),
+  loyaltyTransactions: many(loyaltyTransactions),
+  auditLogs: many(auditLogs),
+}));
+
+export const productsRelations = relations(products, ({ many, one }) => ({
+  cartItems: many(cartItems),
+  orderItems: many(orderItems),
+  vendor: one(users, { fields: [products.vendorId], references: [users.id] }),
+}));
+
+export const ordersRelations = relations(orders, ({ many }) => ({
+  items: many(orderItems),
+}));
+
+export const orderItemsRelations = relations(orderItems, ({ one }) => ({
+  order: one(orders, { fields: [orderItems.orderId], references: [orders.id] }),
+  product: one(products, { fields: [orderItems.productId], references: [products.id] }),
+}));
+
+export const cartItemsRelations = relations(cartItems, ({ one }) => ({
+  product: one(products, { fields: [cartItems.productId], references: [products.id] }),
+}));
+
+export const faqsRelations = relations(faqs, ({ one }) => ({
+  submitter: one(users, { fields: [faqs.submittedBy], references: [users.id] }),
+}));
+
+export const userVisitsRelations = relations(userVisits, ({ one }) => ({
+  user: one(users, { fields: [userVisits.userId], references: [users.id] }),
+}));
+
+export const loyaltyAccountsRelations = relations(loyaltyAccounts, ({ one }) => ({
+  user: one(users, { fields: [loyaltyAccounts.userId], references: [users.id] }),
+}));
+
+export const loyaltyTransactionsRelations = relations(loyaltyTransactions, ({ one }) => ({
+  user: one(users, { fields: [loyaltyTransactions.userId], references: [users.id] }),
+  order: one(orders, { fields: [loyaltyTransactions.orderId], references: [orders.id] }),
+}));
+
+export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
+  user: one(users, { fields: [auditLogs.userId], references: [users.id] }),
+}));
+
+
+/* ============================================================================
+ * 3. ZOD VALIDATION SCHEMAS (MUTATION & SELECTION)
  * ============================================================================ */
 
 // ── Users Schemas ────────────────────────────────────────────────────────────
 
-/**
- * Validation schema for creating/registering new users.
- * Extends raw password validation and omits auto-generated database keys.
- */
 export const insertUserSchema = createInsertSchema(users, {
   email: z.string().email(),
   passwordHash: z.string().optional(),
 })
   .extend({
-    password: z.string().min(6).optional(), // Accepts raw unhashed password during registration requests
+    password: z.string().min(6).optional(),
   })
   .omit({
     id: true,
@@ -210,27 +354,88 @@ export const selectCartItemSchema = createSelectSchema(cartItems);
 
 // ── Site & CMS Settings Schemas ──────────────────────────────────────────────
 
-export const insertBannerSettingsSchema = createInsertSchema(bannerSettings).omit({ 
-  id: true, 
-  updatedAt: true 
+export const insertBannerSettingsSchema = createInsertSchema(bannerSettings).omit({
+  id: true,
+  updatedAt: true,
 });
 export const selectBannerSettingsSchema = createSelectSchema(bannerSettings);
 
-export const insertSiteContentSchema = createInsertSchema(siteContent).omit({ 
-  id: true, 
-  updatedAt: true 
+export const insertSiteContentSchema = createInsertSchema(siteContent).omit({
+  id: true,
+  updatedAt: true,
 });
 export const selectSiteContentSchema = createSelectSchema(siteContent);
 
-export const insertSiteSettingsSchema = createInsertSchema(siteSettings).omit({ 
-  id: true, 
-  updatedAt: true 
+export const insertSiteSettingsSchema = createInsertSchema(siteSettings).omit({
+  id: true,
+  updatedAt: true,
 });
 export const selectSiteSettingsSchema = createSelectSchema(siteSettings);
 
+// ── FAQ Schemas ──────────────────────────────────────────────────────────────
+
+export const insertFaqSchema = createInsertSchema(faqs).omit({
+  id: true,
+  createdAt: true,
+});
+export const selectFaqSchema = createSelectSchema(faqs);
+
+// ── User Visits Schemas ─────────────────────────────────────────────────────
+
+export const insertUserVisitSchema = createInsertSchema(userVisits).omit({
+  id: true,
+  visitedAt: true,
+});
+export const selectUserVisitSchema = createSelectSchema(userVisits);
+
+// ── Newsletter Subscribers Schemas ──────────────────────────────────────────
+
+export const insertNewsletterSubscriberSchema = createInsertSchema(newsletterSubscribers).omit({
+  id: true,
+  subscribedAt: true,
+});
+export const selectNewsletterSubscriberSchema = createSelectSchema(newsletterSubscribers);
+
+// ── Password Reset Tokens Schemas ─────────────────────────────────────────
+
+export const insertPasswordResetTokenSchema = createInsertSchema(passwordResetTokens).omit({
+  id: true,
+  createdAt: true,
+});
+export const selectPasswordResetTokenSchema = createSelectSchema(passwordResetTokens);
+
+// ── Loyalty Schemas ─────────────────────────────────────────────────────
+
+export const insertLoyaltyAccountSchema = createInsertSchema(loyaltyAccounts, {
+  points: z.number().int().optional(),
+  tier: z.string().optional(),
+}).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export const selectLoyaltyAccountSchema = createSelectSchema(loyaltyAccounts);
+
+export const insertLoyaltyTransactionSchema = createInsertSchema(loyaltyTransactions, {
+  points: z.number().int(),
+  description: z.string(),
+  orderId: z.number().int().optional(),
+}).omit({
+  id: true,
+  createdAt: true,
+});
+export const selectLoyaltyTransactionSchema = createSelectSchema(loyaltyTransactions);
+
+export const insertAuditLogSchema = createInsertSchema(auditLogs, {
+  action: z.string().min(1).max(100),
+  entityType: z.string().min(1).max(50),
+}).omit({ id: true, createdAt: true });
+
+export const selectAuditLogSchema = createSelectSchema(auditLogs);
+
 
 /* ============================================================================
- * 3. INFERRED TYPESCRIPT TYPES
+ * 4. INFERRED TYPESCRIPT TYPES
  * ============================================================================ */
 
 /** User domain entity types */
@@ -264,3 +469,34 @@ export type InsertSiteContent = z.infer<typeof insertSiteContentSchema>;
 /** Site key-value configuration entity types */
 export type SiteSettings = z.infer<typeof selectSiteSettingsSchema>;
 export type InsertSiteSettings = z.infer<typeof insertSiteSettingsSchema>;
+
+/** FAQ entity types */
+export type Faq = z.infer<typeof selectFaqSchema>;
+export type InsertFaq = z.infer<typeof insertFaqSchema>;
+
+/** User visit tracking entity types */
+export type UserVisit = z.infer<typeof selectUserVisitSchema>;
+export type InsertUserVisit = z.infer<typeof insertUserVisitSchema>;
+
+/** Newsletter subscriber entity types */
+export type NewsletterSubscriber = z.infer<typeof selectNewsletterSubscriberSchema>;
+export type InsertNewsletterSubscriber = z.infer<typeof insertNewsletterSubscriberSchema>;
+
+/** Composite cart item with joined product data */
+export type CartItemWithProduct = CartItem & { product: Product };
+
+/** Password reset token entity types */
+export type PasswordResetToken = z.infer<typeof selectPasswordResetTokenSchema>;
+export type InsertPasswordResetToken = z.infer<typeof insertPasswordResetTokenSchema>;
+
+/** Loyalty account entity types */
+export type LoyaltyAccount = z.infer<typeof selectLoyaltyAccountSchema>;
+export type InsertLoyaltyAccount = z.infer<typeof insertLoyaltyAccountSchema>;
+
+/** Loyalty transaction entity types */
+export type LoyaltyTransaction = z.infer<typeof selectLoyaltyTransactionSchema>;
+export type InsertLoyaltyTransaction = z.infer<typeof insertLoyaltyTransactionSchema>;
+
+/** Audit log entity types */
+export type AuditLog = z.infer<typeof selectAuditLogSchema>;
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;

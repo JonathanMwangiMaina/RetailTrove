@@ -103,9 +103,14 @@ export default function LoginPage() {
                       onChange={(e) => setLoginPassword(e.target.value)}
                       required
                     />
+                    <div className="text-right">
+                      <Link href="/forgot-password" className="text-xs text-primary-600 hover:text-primary-800">
+                        Forgot your password?
+                      </Link>
+                    </div>
                   </div>
                   <div className="text-xs text-muted-foreground bg-blue-50 border border-blue-200 rounded p-2 space-y-1">
-                    <p><strong>Demo admin:</strong> admin@retailtrove.com / admin123</p>
+                    <p><strong>Demo admin:</strong> admin@retailtrove.com / ChronicleBookKasuku26%</p>
                     <p><strong>Demo vendor:</strong> vendor@retailtrove.com / vendor123</p>
                   </div>
                 </CardContent>

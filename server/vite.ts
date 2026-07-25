@@ -73,7 +73,7 @@ export function serveStatic(app: Express) {
   // Express only needs to manage /api routes.
   if (process.env.NODE_ENV === "production") return;
 
-  const distPath = path.resolve(import.meta.dirname, "public");
+  const distPath = path.resolve(import.meta.dirname, "..", "dist", "public");
 
   if (!fs.existsSync(distPath)) {
     throw new Error(

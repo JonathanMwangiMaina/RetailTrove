@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { useCurrency } from "@/hooks/use-currency";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -27,7 +28,9 @@ import {
   Database, Clock, ShoppingBag, Users, User, Activity, HelpCircle,
   FileText, Share2, Megaphone, Edit, Trash, Plus, Search, Save,
   Shield, CheckCircle, XCircle, Ban, RefreshCw, Eye, TrendingDown, PackageCheck,
+  DollarSign,
 } from "lucide-react";
+import { CURRENCIES } from "@/lib/currencies";
 
 const EMPTY_PRODUCT = {
   name: "", description: "", price: "", originalPrice: "",
@@ -80,6 +83,7 @@ export default function AdminPage() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { formatPrice } = useCurrency();
 
   const [activeTab, setActiveTab] = useState("inventory");
   const [searchQuery, setSearchQuery] = useState("");
@@ -122,7 +126,8 @@ export default function AdminPage() {
   }
 
   // ── Queries ──────────────────────────────────────────────────────────────────
-  const { data: products = [], isLoading: productsLoading } = useQuery<any[]>({ queryKey: ["/api/products"] });
+  const { data: productsResponse, isLoading: productsLoading } = useQuery<any>({ queryKey: ["/api/products"] });
+  const products = Array.isArray(productsResponse) ? productsResponse : productsResponse?.data ?? [];
   const { data: pendingProducts = [] } = useQuery<any[]>({ queryKey: ["/api/admin/products/pending"] });
   const { data: orders = [] } = useQuery<any[]>({ queryKey: ["/api/orders"] });
   const { data: allUsers = [] } = useQuery<any[]>({ queryKey: ["/api/admin/users"] });
@@ -134,6 +139,8 @@ export default function AdminPage() {
     queryKey: [`/api/site-content/${contentType}`],
     retry: false,
   });
+  const { data: newsletterSubscribers = [] } = useQuery<any[]>({ queryKey: ["/api/admin/newsletter/subscribers"] });
+  const { data: auditLogs = [] } = useQuery<any[]>({ queryKey: ["/api/admin/audit-logs"] });
 
   // Sync site content into draft
   useEffect(() => {
@@ -290,6 +297,14 @@ export default function AdminPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/banner"] }),
   });
 
+  const deleteSubscriberMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/admin/newsletter/subscribers/${id}`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/newsletter/subscribers"] });
+      toast({ title: "Subscriber removed" });
+    },
+  });
+
   function handleProductInput(setter: (v: any) => void, current: any) {
     return (e: React.ChangeEvent<HTMLInputElement>) =>
       setter({ ...current, [e.target.name]: e.target.value });
@@ -319,9 +334,9 @@ export default function AdminPage() {
         <Input name="imageUrl" value={data.imageUrl} onChange={handleProductInput(setData, data)} /></div>
       <Separator />
       <div className="grid grid-cols-3 gap-4">
-        <div className="space-y-1"><Label>Price ($)</Label>
+        <div className="space-y-1"><Label>Price</Label>
           <Input name="price" value={data.price} onChange={handleProductInput(setData, data)} /></div>
-        <div className="space-y-1"><Label>Original Price ($)</Label>
+        <div className="space-y-1"><Label>Original Price</Label>
           <Input name="originalPrice" value={data.originalPrice ?? ""} onChange={handleProductInput(setData, data)} /></div>
         <div className="space-y-1"><Label>Stock Qty</Label>
           <Input type="number" name="stockQuantity" min={0} value={data.stockQuantity ?? 0}
@@ -398,6 +413,12 @@ export default function AdminPage() {
               <TabsTrigger value="content" className="text-xs gap-1"><FileText className="h-3.5 w-3.5" />Content</TabsTrigger>
               <TabsTrigger value="social" className="text-xs gap-1"><Share2 className="h-3.5 w-3.5" />Social</TabsTrigger>
               <TabsTrigger value="banner" className="text-xs gap-1"><Megaphone className="h-3.5 w-3.5" />Banner</TabsTrigger>
+              <TabsTrigger value="newsletter" className="text-xs gap-1">
+                <Megaphone className="h-3.5 w-3.5" />Newsletter
+                {(newsletterSubscribers as any[]).length > 0 && <span className="ml-1 bg-blue-500 text-white text-[10px] rounded-full px-1.5">{(newsletterSubscribers as any[]).length}</span>}
+              </TabsTrigger>
+              <TabsTrigger value="currency" className="text-xs gap-1"><DollarSign className="h-3.5 w-3.5" />Currency</TabsTrigger>
+              <TabsTrigger value="audit" className="text-xs gap-1"><Clock className="h-3.5 w-3.5" />Audit</TabsTrigger>
             </TabsList>
 
             {/* ── Inventory ── */}
@@ -442,7 +463,7 @@ export default function AdminPage() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">
-                            <span className="font-semibold">${p.price}</span>
+                            <span className="font-semibold">{formatPrice(Number(p.price))}</span>
                             {pct && <span className="text-xs text-muted-foreground ml-1">(-{pct}%)</span>}
                           </TableCell>
                           <TableCell className="text-center">
@@ -486,7 +507,7 @@ export default function AdminPage() {
                             <p className="font-semibold text-sm">{p.name}</p>
                             <p className="text-xs text-muted-foreground">{p.category}</p>
                           </div>
-                          <span className="font-bold text-sm">${p.price}</span>
+                          <span className="font-bold text-sm">{formatPrice(Number(p.price))}</span>
                         </div>
                         <p className="text-xs text-muted-foreground line-clamp-2">{p.description}</p>
                         <p className="text-xs text-blue-600">Vendor: {getVendorName(p.vendorId)}</p>
@@ -531,7 +552,7 @@ export default function AdminPage() {
                         <TableCell className="font-medium">{o.firstName} {o.lastName}</TableCell>
                         <TableCell className="text-sm text-muted-foreground">{o.email}</TableCell>
                         <TableCell className="text-sm">{new Date(o.createdAt).toLocaleDateString()}</TableCell>
-                        <TableCell className="text-right font-semibold">${parseFloat(o.total).toFixed(2)}</TableCell>
+                        <TableCell className="text-right font-semibold">{formatPrice(parseFloat(o.total))}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -539,7 +560,7 @@ export default function AdminPage() {
               </div>
               {(orders as any[]).length > 0 && (
                 <div className="mt-3 text-right text-sm text-muted-foreground">
-                  Total revenue: <span className="font-bold text-gray-900">${totalRevenue.toFixed(2)}</span>
+                  Total revenue: <span className="font-bold text-gray-900">{formatPrice(totalRevenue)}</span>
                 </div>
               )}
             </TabsContent>
@@ -841,6 +862,121 @@ export default function AdminPage() {
                     </Select>
                   </div>
                 </div>
+              </div>
+            </TabsContent>
+
+            {/* ── Newsletter Subscribers ── */}
+            <TabsContent value="newsletter">
+              <div className="mb-3 text-sm text-muted-foreground">
+                {(newsletterSubscribers as any[]).length} subscriber{(newsletterSubscribers as any[]).length !== 1 ? "s" : ""}
+              </div>
+              <div className="border rounded-md overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Subscribed</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(newsletterSubscribers as any[]).length === 0 ? (
+                      <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No subscribers yet</TableCell></TableRow>
+                    ) : (newsletterSubscribers as any[]).map((s: any) => (
+                      <TableRow key={s.id}>
+                        <TableCell className="font-medium">{s.email}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{new Date(s.subscribedAt).toLocaleDateString()}</TableCell>
+                        <TableCell>
+                          <Badge variant={s.status === "active" ? "default" : "secondary"} className="text-xs">{s.status}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="icon"
+                            onClick={() => { if (window.confirm(`Remove subscriber ${s.email}?`)) deleteSubscriberMutation.mutate(s.id); }}>
+                            <Trash className="h-4 w-4 text-red-500" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </TabsContent>
+
+            {/* ── Currency Settings ── */}
+            <TabsContent value="currency">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Store Currency</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Select the currency used to display product prices across the store. All prices are stored in USD internally and converted on display.
+                  </p>
+                  <div className="max-w-md">
+                    <Label>Display Currency</Label>
+                    <Select
+                      value={(siteSettings as any[]).find((s: any) => s.key === "site_currency")?.value || "USD"}
+                      onValueChange={(val) => updateSettingMutation.mutate({ key: "site_currency", value: val })}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[300px]">
+                        {CURRENCIES.map((c) => (
+                          <SelectItem key={c.code} value={c.code}>
+                            {c.symbol} {c.code} — {c.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="mt-4 p-3 bg-muted/50 rounded-md text-sm text-muted-foreground">
+                    <p className="font-medium mb-1">How it works:</p>
+                    <ul className="list-disc list-inside space-y-0.5">
+                      <li>Product prices are stored in USD in the database</li>
+                      <li>The selected currency symbol is shown to customers at checkout and in the cart</li>
+                      <li>Exchange rates are approximate and used for display purposes</li>
+                    </ul>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* ── Audit Logs ── */}
+            <TabsContent value="audit">
+              <div className="mb-3 text-sm text-muted-foreground">
+                {(auditLogs as any[]).length} recent log{(auditLogs as any[]).length !== 1 ? "s" : ""}
+              </div>
+              <div className="border rounded-md overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Time</TableHead>
+                      <TableHead>Action</TableHead>
+                      <TableHead>Entity</TableHead>
+                      <TableHead>ID</TableHead>
+                      <TableHead>IP</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(auditLogs as any[]).length === 0 ? (
+                      <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No audit logs yet</TableCell></TableRow>
+                    ) : (auditLogs as any[]).map((log: any) => (
+                      <TableRow key={log.id}>
+                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                          {new Date(log.createdAt).toLocaleString()}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="text-xs">{log.action}</Badge>
+                        </TableCell>
+                        <TableCell className="text-sm">{log.entityType}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">#{log.entityId}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{log.ipAddress || "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
             </TabsContent>
           </Tabs>

@@ -20,10 +20,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { useCurrency } from "@/hooks/use-currency";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertOrderSchema } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
+import { COUNTRIES_BY_NAME } from "@/lib/countries";
 import { z } from "zod";
 import { Link, useLocation } from "wouter";
 import { Loader2Icon } from "lucide-react";
@@ -40,10 +42,13 @@ type CheckoutFormValues = z.infer<typeof checkoutFormSchema>;
 export default function Checkout() {
   const { cart, subtotal, clearCart } = useCart();
   const { toast } = useToast();
+  const { formatPrice } = useCurrency();
   const [, navigate] = useLocation();
-  const [paymentMethod, setPaymentMethod] = useState<"card" | "paypal">("card");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+  const [paymentMethod, setPaymentMethod] = useState<"lemonsqueezy" | "mpesa">("lemonsqueezy");
+  const [mpesaPhone, setMpesaPhone] = useState("");
+  const [mpesaWaiting, setMpesaWaiting] = useState(false);
+
   // Calculate tax (10%)
   const tax = subtotal * 0.1;
   // Calculate total
@@ -76,13 +81,22 @@ export default function Checkout() {
       });
       return;
     }
-    
+
+    if (paymentMethod === "mpesa" && !mpesaPhone.trim()) {
+      toast({
+        title: "Phone number required",
+        description: "Enter your M-Pesa phone number to receive the payment prompt",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       setIsSubmitting(true);
-      
+
       // Update total with current value
       values.total = total.toString();
-      
+
       // Create order items from cart
       const orderItems = cart.map(item => ({
         productId: item.product.id,
@@ -90,33 +104,62 @@ export default function Checkout() {
         price: item.product.price,
         quantity: item.quantity,
       }));
-      
-      // Create order
+
+      // Create order first
       const response = await apiRequest("POST", "/api/orders", {
-        order: values,
+        order: { ...values, paymentProvider: paymentMethod },
         items: orderItems,
       });
-      
+
       if (!response.ok) {
         throw new Error("Failed to create order");
       }
-      
-      // Clear cart
-      clearCart();
-      
-      // Get order data from response
+
       const orderData = await response.json();
-      const orderId = orderData.id || 'ORDER123456'; // Fallback for demo purposes
-      
-      // Show success toast
-      toast({
-        title: "Order placed successfully!",
-        description: "Thank you for your purchase",
-        variant: "success",
-      });
-      
-      // Redirect to order confirmation page
-      navigate(`/order-confirmation?id=${orderId}&total=${total}`);
+      const orderId = orderData.id;
+
+      if (paymentMethod === "lemonsqueezy") {
+        // Initiate Lemon Squeezy hosted checkout
+        const checkoutRes = await apiRequest("POST", "/api/checkout/lemonsqueezy", { orderId });
+
+        if (!checkoutRes.ok) {
+          const err = await checkoutRes.json();
+          throw new Error(err.message ?? "Failed to create checkout session");
+        }
+
+        const { url } = await checkoutRes.json();
+        clearCart();
+        // Redirect to Lemon Squeezy hosted checkout
+        window.location.href = url;
+        return;
+      }
+
+      if (paymentMethod === "mpesa") {
+        // Initiate M-Pesa STK Push
+        setMpesaWaiting(true);
+        const mpesaRes = await apiRequest("POST", "/api/checkout/mpesa", {
+          orderId,
+          phone: mpesaPhone.trim(),
+        });
+
+        if (!mpesaRes.ok) {
+          setMpesaWaiting(false);
+          const err = await mpesaRes.json();
+          throw new Error(err.message ?? "Failed to initiate M-Pesa payment");
+        }
+
+        toast({
+          title: "STK push sent!",
+          description: "Check your phone for the M-Pesa payment prompt. Enter your PIN to complete.",
+        });
+
+        // Clear cart and redirect to confirmation after a delay
+        clearCart();
+        setTimeout(() => {
+          navigate(`/order-confirmation?id=${orderId}&total=${total}&payment=mpesa`);
+        }, 3000);
+        return;
+      }
     } catch (error) {
       console.error("Error submitting order:", error);
       toast({
@@ -290,15 +333,10 @@ export default function Checkout() {
                                 <SelectValue placeholder="Select a country" />
                               </SelectTrigger>
                             </FormControl>
-                            <SelectContent>
-                              <SelectItem value="United States">United States</SelectItem>
-                              <SelectItem value="Canada">Canada</SelectItem>
-                              <SelectItem value="Mexico">Mexico</SelectItem>
-                              <SelectItem value="United Kingdom">United Kingdom</SelectItem>
-                              <SelectItem value="Germany">Germany</SelectItem>
-                              <SelectItem value="France">France</SelectItem>
-                              <SelectItem value="Japan">Japan</SelectItem>
-                              <SelectItem value="Australia">Australia</SelectItem>
+                            <SelectContent className="max-h-[300px]">
+                              {COUNTRIES_BY_NAME.map((c) => (
+                                <SelectItem key={c.code} value={c.name}>{c.name}</SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -311,104 +349,76 @@ export default function Checkout() {
                 {/* Payment Method */}
                 <div className="bg-white rounded-lg border border-gray-200 p-6">
                   <h3 className="text-lg font-medium text-primary-900 mb-4">Payment Method</h3>
-                  <div className="space-y-4">
-                    <div className="flex items-center">
-                      <input 
-                        id="card" 
-                        name="payment-method" 
-                        type="radio" 
-                        checked={paymentMethod === "card"}
-                        onChange={() => setPaymentMethod("card")}
-                        className="h-4 w-4 text-secondary-600 border-gray-300 focus:ring-secondary-500" 
+                  <div className="space-y-3">
+                    {/* Lemon Squeezy (Card) */}
+                    <label className={`flex items-center gap-3 border rounded-md p-4 cursor-pointer transition-colors ${paymentMethod === "lemonsqueezy" ? "border-primary-500 bg-primary-50" : "border-gray-200 hover:border-gray-300"}`}>
+                      <input
+                        type="radio"
+                        name="payment-method"
+                        checked={paymentMethod === "lemonsqueezy"}
+                        onChange={() => setPaymentMethod("lemonsqueezy")}
+                        className="h-4 w-4 text-primary-600"
                       />
-                      <Label htmlFor="card" className="ml-3 block text-sm font-medium text-gray-700">Credit Card</Label>
-                    </div>
-                    
-                    {paymentMethod === "card" && (
-                      <div className="border rounded-md p-4">
-                        <div className="grid grid-cols-2 gap-4 mb-4">
-                          <div className="col-span-2">
-                            <Label htmlFor="card-number" className="block text-sm font-medium text-gray-700">Card number</Label>
-                            <Input 
-                              type="text" 
-                              id="card-number" 
-                              name="card-number"
-                              placeholder="1234 1234 1234 1234"
-                              className="mt-1"
-                            />
-                          </div>
-                          <div>
-                            <Label htmlFor="expiration-date" className="block text-sm font-medium text-gray-700">Expiration date (MM/YY)</Label>
-                            <Input 
-                              type="text" 
-                              id="expiration-date" 
-                              name="expiration-date"
-                              placeholder="MM/YY"
-                              className="mt-1"
-                            />
-                          </div>
-                          <div>
-                            <Label htmlFor="cvc" className="block text-sm font-medium text-gray-700">CVC</Label>
-                            <Input 
-                              type="text" 
-                              id="cvc" 
-                              name="cvc"
-                              placeholder="123"
-                              className="mt-1"
-                            />
-                          </div>
-                        </div>
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-gray-900">Credit / Debit Card</span>
+                        <p className="text-xs text-gray-500 mt-0.5">Powered by Lemon Squeezy — secure hosted checkout</p>
+                      </div>
+                      <img
+                        src="https://cdn.prod.website-files.com/6347244ba8d63489ba51c08e/6a30261d7c3d5620431187e0_ls-logo-stripe-company.svg"
+                        alt="Lemon Squeezy"
+                        className="h-5 w-auto"
+                      />
+                    </label>
+
+                    {/* M-Pesa */}
+                    <label className={`flex items-center gap-3 border rounded-md p-4 cursor-pointer transition-colors ${paymentMethod === "mpesa" ? "border-primary-500 bg-primary-50" : "border-gray-200 hover:border-gray-300"}`}>
+                      <input
+                        type="radio"
+                        name="payment-method"
+                        checked={paymentMethod === "mpesa"}
+                        onChange={() => setPaymentMethod("mpesa")}
+                        className="h-4 w-4 text-primary-600"
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-gray-900">M-Pesa</span>
+                        <p className="text-xs text-gray-500 mt-0.5">Pay via Safaricom M-Pesa STK Push</p>
+                      </div>
+                      <img
+                        src="https://upload.wikimedia.org/wikipedia/commons/1/15/M-PESA_LOGO-01.svg"
+                        alt="M-Pesa"
+                        className="h-6 w-auto"
+                      />
+                    </label>
+
+                    {/* M-Pesa phone input */}
+                    {paymentMethod === "mpesa" && (
+                      <div className="border rounded-md p-4 bg-gray-50 mt-2">
+                        <Label htmlFor="mpesa-phone" className="block text-sm font-medium text-gray-700 mb-1">
+                          M-Pesa Phone Number
+                        </Label>
+                        <Input
+                          id="mpesa-phone"
+                          type="tel"
+                          placeholder="254 7XX XXX XXX"
+                          value={mpesaPhone}
+                          onChange={(e) => setMpesaPhone(e.target.value)}
+                          className="mt-1"
+                        />
+                        <p className="text-xs text-gray-500 mt-2">
+                          You will receive an STK push prompt on this number to complete the payment.
+                        </p>
                       </div>
                     )}
-                    
-                    <div className="flex items-center">
-                      <input 
-                        id="paypal" 
-                        name="payment-method" 
-                        type="radio"
-                        checked={paymentMethod === "paypal"}
-                        onChange={() => setPaymentMethod("paypal")}
-                        className="h-4 w-4 text-secondary-600 border-gray-300 focus:ring-secondary-500" 
-                      />
-                      <Label htmlFor="paypal" className="ml-3 block text-sm font-medium text-gray-700">PayPal</Label>
-                    </div>
-                    
-                    {paymentMethod === "paypal" && (
-                      <div className="border rounded-md p-4">
-                        <div className="flex flex-col items-center space-y-4">
-                          <img 
-                            src="https://www.paypalobjects.com/webstatic/en_US/i/buttons/PP_logo_h_100x26.png" 
-                            alt="PayPal" 
-                            className="h-8" 
-                          />
-                          <p className="text-sm text-gray-600 text-center">
-                            You'll be redirected to PayPal to complete your payment securely.
-                          </p>
-                          <Button
-                            type="button"
-                            onClick={() => {
-                              // Simulate PayPal redirect and return
-                              toast({
-                                title: "Connecting to PayPal",
-                                description: "Securely connecting to PayPal services...",
-                              });
-                              
-                              // Simulate a redirect delay
-                              setTimeout(() => {
-                                toast({
-                                  title: "PayPal Authorization Successful",
-                                  description: "Completing your order...",
-                                  variant: "success"
-                                });
-                                
-                                // Continue with the checkout flow
-                                form.handleSubmit(onSubmit)();
-                              }, 1500);
-                            }}
-                            className="bg-[#0070ba] hover:bg-[#005ea6] text-white w-full"
-                          >
-                            Pay with PayPal
-                          </Button>
+
+                    {/* M-Pesa waiting state */}
+                    {mpesaWaiting && (
+                      <div className="border rounded-md p-4 bg-blue-50 border-blue-200 mt-2">
+                        <div className="flex items-center gap-3">
+                          <Loader2Icon className="h-5 w-5 animate-spin text-blue-600" />
+                          <div>
+                            <p className="text-sm font-medium text-blue-900">Waiting for M-Pesa confirmation...</p>
+                            <p className="text-xs text-blue-700">Check your phone and enter your PIN</p>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -428,7 +438,7 @@ export default function Checkout() {
                         Processing...
                       </>
                     ) : (
-                      "Complete Order"
+                      paymentMethod === "mpesa" ? "Pay with M-Pesa" : "Pay with Card"
                     )}
                   </Button>
                   <p className="mt-4 text-xs text-center text-gray-500">
@@ -468,7 +478,7 @@ export default function Checkout() {
               <div className="border-t border-gray-200 pt-6">
                 <div className="flex justify-between text-sm mb-2">
                   <p className="text-gray-500">Subtotal</p>
-                  <p className="font-medium text-primary-900">${subtotal.toFixed(2)}</p>
+                  <p className="font-medium text-primary-900">{formatPrice(subtotal)}</p>
                 </div>
                 <div className="flex justify-between text-sm mb-2">
                   <p className="text-gray-500">Shipping</p>
@@ -476,11 +486,11 @@ export default function Checkout() {
                 </div>
                 <div className="flex justify-between text-sm mb-2">
                   <p className="text-gray-500">Tax</p>
-                  <p className="font-medium text-primary-900">${tax.toFixed(2)}</p>
+                  <p className="font-medium text-primary-900">{formatPrice(tax)}</p>
                 </div>
                 <div className="flex justify-between text-base font-medium mt-6">
                   <p className="text-primary-900">Total</p>
-                  <p className="text-primary-900">${total.toFixed(2)}</p>
+                  <p className="text-primary-900">{formatPrice(total)}</p>
                 </div>
               </div>
 
@@ -498,7 +508,7 @@ export default function Checkout() {
                       Processing...
                     </>
                   ) : (
-                    "Complete Order"
+                    paymentMethod === "mpesa" ? "Pay with M-Pesa" : "Pay with Card"
                   )}
                 </Button>
                 <div className="mt-4 text-center">

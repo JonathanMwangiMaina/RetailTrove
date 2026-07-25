@@ -20,8 +20,11 @@ const Contact = lazy(() => import("@/pages/contact"));
 const FaqPage = lazy(() => import("@/pages/faq"));
 const Privacy = lazy(() => import("@/pages/privacy"));
 const LoginPage = lazy(() => import("@/pages/login"));
+const ForgotPasswordPage = lazy(() => import("@/pages/forgot-password"));
+const ResetPasswordPage = lazy(() => import("@/pages/reset-password"));
 const AdminPage = lazy(() => import("@/pages/admin"));
 const VendorPage = lazy(() => import("@/pages/vendor"));
+const AccountPage = lazy(() => import("@/pages/account"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 
 // ── Fallback Loading Component ──────────────────────────────────────────────
@@ -63,8 +66,11 @@ function Router() {
           <Route path="/faq" component={FaqPage} />
           <Route path="/privacy" component={Privacy} />
           <Route path="/login" component={LoginPage} />
+          <Route path="/forgot-password" component={ForgotPasswordPage} />
+          <Route path="/reset-password" component={ResetPasswordPage} />
           <Route path="/admin" component={AdminPage} />
           <Route path="/vendor" component={VendorPage} />
+          <Route path="/account" component={AccountPage} />
           <Route component={NotFound} />
         </Switch>
       </Suspense>

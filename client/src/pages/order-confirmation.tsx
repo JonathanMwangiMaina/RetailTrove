@@ -1,18 +1,22 @@
 import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import { useCurrency } from "@/hooks/use-currency";
 import { CheckCircle2Icon } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 export default function OrderConfirmation() {
+  const { formatPrice } = useCurrency();
   // Use window.location to get URL parameters
   const [orderId, setOrderId] = useState<string>('ORDER123456');
   const [total, setTotal] = useState<number>(0);
-  
+  const [paymentMethod, setPaymentMethod] = useState<string>("");
+
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     setOrderId(searchParams.get('id') || 'ORDER123456');
     setTotal(parseFloat(searchParams.get('total') || '0'));
+    setPaymentMethod(searchParams.get('payment') || "");
   }, []);
   
   // Format current date
@@ -60,8 +64,16 @@ export default function OrderConfirmation() {
             </div>
             <div className="mt-4 flex justify-between text-base font-medium text-primary-900">
               <p>Order total</p>
-              <p className="font-semibold">${total.toFixed(2)}</p>
+              <p className="font-semibold">{formatPrice(total)}</p>
             </div>
+            {paymentMethod && (
+              <div className="mt-3 flex justify-between text-sm text-gray-500">
+                <p>Payment method</p>
+                <p className="font-medium text-gray-700">
+                  {paymentMethod === "mpesa" ? "M-Pesa" : "Credit / Debit Card"}
+                </p>
+              </div>
+            )}
           </div>
           
           <div className="py-6">

@@ -19,6 +19,7 @@ import {
   PencilIcon,
   CheckIcon,
   XCircleIcon,
+  Star,
 } from "lucide-react";
 
 interface BannerData {
@@ -68,6 +69,11 @@ export default function Header() {
 
   const { data: banner } = useQuery<BannerData>({
     queryKey: ["/api/banner"],
+  });
+
+  const { data: loyaltyAccount } = useQuery<{ points: number; tier: string }>({
+    queryKey: ["/api/loyalty/account"],
+    enabled: !!user,
   });
 
   const updateBannerMutation = useMutation({
@@ -297,7 +303,22 @@ export default function Header() {
                         >
                           {user.role}
                         </span>
+                        {loyaltyAccount && (
+                          <span className="inline-block mt-1 ml-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                            <Star className="inline h-2.5 w-2.5 mr-0.5 -mt-px" />{loyaltyAccount.points} pts
+                          </span>
+                        )}
                       </div>
+
+                      <Link href="/account">
+                        <span
+                          onClick={() => setProfileOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 cursor-pointer"
+                        >
+                          <UserIcon className="h-4 w-4 text-slate-500" />
+                          My Account
+                        </span>
+                      </Link>
 
                       {(user.role === "admin" || user.role === "vendor") && (
                         <Link href={dashboardHref(user.role)}>
@@ -401,11 +422,25 @@ export default function Header() {
                     <p className="text-sm font-semibold text-slate-900">
                       {user.name}
                     </p>
-                    <p className="text-xs text-slate-500 capitalize">
+                    <p className="text-xs text-slate-500 capitalize flex items-center gap-1.5">
                       {user.role}
+                      {loyaltyAccount && (
+                        <span className="text-amber-600 font-bold">
+                          <Star className="inline h-2.5 w-2.5 -mt-px" /> {loyaltyAccount.points} pts
+                        </span>
+                      )}
                     </p>
                   </div>
                 </div>
+
+                <Link href="/account">
+                  <span
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-md cursor-pointer"
+                  >
+                    My Account
+                  </span>
+                </Link>
 
                 {(user.role === "admin" || user.role === "vendor") && (
                   <Link href={dashboardHref(user.role)}>

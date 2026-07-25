@@ -30,7 +30,7 @@ jobs:
               `build:api` bundles api/index.ts → api/index.js), tsx (dev)
             - Deployment: Vercel (serverless), `vercel-build` script must
               run both `build:client` AND `build:api`
-            - Payments: Stripe (schema groundwork landed — `payment_status`,
+            - Payments: Lemon Squeezy (schema groundwork landed — `payment_status`,
               `stripe_session_id`, `stripe_payment_intent_id` on `orders`;
               checkout flow and webhooks not yet wired up). M-Pesa STK Push
               (Safaricom Daraja API) also planned.

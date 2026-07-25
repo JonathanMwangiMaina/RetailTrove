@@ -9,24 +9,91 @@ This project does not currently use semantic versioning — entries are dated.
 
 ## [Unreleased]
 
-### Planned — Phase 2 (Payments)
-- Remove PayPal simulation
-- Stripe hosted checkout for card payments (schema groundwork landed in v0.3.2 — see below; checkout flow and webhook handlers still pending)
-- M-Pesa STK Push via Safaricom Daraja API
-- Server-side order total verification
-- African countries added to checkout country dropdown
-- Payment webhook handlers (Stripe, M-Pesa)
-
-### Planned — Phase 3 (Hardening & Quality)
-- `helmet` security headers (CSP, HSTS, X-Frame-Options)
-- CSRF protection on all state-mutating endpoints
-- Rate limiting on auth, cart, and order endpoints
-- Input sanitisation on free-text fields
-- Admin/vendor audit logging to `audit_logs` table
-- Vitest unit + integration test suite
-- Cursor-based pagination on `/api/products`
+### Planned — Phase 4 (Performance & Scale)
 - Sentry error monitoring
 - Upgrade Express 4.21 → 5.x
+- Database read replicas
+- CDN image optimisation
+
+---
+
+## [0.4.0] — 2026-07-26
+
+### Added
+
+#### Security Hardening (Phase 3)
+- **helmet** security headers: Content-Security-Policy (disabled in dev for Vite HMR), HSTS in production, X-Frame-Options DENY, Referrer-Policy strict-origin-when-cross-origin
+- **CSRF protection** via `csrf-sync`: all POST/PUT/DELETE routes automatically protected; `GET /api/csrf-token` endpoint issues tokens; frontend fetches token on mount and sends via `x-csrf-token` header in `apiRequest()`
+- **Rate limiting** via `express-rate-limit`: global (500 req/15 min), auth endpoints (10 req/15 min), write endpoints like cart/orders/newsletter (30 req/15 min)
+- **Input sanitisation** middleware: recursively applies `xss()` to all string values in `req.body`, `req.query`, and `req.params` before route handlers execute
+- **Structured error handler**: JSON-formatted error responses with `x-request-id`, timestamp, level, message, stack trace, IP, and path; replaces the previous bare `console.error` fallback
+- **Audit logging** system: `auditLogs` table (userId, action, entityType, entityId, changes JSONB, ipAddress, userAgent, createdAt); `logAudit()` middleware helper; automatic logging on product create/update/delete, order create, user CRUD, product approve/reject; admin-visible Audit Logs tab in dashboard
+
+#### Database
+- Added `audit_logs` table with relation, Zod schema, and TypeScript types
+- Added `getProductsPaginated()` storage method with cursor-based pagination support
+- `GET /api/products` now returns `{ data: Product[], nextCursor: number | null }` with optional `cursor`, `limit`, `category`, and `q` query parameters
+
+#### Multi-Currency System
+- 170 fiat currencies with ISO 4217 codes, symbols, decimal places, and approximate USD exchange rates in `client/src/lib/currencies.ts`
+- `formatPrice(amountUsd, currencyCode)` and `convertCurrency(amountUsd, toCurrency)` utility functions
+- `useCurrency()` React hook reads `site_currency` from site settings and provides `formatPrice()` globally
+- All 23 price display locations across 10 frontend files updated to use `formatPrice()`
+- Admin Currency tab with dropdown for all 170 currencies, saves to `site_settings`
+
+#### Internationalisation
+- 250 countries with ISO 3166-1 alpha-2 codes in `client/src/lib/countries.ts` (replacing 8 hardcoded countries in checkout)
+- Checkout country dropdown now shows all 250 countries sorted alphabetically
+
+#### Frontend
+- **Audit Logs** admin tab: shows recent audit log entries with timestamp, action badge, entity type, entity ID, and IP address
+- **Loyalty dashboard** (`loyalty-dashboard.tsx`): loyalty points display, tier badge, transaction history, redeem points for discount codes
+- **Account page** (`/account`): wraps the loyalty dashboard for customer self-service
+- **Header loyalty badge**: desktop dropdown and mobile menu show current loyalty points + "My Account" link
+- **Newsletter admin tab**: subscriber table with delete and subscriber count badge
+
+#### Checkout
+- Removed PayPal simulation — payment section now shows card fields directly without radio button selection
+- Server-side order total verification: server recalculates total from DB product prices + 10% tax and rejects orders where the client-submitted total deviates by more than \$0.02
+
+#### Payments
+- **Lemon Squeezy hosted checkout**: `POST /api/checkout/lemonsqueezy` creates a hosted checkout session via Lemon Squeezy's JSON:API and returns a redirect URL; customer completes payment on Lemon Squeezy's hosted page
+- **Lemon Squeezy webhook handler**: `POST /api/webhooks/lemonsqueezy` receives signed `order_created` / `order_refunded` events (HMAC-SHA256 verified via `X-Signature` header), updates order payment status; raw body preserved for signature verification (registered before `express.json()`)
+- **M-Pesa STK Push**: `POST /api/checkout/mpesa` initiates a Daraja API STK Push to the customer's phone; `POST /api/mpesa/callback` receives the async callback with receipt number and updates the order
+- **M-Pesa OAuth token caching**: Access token fetched once and cached server-side for ~1 hour with early refresh
+- Checkout page shows payment method selector (Lemon Squeezy card / M-Pesa) with M-Pesa phone number input and waiting state
+- Order confirmation page displays payment method and Lemon Squeezy redirect includes payment method in URL
+- `paymentProvider` column added to `orders` table; `mpesaReceiptNumber` column for M-Pesa receipts
+
+#### Quality & Testing
+- **Vitest** test suite: 35 unit tests across 3 test files
+  - `currencies.test.ts`: 17 tests covering CURRENCIES array, lookup, conversion, formatting
+  - `countries.test.ts`: 9 tests covering COUNTRIES array, sorting, lookup
+  - `schemas.test.ts`: 9 tests covering insertUserSchema and insertProductSchema validation
+- `vitest.config.ts` with path aliases for `@/` and `@shared/`
+- `npm test` and `npm run test:watch` scripts
+
+#### API
+- `GET /api/admin/audit-logs` with pagination and filter support (userId, entityType, limit, offset)
+- `POST /api/admin/newsletter/subscribers/:id` → DELETE subscriber
+- `PUT /api/admin/settings` now accepts `site_currency` key
+
+### Changed
+- `GET /api/products` response format changed from `Product[]` to `{ data: Product[], nextCursor: number | null }`
+- Frontend `shop.tsx` and `admin.tsx` updated to unwrap paginated response
+- Rate limiter middleware applied globally; cart, order, and newsletter subscribe routes additionally rate-limited
+- Auth routes intentionally excluded from CSRF protection (client has no token before login)
+
+### Fixed
+- Admin endpoint `GET /admin/users/customers` was previously unprotected; now requires `requireRole("admin")`
+- CSRF token not being sent with frontend requests (added `fetchCsrfToken()` in `main.tsx`)
+
+### Dependencies Added
+- `helmet` (security headers)
+- `express-rate-limit` (rate limiting)
+- `csrf-sync` (CSRF protection)
+- `xss` (input sanitisation, ships its own TypeScript types)
+- `vitest` (test runner, devDependency)
 
 ---
 
@@ -46,7 +113,7 @@ This project does not currently use semantic versioning — entries are dated.
 - `db:seed` script wired to `server/seed-supabase.ts`
 
 #### Schema — Payments Groundwork
-- Added `payment_status` (text, default `'pending'`), `stripe_session_id` (nullable text), and `stripe_payment_intent_id` (nullable text) columns to `orders`, laying schema groundwork ahead of full Stripe checkout integration
+- Added `payment_status` (text, default `'pending'`), `stripe_session_id` (nullable text), and `stripe_payment_intent_id` (nullable text) columns to `orders`, laying schema groundwork ahead of full Lemon Squeezy checkout integration
 - Added `user_id` (uuid, nullable) to `orders` and `cart_items`, linking session-scoped cart/order activity to authenticated Supabase Auth users where available
 
 #### Schema — Documented Defaults
@@ -292,7 +359,8 @@ This project does not currently use semantic versioning — entries are dated.
 
 ---
 
-[Unreleased]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.2.0...v0.3.0

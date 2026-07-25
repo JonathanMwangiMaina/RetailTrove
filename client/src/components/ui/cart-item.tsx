@@ -1,5 +1,6 @@
 import { CartItemWithProduct } from "@shared/schema";
 import { useCart } from "@/hooks/use-cart";
+import { useCurrency } from "@/hooks/use-currency";
 import { Button } from "@/components/ui/button";
 import { MinusIcon, PlusIcon, TrashIcon } from "lucide-react";
 
@@ -11,6 +12,7 @@ interface CartItemProps {
 export function CartItem({ item, showControls = true }: CartItemProps) {
   const { product, quantity } = item;
   const { updateQuantity, removeFromCart } = useCart();
+  const { formatPrice } = useCurrency();
 
   return (
     <li className="py-6 flex">
@@ -26,7 +28,7 @@ export function CartItem({ item, showControls = true }: CartItemProps) {
         <div>
           <div className="flex justify-between text-base font-medium text-primary-900">
             <h3>{product.name}</h3>
-            <p className="ml-4">${(Number(product.price) * quantity).toFixed(2)}</p>
+            <p className="ml-4">{formatPrice(Number(product.price) * quantity)}</p>
           </div>
           <p className="mt-1 text-sm text-gray-500">{product.category}</p>
         </div>

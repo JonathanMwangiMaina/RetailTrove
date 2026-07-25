@@ -35,9 +35,12 @@ export default function Shop({ params }: ShopProps) {
   }, [location]);
   
   // Fetch products by category
-  const { data: products, isLoading } = useQuery<Product[]>({
-    queryKey: [`/api/products/category/${filterCategory}`],
+  const { data: productsResponse, isLoading } = useQuery<{ data: Product[]; nextCursor: number | null } | Product[]>({
+    queryKey: filterCategory === "All Products" ? ["/api/products"] : [`/api/products/category/${filterCategory}`],
   });
+
+  // Normalize: paginated endpoints return { data }, category endpoint returns array
+  const products: Product[] = Array.isArray(productsResponse) ? productsResponse : (productsResponse as any)?.data ?? [];
   
   // Filter and sort products
   const filteredAndSortedProducts = products ? products

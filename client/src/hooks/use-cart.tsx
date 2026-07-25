@@ -168,14 +168,24 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   };
   
-  // Clear cart
-  const clearCart = () => {
-    // This only clears locally - in a real app you'd want to clear on the server too
-    setCart([]);
-    toast({
-      title: "Cart cleared",
-      description: "All items have been removed from your cart",
-    });
+  // Clear cart — server-side and local
+  const clearCart = async () => {
+    try {
+      const cartId = getCartId();
+      await apiRequest("DELETE", `/api/cart/clear/${cartId}`, undefined);
+      setCart([]);
+      toast({
+        title: "Cart cleared",
+        description: "All items have been removed from your cart",
+      });
+    } catch (error) {
+      console.error("Error clearing cart:", error);
+      setCart([]);
+      toast({
+        title: "Cart cleared",
+        description: "All items have been removed from your cart",
+      });
+    }
   };
   
   return (
