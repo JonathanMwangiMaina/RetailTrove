@@ -14,6 +14,10 @@ This project does not currently use semantic versioning — entries are dated.
 - `LOGIN_CREDENTIALS.txt` (plaintext credentials — security risk)
 - `import-to-supabase.sh` (one-time migration script, completed)
 - `esbuild.config.js` (unused — project uses Vite)
+- `serverless-http` dependency (incompatible with Vercel native runtime)
+
+### Fixed
+- Vercel deployment: let Vercel compile `api/index.ts` natively instead of pre-bundling with esbuild
 
 ### Planned — Phase 4 (Performance & Scale)
 - Sentry error monitoring
