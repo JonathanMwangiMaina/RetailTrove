@@ -9,6 +9,12 @@ This project does not currently use semantic versioning — entries are dated.
 
 ## [Unreleased]
 
+### Removed
+- 22 stale markdown docs (deployment checklists, migration logs, Vercel guides, planning docs)
+- `LOGIN_CREDENTIALS.txt` (plaintext credentials — security risk)
+- `import-to-supabase.sh` (one-time migration script, completed)
+- `esbuild.config.js` (unused — project uses Vite)
+
 ### Planned — Phase 4 (Performance & Scale)
 - Sentry error monitoring
 - Upgrade Express 4.21 → 5.x

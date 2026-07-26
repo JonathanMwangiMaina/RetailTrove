@@ -1,9 +1,9 @@
 # RetailTrove — Full-Stack E-Commerce Platform
 
-> **Status:** Phase 1 (Authentication, RBAC, Supabase PostgreSQL) and Phase 3 (Security Hardening & Quality) are complete. Phase 2 (Payments — Lemon Squeezy + M-Pesa) is in development. Latest: **v0.4.0** with helmet headers, CSRF, rate limiting, audit logging, multi-currency support, and Vitest test suite.
+> **Status:** Phase 1 (Authentication, RBAC, Supabase PostgreSQL), Phase 2 (Payments — Lemon Squeezy + M-Pesa), and Phase 3 (Security Hardening & Quality) are all complete. Latest: **v0.4.0** — payments, helmet headers, CSRF, rate limiting, audit logging, multi-currency, loyalty system, and 35 Vitest tests.
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue)](https://www.typescriptlang.org/)
-[![React](https://img.shields.io/badge/React-18.3-61dafb)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React-19.1-61dafb)](https://react.dev/)
 [![Express](https://img.shields.io/badge/Express-4.21-90c53f)](https://expressjs.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791)](https://www.postgresql.org/)
 [![License](https://img.shields.io/badge/License-MIT-green)](#license)
@@ -58,7 +58,7 @@ npm run dev
 ```
 
 **Demo Credentials:**
-- Admin: `admin@retailtrove.com` / `admin123`
+- Admin: `admin@retailtrove.com` / `ChronicleBookKasuku26%`
 - Vendor: `vendor@retailtrove.com` / `vendor123`
 - Customer: Register via login page
 
@@ -70,10 +70,13 @@ RetailTrove (branded as ModernRetail) is a production-ready, full-stack e-commer
 
 - Customer-facing storefront with product browsing, filtering, and search
 - Shopping cart with session persistence and server-side synchronization
-- Multi-step checkout with order creation and confirmation
-- Admin dashboard for product, user, and content management
+- Multi-step checkout with Lemon Squeezy hosted card payments and M-Pesa STK Push
+- Admin dashboard for product, user, content, and audit log management
 - Vendor portal for vendor-submitted product management and approval workflow
 - Role-based access control (Admin, Vendor, Customer)
+- Multi-currency system (155 currencies) with live conversion
+- Loyalty points system with tiered rewards
+- Security hardening: helmet, CSRF, rate limiting, input sanitisation, audit logging
 - Responsive design built on Tailwind CSS and Radix UI
 
 The application runs as a monorepo with a unified Express backend serving both API routes and the React frontend via Vite.
@@ -118,6 +121,11 @@ The application runs as a monorepo with a unified Express backend serving both A
 | drizzle-zod | Auto-generated Zod schemas | 0.7.0 |
 | tsx | TypeScript execution | 4.22.4 |
 | esbuild | Production bundler | 0.28.0 |
+| helmet | Security headers | 8.3.0 |
+| express-rate-limit | Rate limiting | 8.6.0 |
+| csrf-sync | CSRF protection | 4.2.1 |
+| xss | Input sanitisation | 1.0.15 |
+| resend | Transactional email | 6.12.4 |
 
 ---
 
@@ -129,16 +137,19 @@ retailtrove/
 ├── client/                               # React frontend (Vite)
 │   └── src/
 │       ├── App.tsx                       # Root routing & layout
-│       ├── main.tsx                      # React DOM entry
+│       ├── main.tsx                      # React DOM entry + CSRF init
 │       ├── index.css                     # Global styles + Tailwind directives
 │       │
 │       ├── pages/                        # Route components
 │       │   ├── home.tsx                  # Landing page
 │       │   ├── shop.tsx                  # Product listing + filtering
 │       │   ├── product.tsx               # Product detail view
-│       │   ├── checkout.tsx              # Order checkout form
-│       │   ├── order-confirmation.tsx    # Post-purchase success
+│       │   ├── checkout.tsx              # Checkout (Lemon Squeezy / M-Pesa)
+│       │   ├── order-confirmation.tsx    # Post-purchase confirmation
 │       │   ├── login.tsx                 # Auth page (login/register)
+│       │   ├── forgot-password.tsx       # Password reset request
+│       │   ├── reset-password.tsx        # Password reset form
+│       │   ├── account.tsx               # Account page (loyalty dashboard)
 │       │   ├── admin.tsx                 # Admin dashboard (protected)
 │       │   ├── vendor.tsx                # Vendor dashboard (protected)
 │       │   ├── faq.tsx                   # Public FAQ listing
@@ -149,42 +160,55 @@ retailtrove/
 │       │
 │       ├── components/
 │       │   ├── layout/
-│       │   │   ├── header.tsx            # Sticky header with nav
+│       │   │   ├── header.tsx            # Sticky header with nav + loyalty badge
 │       │   │   └── footer.tsx            # Site footer
 │       │   ├── cart/
 │       │   │   └── cart-drawer.tsx       # Slide-out cart sheet
+│       │   ├── loyalty/
+│       │   │   └── loyalty-dashboard.tsx # Points, tier, transactions, redeem
 │       │   └── ui/                       # shadcn/ui components (40+)
 │       │
 │       ├── hooks/
 │       │   ├── use-auth.tsx              # Auth context & hooks
 │       │   ├── use-cart.tsx              # Cart context & hooks
+│       │   ├── use-currency.tsx          # Currency hook (site_currency)
+│       │   ├── use-mobile.tsx            # Mobile breakpoint detection
 │       │   └── use-toast.ts              # Toast notifications
 │       │
 │       └── lib/
-│           ├── queryClient.ts            # TanStack Query setup
-│           └── utils.ts                  # Utility functions
+│           ├── queryClient.ts            # TanStack Query + CSRF token
+│           ├── currencies.ts             # 155 currencies + formatPrice
+│           ├── countries.ts              # 240 countries (ISO 3166-1)
+│           ├── utils.ts                  # Utility functions
+│           └── __tests__/                # Unit tests (currencies, countries)
 │
 ├── server/
-│   ├── index.ts                          # Express bootstrap
-│   ├── routes.ts                         # All API endpoints
-│   ├── db.ts                             # Database connection (Supabase + Vercel pooler)
+│   ├── index.ts                          # Express bootstrap + webhooks
+│   ├── routes.ts                         # All API endpoints (~55+)
+│   ├── db.ts                             # Database connection (Supabase pooler)
 │   ├── storage.ts                        # IStorage interface + MemStorage
 │   ├── database-storage.ts               # DatabaseStorage implementation
 │   ├── auth.ts                           # Auth middleware + bcrypt
-│   ├── email.ts                          # Email utility (Resend/Nodemailer)
+│   ├── email.ts                          # Email utility (Resend)
+│   ├── payment-service.ts                # Lemon Squeezy + M-Pesa services
 │   ├── seed-supabase.ts                  # Refactored product seeder
 │   ├── vite.ts                           # Vite dev middleware
-│   └── [legacy seeders]                  # (deprecated, commented out)
+│   └── middleware/
+│       ├── rate-limiter.ts               # Global, auth, write rate limiters
+│       ├── csrf.ts                       # CSRF token setup
+│       ├── sanitize.ts                   # XSS input sanitisation
+│       └── audit.ts                      # Audit logging helper
 │
 ├── shared/
-│   └── schema.ts                         # Drizzle tables + Zod schemas + TS types
-│                                         # Single source of truth for DB structure
+│   ├── schema.ts                         # Drizzle tables + Zod schemas + TS types
+│   └── __tests__/                        # Schema validation tests
 │
 ├── Configuration Files
 │   ├── .env.example                      # Environment variable template
-│   ├── package.json                      # Dependencies & scripts
+│   ├── package.json                      # Dependencies & scripts (v0.4.0)
 │   ├── tsconfig.json                     # TypeScript config
 │   ├── vite.config.ts                    # Vite build config
+│   ├── vitest.config.ts                  # Vitest test runner config
 │   ├── tailwind.config.ts                # Tailwind theme + plugins
 │   ├── drizzle.config.ts                 # Drizzle Kit config
 │   ├── components.json                   # shadcn/ui config
@@ -302,8 +326,10 @@ export const db = drizzle(pool, { schema });
 | created_at | timestamp without time zone | Nullable, default `now()` |
 | user_id | uuid | Nullable |
 | payment_status | text | Default `'pending'` |
-| stripe_session_id | text | Nullable |
-| stripe_payment_intent_id | text | Nullable |
+| paymentProvider | text | `'lemonsqueezy'` or `'mpesa'` |
+| mpesaReceiptNumber | text | M-Pesa receipt (nullable) |
+| stripe_session_id | text | Lemon Squeezy checkout ID |
+| stripe_payment_intent_id | text | Deprecated (kept for schema compat) |
 
 #### `order_items` — Line Items
 
@@ -369,6 +395,9 @@ export const db = drizzle(pool, { schema });
 - `newsletter_subscribers` — Email subscribers (active/unsubscribed)
 - `user_visits` — Page visit tracking per user
 - `user_sessions` — PostgreSQL-backed session store (auto-created by connect-pg-simple)
+- `audit_logs` — Audit trail (userId, action, entityType, entityId, changes JSONB, ipAddress, userAgent)
+- `loyalty_accounts` — Loyalty points balance and tier per user
+- `loyalty_transactions` — Points earn/redeem history per user
 
 ### Type Safety & Validation
 
@@ -403,10 +432,12 @@ npm run db:studio      # Open Drizzle Studio (interactive browser)
 
 ### Server Bootstrap (`server/index.ts`)
 
-- Initializes middleware (JSON parser, logging)
+- Registers Lemon Squeezy webhook handler before `express.json()` (raw body for signature verification)
+- Initializes middleware: JSON parser, `helmet` security headers, XSS input sanitisation, CSRF token endpoint, logging
+- Applies global rate limiter to all routes
 - Runs database operations (seeders, ensure defaults)
 - Registers all API routes via `registerRoutes()`
-- Attaches error handler
+- Attaches structured error handler (JSON with request ID, timestamp, IP, path)
 - Serves frontend via Vite (dev) or static build (prod)
 - Listens on port 5000
 
@@ -420,8 +451,11 @@ interface IStorage {
   getProducts(): Promise<Product[]>
   getProductById(id: number): Promise<Product | undefined>
   searchProducts(query: string): Promise<Product[]>
+  getProductsPaginated(cursor?: number, limit?: number, category?: string, q?: string): Promise<{data: Product[], nextCursor: number | null}>
+  // Users
   getUser(id: string): Promise<User | undefined>
-  // ... 40+ methods
+  getUserByEmail(email: string): Promise<User | undefined>
+  // ... 55+ methods
 }
 ```
 
@@ -476,16 +510,56 @@ Two implementations:
 | Method | Endpoint | Description |
 |---|---|---|
 | GET | `/api/admin/users` | All users (admin only) |
+| GET | `/api/admin/users/vendors` | All vendors |
+| GET | `/api/admin/users/customers` | All customers (admin only) |
 | GET | `/api/admin/products/pending` | Pending vendor products |
 | PUT | `/api/admin/products/:id/approve` | Approve/reject product |
 | GET | `/api/admin/visits` | All user visits |
+| GET | `/api/admin/users/:id/visits` | Visits for specific user |
 | GET | `/api/admin/newsletter/subscribers` | Newsletter subscribers |
+| DELETE | `/api/admin/newsletter/subscribers/:id` | Delete subscriber |
+| GET | `/api/admin/audit-logs` | Audit log entries (paginated) |
+| PUT | `/api/admin/settings` | Update site settings (incl. `site_currency`) |
+
+### Password Reset
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/auth/forgot-password` | Send password reset email |
+| GET | `/api/auth/reset-password/:token` | Validate reset token |
+| POST | `/api/auth/reset-password/:token` | Set new password |
+
+### Loyalty
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/loyalty/me` | Current user's loyalty account |
+| GET | `/api/loyalty/me/transactions` | Points transaction history |
+| POST | `/api/loyalty/redeem` | Redeem points for discount code |
+
+### Payments
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/csrf-token` | Fetch CSRF token |
+| POST | `/api/checkout/lemonsqueezy` | Create Lemon Squeezy hosted checkout session |
+| POST | `/api/checkout/mpesa` | Initiate M-Pesa STK Push |
+| POST | `/api/webhooks/lemonsqueezy` | Lemon Squeezy webhook (HMAC-SHA256 verified) |
+| POST | `/api/mpesa/callback` | M-Pesa STK Push callback |
 
 **Error Response Format:**
 
+Structured JSON error responses with request ID, timestamp, and logging:
+
 ```json
 {
-  "message": "Error description"
+  "x-request-id": "uuid",
+  "timestamp": "2026-07-26T00:00:00.000Z",
+  "level": "error",
+  "message": "Error description",
+  "stack": "...",
+  "ip": "127.0.0.1",
+  "path": "/api/endpoint"
 }
 ```
 
@@ -512,10 +586,13 @@ Uses `wouter` for client-side SPA routing. All routes wrapped in:
 | `/` | home.tsx | Public | Landing page with featured products |
 | `/shop` | shop.tsx | Public | Product browsing with filters |
 | `/product/:id` | product.tsx | Public | Product detail view |
-| `/checkout` | checkout.tsx | Public | Order form + summary |
+| `/checkout` | checkout.tsx | Public | Checkout (Lemon Squeezy / M-Pesa) |
 | `/order/:id` | order-confirmation.tsx | Public | Post-purchase confirmation |
 | `/login` | login.tsx | Public | Auth page (login/register tabs) |
-| `/admin` | admin.tsx | Admin | Dashboard (users, products, orders, content) |
+| `/forgot-password` | forgot-password.tsx | Public | Password reset request |
+| `/reset-password/:token` | reset-password.tsx | Public | Password reset form |
+| `/account` | account.tsx | Customer | Account page (loyalty dashboard) |
+| `/admin` | admin.tsx | Admin | Dashboard (users, products, orders, audit, currency) |
 | `/vendor` | vendor.tsx | Vendor | Vendor dashboard (products, FAQs) |
 | `/faq` | faq.tsx | Public | FAQ listing |
 | `/about` | about.tsx | Public | About page |
@@ -525,9 +602,10 @@ Uses `wouter` for client-side SPA routing. All routes wrapped in:
 
 ### Key Components
 
-- **Header** — Logo, nav, search, cart badge, profile dropdown, mobile hamburger
-- **CartDrawer** — Slide-out cart sheet with item list and subtotal
-- **ProductCard** — Reusable product tile with add-to-cart action
+- **Header** — Logo, nav, search, cart badge, loyalty points badge, profile dropdown, mobile hamburger
+- **CartDrawer** — Slide-out cart sheet with item list, subtotal, and currency-formatted prices
+- **ProductCard** — Reusable product tile with add-to-cart action and multi-currency price display
+- **LoyaltyDashboard** — Loyalty points, tier badge, transaction history, redeem points
 - **40+ UI components** — shadcn/ui wrapped Radix primitives (Button, Dialog, Form, Table, etc.)
 
 ---
@@ -604,7 +682,7 @@ npm run build
 
 Outputs:
 - `dist/` — Vite frontend build (React SPA)
-- Backend bundled via esbuild (for Vercel)
+- Backend bundled via esbuild for Vercel serverless
 
 ### Deployment to Vercel
 
@@ -627,8 +705,19 @@ Copy `.env.example` to `.env` and populate:
 |---|---|---|
 | DATABASE_URL | `postgres://user:pass@host/db` | Supabase pooler connection string |
 | SESSION_SECRET | `your-random-32-char-secret` | Cookie signing secret (min 32 chars) |
-| SUPABASE_CA_CERT | `-----BEGIN CERTIFICATE-----...` | Pinned CA certificate for strict SSL verification |
+| SUPABASE_CA_CERT | `-----BEGIN CERTIFICATE-----...` | Pinned CA certificate for strict SSL |
 | NODE_ENV | `development` or `production` | Environment mode |
+| RESEND_API_KEY | `re_...` | Resend email API key |
+| LEMONSQUEEZY_API_KEY | `ls_...` | Lemon Squeezy API key |
+| LEMONSQUEEZY_STORE_ID | `123` | Lemon Squeezy store ID |
+| LEMONSQUEEZY_VARIANT_ID | `456` | Lemon Squeezy product variant ID |
+| LEMONSQUEEZY_WEBHOOK_SECRET | `...` | Lemon Squeezy webhook HMAC secret |
+| MPESA_CONSUMER_KEY | `...` | Safaricom Daraja consumer key |
+| MPESA_CONSUMER_SECRET | `...` | Safaricom Daraja consumer secret |
+| MPESA_SHORTCODE | `174379` | M-Pesa paybill/till number |
+| MPESA_PASSKEY | `...` | M-Pesa API passkey |
+| MPESA_CALLBACK_URL | `https://...` | M-Pesa callback endpoint URL |
+| MPESA_ENVIRONMENT | `sandbox` or `production` | M-Pesa API environment |
 
 **Never commit `.env` to version control.**
 
@@ -636,7 +725,7 @@ Copy `.env.example` to `.env` and populate:
 
 ## Security Roadmap
 
-### Phase 1 (Current) ✅
+### Phase 1 (Auth & RBAC) ✅
 
 - ✅ bcrypt password hashing
 - ✅ express-session + PostgreSQL store
@@ -644,30 +733,51 @@ Copy `.env.example` to `.env` and populate:
 - ✅ Role-based access control (RBAC)
 - ✅ Protected routes via middleware
 
-### Phase 2 (Payments) 🔄
+### Phase 2 (Payments) ✅
 
-- Payment gateway integration (Lemon Squeezy, M-Pesa)
-- Server-side order total verification
+- ✅ Lemon Squeezy hosted checkout (card payments)
+- ✅ M-Pesa STK Push (Safaricom Daraja API)
+- ✅ Payment webhook handlers (HMAC-SHA256 verification)
+- ✅ Server-side order total verification
 
-### Phase 3 (Hardening) 📋
+### Phase 3 (Hardening & Quality) ✅
 
-- helmet security headers (CSP, HSTS, X-Frame-Options)
-- CSRF protection on all POST/PUT/DELETE
-- Rate limiting on auth endpoints
-- Input sanitisation on free-text fields
-- Audit logging
-- Vitest unit + integration tests
+- ✅ helmet security headers (CSP, HSTS, X-Frame-Options, Referrer-Policy)
+- ✅ CSRF protection via csrf-sync on all POST/PUT/DELETE
+- ✅ Rate limiting (global: 500/15min, auth: 10/15min, write: 30/15min)
+- ✅ Input sanitisation via recursive xss() on req.body/query/params
+- ✅ Structured JSON error handler with request IDs
+- ✅ Audit logging (auditLogs table, logAudit() helper, admin Audit Logs tab)
+- ✅ Vitest unit tests (35 tests: currencies, countries, schemas)
+- ✅ Cursor-based pagination on GET /api/products
+
+### Phase 4 (Performance & Scale) — Planned
+
+- Sentry error monitoring
+- Upgrade Express 4.21 → 5.x
+- Database read replicas
+- CDN image optimisation
 
 ---
 
 ## Testing
 
-**Current Status:** No test suite yet.
+**Test Runner:** Vitest 4.1.10
 
-**Planned (Phase 3):**
-- Unit tests for utility functions (Vitest)
-- Integration tests for API endpoints
-- E2E tests for user flows (Playwright)
+**Current Status:** 35 unit tests across 3 test files.
+
+| Test File | Tests | Coverage |
+|---|---|---|
+| `client/src/lib/__tests__/currencies.test.ts` | 17 | CURRENCY array, lookup, conversion, formatting |
+| `client/src/lib/__tests__/countries.test.ts` | 9 | COUNTRIES array, sorting, lookup |
+| `shared/__tests__/schemas.test.ts` | 9 | insertUserSchema, insertProductSchema validation |
+
+**Run tests:**
+
+```bash
+npm run test        # Single run
+npm run test:watch  # Watch mode
+```
 
 ---
 
@@ -697,12 +807,13 @@ Copy `.env.example` to `.env` and populate:
 - [x] Upgrade TypeScript 5.6 → 6.0
 - [x] Upgrade React 18.3 → 19.x
 - [x] Upgrade Vite 5.4 → 8.x
+- [x] Remove stale markdown docs, unused esbuild config, plaintext credentials
 - [ ] Upgrade Express 4.21 → 5.x
 
 ### Features Not Yet Implemented
 
-- [ ] Payment processing (Phase 2)
-- [ ] Email notifications (confirmation, shipping updates)
+- [x] ~~Payment processing (Lemon Squeezy + M-Pesa)~~ ✅
+- [ ] Email notifications (shipping updates, marketing)
 - [ ] Product reviews & ratings (customer-submitted)
 - [ ] Wishlists / favorites
 - [ ] Advanced filtering (price range, ratings, availability)
@@ -715,7 +826,7 @@ Copy `.env.example` to `.env` and populate:
 
 ## Roadmap
 
-### Phase 1 — Complete ✅ (v0.3.0+)
+### Phase 1 — Complete ✅ (v0.3.0)
 
 - [x] Full-stack project scaffold
 - [x] PostgreSQL + Drizzle ORM
@@ -726,21 +837,32 @@ Copy `.env.example` to `.env` and populate:
 - [x] Admin portal (product, user, order, content management)
 - [x] Vendor portal (product submission, FAQ management)
 
-### Phase 2 — In Development 🔄
+### Phase 2 — Complete ✅ (v0.4.0)
 
-- [x] Lemon Squeezy checkout integration
-- [ ] M-Pesa STK Push (Safaricom Daraja API)
-- [ ] Payment webhook handlers
-- [ ] Order verification (server-side total check)
-- [ ] Email confirmations
+- [x] Lemon Squeezy hosted checkout (card payments)
+- [x] M-Pesa STK Push (Safaricom Daraja API)
+- [x] Payment webhook handlers (HMAC-SHA256 verification)
+- [x] Server-side order total verification
+- [x] Multi-currency system (155 currencies)
+- [x] Loyalty points system
+- [x] Password reset flow
 
-### Phase 3 — Planned 📋
+### Phase 3 — Complete ✅ (v0.4.0)
 
-- [ ] Security hardening (Helmet, CSRF, rate limiting)
-- [ ] Test suite (Vitest + Playwright)
-- [ ] Error monitoring (Sentry)
-- [ ] Audit logging
-- [ ] Pagination & cursor-based API
+- [x] Security hardening (helmet, CSRF, rate limiting)
+- [x] Input sanitisation via xss()
+- [x] Structured JSON error handler
+- [x] Audit logging
+- [x] Vitest test suite (35 tests)
+- [x] Cursor-based pagination
+- [x] 240 countries in checkout
+
+### Phase 4 — Planned
+
+- [ ] Sentry error monitoring
+- [ ] Upgrade Express 4.21 → 5.x
+- [ ] Database read replicas
+- [ ] CDN image optimisation
 
 ---
 
@@ -748,12 +870,15 @@ Copy `.env.example` to `.env` and populate:
 
 See `CHANGELOG.md` for complete version history.
 
-### v0.3.2 — Vercel Serverless Optimization & Type Hardening (2026-07-23)
+### v0.4.0 — Payments, Security Hardening & Quality (2026-07-26)
 
-- **Updated:** Configured `server/db.ts` connection pool for stateless Vercel Serverless Function execution against Supabase PostgreSQL poolers.
-- **Fixed:** Resolved Vercel build-time TypeScript compilation error TS2769 in `server/database-storage.ts` using explicitly typed `products.$inferInsert` payload mapping.
-- **Updated:** Aligned `users.id` (text string primary key) and numeric field types across `shared/schema.ts` and DatabaseStorage.
-- **Maintained:** Retained full contract integrity for `server/storage.ts` without requiring structural modifications.
+- **Added:** Lemon Squeezy hosted checkout + M-Pesa STK Push payments
+- **Added:** Security hardening: helmet, CSRF, rate limiting, input sanitisation, audit logging
+- **Added:** Vitest test suite (35 tests)
+- **Added:** Multi-currency system (155 currencies), loyalty points, 240 countries
+- **Added:** Password reset flow, structured error handler, cursor-based pagination
+- **Changed:** `GET /api/products` returns `{ data, nextCursor }` paginated response
+- **Removed:** PayPal simulation, stale markdown docs, unused esbuild config
 
 ---
 
@@ -773,5 +898,6 @@ For issues, feature requests, or questions:
 
 ---
 
-**Last Updated:** 2026-07-23
+**Last Updated:** 2026-07-26
+**Version:** 0.4.0
 **Maintainer:** Jonathan Maina
