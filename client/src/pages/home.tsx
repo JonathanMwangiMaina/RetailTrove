@@ -7,6 +7,7 @@ import { StarIcon } from "lucide-react";
 import { Product } from "@shared/schema";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function Home() {
   const [newsletterEmail, setNewsletterEmail] = useState("");
@@ -25,16 +26,8 @@ export default function Home() {
   // Newsletter subscription mutation
   const newsletterMutation = useMutation({
     mutationFn: async (email: string) => {
-      const response = await fetch("/api/newsletter/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Subscription failed");
-      }
-      return response.json();
+      const res = await apiRequest("POST", "/api/newsletter/subscribe", { email });
+      return res.json();
     },
     onSuccess: (data) => {
       toast({

@@ -19,6 +19,7 @@ const About = lazy(() => import("@/pages/about"));
 const Contact = lazy(() => import("@/pages/contact"));
 const FaqPage = lazy(() => import("@/pages/faq"));
 const Privacy = lazy(() => import("@/pages/privacy"));
+const Terms = lazy(() => import("@/pages/terms"));
 const LoginPage = lazy(() => import("@/pages/login"));
 const ForgotPasswordPage = lazy(() => import("@/pages/forgot-password"));
 const ResetPasswordPage = lazy(() => import("@/pages/reset-password"));
@@ -65,6 +66,7 @@ function Router() {
           <Route path="/contact" component={Contact} />
           <Route path="/faq" component={FaqPage} />
           <Route path="/privacy" component={Privacy} />
+          <Route path="/terms" component={Terms} />
           <Route path="/login" component={LoginPage} />
           <Route path="/forgot-password" component={ForgotPasswordPage} />
           <Route path="/reset-password" component={ResetPasswordPage} />
