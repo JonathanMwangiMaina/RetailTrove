@@ -3,7 +3,6 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import helmet from "helmet";
 import crypto from "crypto";
-import serverless from "serverless-http";
 import { pool } from "../server/db.js";
 import { registerRoutes } from "../server/routes.js";
 import { setupAuth } from "../server/auth.js";
@@ -195,4 +194,4 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   });
 });
 
-export default serverless(app);
+export default app;
