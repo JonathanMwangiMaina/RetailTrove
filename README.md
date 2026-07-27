@@ -1,6 +1,6 @@
 # RetailTrove — Full-Stack E-Commerce Platform
 
-> **Status:** Phases 1–3 complete (Auth, RBAC, Payments, Security Hardening). Phase 4 in progress. Latest: **v0.4.0+** — advanced product filtering, inventory management with stock auto-decrement, analytics dashboard (recharts), ESLint + Prettier configured, edge prerendering, testimonials system, admin refactor.
+> **Status:** Phases 1–3 complete (Auth, RBAC, Payments, Security Hardening). Phase 4 in progress. Latest: **v0.4.1** — advanced product filtering, inventory management with stock auto-decrement, analytics dashboard (recharts), ESLint + Prettier configured, edge prerendering, testimonials system, admin refactor.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19.1-61dafb)](https://react.dev/)
@@ -66,7 +66,7 @@ npm run dev
 
 ## Project Overview
 
-RetailTrove (branded as ModernRetail) is a production-ready, full-stack e-commerce platform enabling:
+RetailTrove is a production-ready, full-stack e-commerce platform enabling:
 
 - Customer-facing storefront with product browsing, filtering, and search
 - Shopping cart with session persistence and server-side synchronization
@@ -93,7 +93,7 @@ The application runs as a monorepo with a unified Express backend serving both A
 | Runtime | Node.js | 20.x LTS | Current stable |
 | Frontend Framework | React | 19.1.0 | Upgraded from 18.3 |
 | Build Tool | Vite | 8.1.0 | Upgraded from 5.4 |
-| Backend Framework | Express | 4.21.2 | ⚠️ 5.x available |
+| Backend Framework | Express | 4.21.2 | .x available |
 | Database | PostgreSQL | 15+ | Supabase or self-hosted |
 | ORM | Drizzle ORM | 0.45.2 | Type-safe SQL builder |
 | Validation | Zod | 3.24.2 | Schema validation (shared) |
@@ -776,8 +776,7 @@ Copy `.env.example` to `.env` and populate:
 ### Phase 4 (Performance & Scale) — Planned
 
 - Sentry error monitoring
-- Upgrade Express 4.21 → 5.x
-- Database read replicas
+- Redis cache layer
 - CDN image optimisation
 
 ---
@@ -843,7 +842,7 @@ npm run test:watch  # Watch mode
 - [ ] Email notifications (shipping updates, marketing)
 - [ ] Wishlists / favorites
 - [ ] Product variants (size, color, etc.)
-- [ ] SEO optimization (meta tags, structured data)
+
 
 ---
 
@@ -896,7 +895,7 @@ npm run test:watch  # Watch mode
 
 See `CHANGELOG.md` for complete version history.
 
-### v0.4.0+ — Filtering, Inventory & Analytics (2026-07-27)
+### v0.4.1 — Filtering, Inventory & Analytics (2026-07-27)
 
 - **Added:** Advanced product filtering — server-side price range, star rating, and in-stock filters on shop page
 - **Added:** Inventory management — `decrementStock()` on order creation, `getLowStockProducts()` endpoint, admin low-stock alerts and stock filter

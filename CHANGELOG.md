@@ -9,7 +9,26 @@ This project does not currently use semantic versioning — entries are dated.
 
 ## [Unreleased]
 
+---
+
+## [0.4.1] — 2026-07-27
+
 ### Added
+
+#### Dynamic Team Members (Admin-Managed)
+- **`team_members` Supabase table** with fields: `id`, `name`, `title`, `bio`, `image_url`, `display_order`, `is_published`, `created_at`
+- **Drizzle schema + Zod validation** in `shared/schema.ts`: `teamMembers` table, `insertTeamMemberSchema`, `selectTeamMemberSchema`, `TeamMember`/`InsertTeamMember` types
+- **6 storage methods** in `IStorage` and `DatabaseStorage`: `getPublicTeamMembers`, `getAllTeamMembers`, `getTeamMemberById`, `createTeamMember`, `updateTeamMember`, `deleteTeamMember`
+- **5 API routes**: `GET /api/team-members` (public, published only), `GET/POST /api/admin/team-members`, `PUT/DELETE /api/admin/team-members/:id` — all admin routes protected by `requireAuth` + `requireRole("admin")`
+- **Admin "Team" tab** (`client/src/pages/admin/team-tab.tsx`): full CRUD table with Add/Edit dialogs, display order, published/draft toggle, avatar preview, delete confirmation
+- **About page** (`client/src/pages/about.tsx`): replaced 3 hardcoded team members with `useQuery` to `/api/team-members`; section hidden when no published members exist
+
+#### RLS Policies (Supabase SQL Editor — ready to execute)
+- **`team_members`**: public SELECT where `is_published = true`; INSERT/UPDATE/DELETE restricted to admin role via `public.users.auth_user_id = auth.uid()` join
+- **`loyalty_accounts`**: authenticated SELECT own account; admin SELECT all
+- **`loyalty_transactions`**: authenticated SELECT own transactions; admin SELECT all
+- **`audit_logs`**: deny authenticated SELECT; allow service_role INSERT
+- **`password_reset_tokens`**: deny all client access
 
 #### Advanced Product Filtering (Shop)
 - **Server-side filtering** on `GET /api/products`: new query params `minPrice`, `maxPrice`, `minRating`, `inStock` — all evaluated in PostgreSQL via Drizzle `gte`/`lte` conditions
@@ -90,6 +109,7 @@ This project does not currently use semantic versioning — entries are dated.
 - Shop page (`shop.tsx`) now sends filter params to server instead of client-side filtering; client only handles sort order
 - `vendor.tsx`: fixed all `any` types with proper interfaces (`VendorProduct`, `VendorFaq`, `Customer`, `ProductFormData`); `ProductForm` moved outside component; hooks reordered
 - Admin inventory tab: enhanced with low stock alerts, stock summary, and stock filter buttons
+- **README.md**: updated feature checklist, Phase 4 pending items, and IStorage interface documentation
 
 ### Removed
 - `server/seed-testimonials.ts` (redundant — schema, storage, and DB now aligned)
@@ -105,15 +125,8 @@ This project does not currently use semantic versioning — entries are dated.
 - M-Pesa callback: now uses `getOrderByStripeSessionId()` direct DB lookup instead of relying on session state
 - CSP + HSTS headers enabled in production (`api/index.ts`)
 - `any` type annotations in `vendor.tsx` replaced with proper TypeScript interfaces
-
-### Planned — Phase 4 (Performance & Scale)
-- Sentry error monitoring
-- Upgrade Express 4.21 → 5.x
-- Database read replicas
-- CDN image optimisation
-- Wishlists / favorites
-- Product variants (size, color, etc.)
-- Email notifications (shipping updates, marketing)
+- **Broken hero image** on About page: replaced invalid Unsplash `photo-ABVE1cyT7hk` with `photo-1702047109910-43af92894dc1` (team hands collaboration, free license)
+- **Broken testimonial images** on home page: replaced with valid Unsplash URLs
 
 ---
 
@@ -459,7 +472,8 @@ This project does not currently use semantic versioning — entries are dated.
 
 ---
 
-[Unreleased]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.3.0...v0.3.1

@@ -7,6 +7,16 @@ interface SiteContent {
   content: string;
 }
 
+interface TeamMember {
+  id: number;
+  name: string;
+  title: string;
+  bio: string;
+  imageUrl: string;
+  displayOrder: number | null;
+  isPublished: boolean;
+}
+
 export default function About() {
   useEffect(() => {
     document.title = "About Us - RetailTrove";
@@ -17,6 +27,10 @@ export default function About() {
   });
   const dbContent: string | undefined = contentData?.content;
 
+  const { data: teamMembers = [] } = useQuery<TeamMember[]>({
+    queryKey: ["/api/team-members"],
+  });
+
   return (
     <div className="bg-white">
       {/* Hero section */}
@@ -24,8 +38,8 @@ export default function About() {
         <div className="absolute inset-0 bg-gradient-to-r from-primary-900/90 to-primary-800/70 overflow-hidden">
           <div className="absolute inset-0">
             <img
-              src="https://images.unsplash.com/photo-ABVE1cyT7hk?auto=format&fit=crop&w=1950&q=80"
-              alt="People with hands gathered in the middle"
+              src="https://images.unsplash.com/photo-1702047109910-43af92894dc1?auto=format&fit=crop&w=1950&q=80"
+              alt="Team collaborating with hands together"
               className="h-full w-full object-cover opacity-30"
             />
           </div>
@@ -181,75 +195,39 @@ export default function About() {
       </div>
 
       {/* Team section */}
-      <div className="max-w-7xl mx-auto py-16 px-4 sm:py-24 sm:px-6 lg:px-8">
-        <div className="text-center">
-          <h2 className="text-3xl font-extrabold text-primary-900 tracking-tight sm:text-4xl">
-            Meet Our Team
-          </h2>
-          <p className="mt-4 max-w-2xl text-lg text-gray-500 mx-auto">
-            The passionate people behind ModernRetail.
-          </p>
-        </div>
-
-        <div className="mt-16 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-          {/* Team member 1 */}
+      {teamMembers.length > 0 && (
+        <div className="max-w-7xl mx-auto py-16 px-4 sm:py-24 sm:px-6 lg:px-8">
           <div className="text-center">
-            <div className="relative h-48 w-48 mx-auto rounded-full overflow-hidden">
-              <img
-                src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&auto=format&fit=crop&w=400&q=80"
-                alt="Sarah Johnson"
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <div className="mt-4">
-              <h3 className="text-lg font-medium text-primary-900">Sarah Johnson</h3>
-              <p className="text-sm text-gray-500">Founder & CEO</p>
-              <p className="mt-2 text-base text-gray-500 max-w-xs mx-auto">
-                With 15 years of retail experience, Sarah founded ModernRetail with a vision to
-                transform online shopping.
-              </p>
-            </div>
+            <h2 className="text-3xl font-extrabold text-primary-900 tracking-tight sm:text-4xl">
+              Meet Our Team
+            </h2>
+            <p className="mt-4 max-w-2xl text-lg text-gray-500 mx-auto">
+              The passionate people behind ModernRetail.
+            </p>
           </div>
 
-          {/* Team member 2 */}
-          <div className="text-center">
-            <div className="relative h-48 w-48 mx-auto rounded-full overflow-hidden">
-              <img
-                src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-1.2.1&auto=format&fit=crop&w=400&q=80"
-                alt="David Chen"
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <div className="mt-4">
-              <h3 className="text-lg font-medium text-primary-900">David Chen</h3>
-              <p className="text-sm text-gray-500">Head of Product</p>
-              <p className="mt-2 text-base text-gray-500 max-w-xs mx-auto">
-                David leads our product curation team with an expert eye for quality and emerging
-                design trends.
-              </p>
-            </div>
-          </div>
-
-          {/* Team member 3 */}
-          <div className="text-center">
-            <div className="relative h-48 w-48 mx-auto rounded-full overflow-hidden">
-              <img
-                src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?ixlib=rb-1.2.1&auto=format&fit=crop&w=400&q=80"
-                alt="Maya Rodriguez"
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <div className="mt-4">
-              <h3 className="text-lg font-medium text-primary-900">Maya Rodriguez</h3>
-              <p className="text-sm text-gray-500">Creative Director</p>
-              <p className="mt-2 text-base text-gray-500 max-w-xs mx-auto">
-                Maya brings our brand to life through thoughtful design and storytelling that
-                connects with customers.
-              </p>
-            </div>
+          <div className="mt-16 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+            {teamMembers.map((member) => (
+              <div key={member.id} className="text-center">
+                <div className="relative h-48 w-48 mx-auto rounded-full overflow-hidden">
+                  <img
+                    src={member.imageUrl}
+                    alt={member.name}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="mt-4">
+                  <h3 className="text-lg font-medium text-primary-900">{member.name}</h3>
+                  <p className="text-sm text-gray-500">{member.title}</p>
+                  <p className="mt-2 text-base text-gray-500 max-w-xs mx-auto">
+                    {member.bio}
+                  </p>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
-      </div>
+      )}
 
       {/* CTA section */}
       <div className="bg-secondary-700">

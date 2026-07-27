@@ -69,6 +69,17 @@ export interface AdminAuditLog {
   createdAt: string;
 }
 
+export interface AdminTeamMember {
+  id: number;
+  name: string;
+  title: string;
+  bio: string;
+  imageUrl: string;
+  displayOrder: number | null;
+  isPublished: boolean;
+  createdAt: string;
+}
+
 export interface SiteSetting {
   key: string;
   value: string;

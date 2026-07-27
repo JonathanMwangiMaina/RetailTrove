@@ -16,6 +16,7 @@ import {
   loyaltyTransactions,
   auditLogs,
   testimonials,
+  teamMembers,
   type Product,
   type InsertProduct,
   type User,
@@ -41,6 +42,8 @@ import {
   type InsertAuditLog,
   type Testimonial,
   type InsertTestimonial,
+  type TeamMember,
+  type InsertTeamMember,
 } from "../shared/schema.js";
 import { eq, and, or, sql, gt, gte, lte, ilike } from "drizzle-orm";
 import { IStorage } from "./storage.js";
@@ -676,6 +679,47 @@ export class DatabaseStorage implements IStorage {
 
   async deleteTestimonial(id: number): Promise<boolean> {
     const result = await db.delete(testimonials).where(eq(testimonials.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  // ── Team Member Operations ───────────────────────────────────────────────
+
+  async getPublicTeamMembers(): Promise<TeamMember[]> {
+    return await db
+      .select()
+      .from(teamMembers)
+      .where(eq(teamMembers.isPublished, true))
+      .orderBy(teamMembers.displayOrder);
+  }
+
+  async getAllTeamMembers(): Promise<TeamMember[]> {
+    return await db.select().from(teamMembers).orderBy(teamMembers.displayOrder);
+  }
+
+  async getTeamMemberById(id: number): Promise<TeamMember | undefined> {
+    const [member] = await db.select().from(teamMembers).where(eq(teamMembers.id, id));
+    return member;
+  }
+
+  async createTeamMember(member: InsertTeamMember): Promise<TeamMember> {
+    const [newMember] = await db.insert(teamMembers).values(member).returning();
+    return newMember;
+  }
+
+  async updateTeamMember(
+    id: number,
+    data: Partial<InsertTeamMember>,
+  ): Promise<TeamMember | undefined> {
+    const [updated] = await db
+      .update(teamMembers)
+      .set(data)
+      .where(eq(teamMembers.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTeamMember(id: number): Promise<boolean> {
+    const result = await db.delete(teamMembers).where(eq(teamMembers.id, id));
     return (result.rowCount ?? 0) > 0;
   }
 

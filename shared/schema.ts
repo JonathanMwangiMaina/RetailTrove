@@ -206,6 +206,21 @@ export const testimonials = pgTable("testimonials", {
 });
 
 /**
+ * Team Members Table (`team_members`)
+ * Manages the "Meet Our Team" section on the About page via the admin dashboard.
+ */
+export const teamMembers = pgTable("team_members", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  title: text("title").notNull(),
+  bio: text("bio").notNull(),
+  imageUrl: text("image_url").notNull(),
+  displayOrder: integer("display_order").default(0),
+  isPublished: boolean("is_published").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+/**
  * Password Reset Tokens Table (`password_reset_tokens`)
  * Stores one-time tokens for the forgot-password flow. Tokens expire after 1 hour.
  */
@@ -440,6 +455,19 @@ export const insertTestimonialSchema = createInsertSchema(testimonials, {
 });
 export const selectTestimonialSchema = createSelectSchema(testimonials);
 
+// ── Team Members Schemas ──────────────────────────────────────────────────
+
+export const insertTeamMemberSchema = createInsertSchema(teamMembers, {
+  name: (s) => s.min(1, "Name is required"),
+  title: (s) => s.min(1, "Title is required"),
+  bio: (s) => s.min(1, "Bio is required"),
+  imageUrl: (s) => s.min(1, "Image URL is required"),
+}).omit({
+  id: true,
+  createdAt: true,
+});
+export const selectTeamMemberSchema = createSelectSchema(teamMembers);
+
 // ── Password Reset Tokens Schemas ─────────────────────────────────────────
 
 export const insertPasswordResetTokenSchema = createInsertSchema(passwordResetTokens).omit({
@@ -528,6 +556,10 @@ export type InsertNewsletterSubscriber = z.infer<typeof insertNewsletterSubscrib
 /** Testimonial entity types */
 export type Testimonial = z.infer<typeof selectTestimonialSchema>;
 export type InsertTestimonial = z.infer<typeof insertTestimonialSchema>;
+
+/** Team member entity types */
+export type TeamMember = z.infer<typeof selectTeamMemberSchema>;
+export type InsertTeamMember = z.infer<typeof insertTeamMemberSchema>;
 
 /** Composite cart item with joined product data */
 export type CartItemWithProduct = CartItem & { product: Product };

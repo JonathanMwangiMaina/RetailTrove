@@ -18,6 +18,7 @@ import {
   Megaphone,
   Shield,
   DollarSign,
+  Users2,
 } from "lucide-react";
 
 import InventoryTab from "./admin/inventory-tab";
@@ -34,6 +35,7 @@ import NewsletterTab from "./admin/newsletter-tab";
 import CurrencyTab from "./admin/currency-tab";
 import AuditTab from "./admin/audit-tab";
 import AnalyticsTab from "./admin/analytics-tab";
+import TeamTab from "./admin/team-tab";
 
 import type {
   AdminProduct,
@@ -43,6 +45,7 @@ import type {
   AdminVisit,
   AdminSubscriber,
   AdminAuditLog,
+  AdminTeamMember,
   SiteSetting,
 } from "./admin/types";
 
@@ -75,6 +78,9 @@ export default function AdminPage() {
   });
   const { data: auditLogs = [] } = useQuery<AdminAuditLog[]>({
     queryKey: ["/api/admin/audit-logs"],
+  });
+  const { data: teamMembers = [] } = useQuery<AdminTeamMember[]>({
+    queryKey: ["/api/admin/team-members"],
   });
 
   // Guard: admin only
@@ -197,6 +203,10 @@ export default function AdminPage() {
                 <Users className="h-3.5 w-3.5" />
                 Members
               </TabsTrigger>
+              <TabsTrigger value="team" className="text-xs gap-1">
+                <Users2 className="h-3.5 w-3.5" />
+                Team
+              </TabsTrigger>
               <TabsTrigger value="users" className="text-xs gap-1">
                 <User className="h-3.5 w-3.5" />
                 Users
@@ -267,6 +277,10 @@ export default function AdminPage() {
 
             <TabsContent value="members">
               <MembersTab admins={admins} vendors={vendors} currentUserId={user.id} />
+            </TabsContent>
+
+            <TabsContent value="team">
+              <TeamTab members={teamMembers} />
             </TabsContent>
 
             <TabsContent value="users">

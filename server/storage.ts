@@ -32,6 +32,8 @@ import type {
   InsertAuditLog,
   Testimonial,
   InsertTestimonial,
+  TeamMember,
+  InsertTeamMember,
 } from "../shared/schema.js";
 import { databaseStorage } from "./database-storage.js";
 
@@ -140,6 +142,15 @@ export interface IStorage {
   createTestimonial(testimonial: InsertTestimonial): Promise<Testimonial>;
   updateTestimonial(id: number, data: Partial<InsertTestimonial>): Promise<Testimonial | undefined>;
   deleteTestimonial(id: number): Promise<boolean>;
+
+  // ── Team Member Operations ─────────────────────────────────────────────────
+
+  getPublicTeamMembers(): Promise<TeamMember[]>;
+  getAllTeamMembers(): Promise<TeamMember[]>;
+  getTeamMemberById(id: number): Promise<TeamMember | undefined>;
+  createTeamMember(member: InsertTeamMember): Promise<TeamMember>;
+  updateTeamMember(id: number, data: Partial<InsertTeamMember>): Promise<TeamMember | undefined>;
+  deleteTeamMember(id: number): Promise<boolean>;
 
   // ── Password Reset Token Operations ───────────────────────────────────────
 

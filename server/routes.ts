@@ -1169,6 +1169,102 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     },
   );
 
+  // ── Team Member Routes ────────────────────────────────────────────────────
+
+  router.get("/team-members", async (_req: Request, res: Response) => {
+    try {
+      const members = await storage.getPublicTeamMembers();
+      res.json(members);
+    } catch (error) {
+      console.error("Error fetching team members:", error);
+      res.json([]);
+    }
+  });
+
+  router.get(
+    "/admin/team-members",
+    requireAuth,
+    requireRole("admin"),
+    async (_req: Request, res: Response) => {
+      try {
+        const members = await storage.getAllTeamMembers();
+        res.json(members);
+      } catch (error) {
+        console.error("Error fetching all team members:", error);
+        res.json([]);
+      }
+    },
+  );
+
+  post(
+    "/admin/team-members",
+    requireAuth,
+    requireRole("admin"),
+    async (req: Request, res: Response) => {
+      try {
+        const { insertTeamMemberSchema } = await import("../shared/schema.js");
+        const validated = insertTeamMemberSchema.parse(req.body);
+        const member = await storage.createTeamMember(validated);
+        res.status(201).json(member);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return res.status(400).json({ message: "Validation error", errors: error.errors });
+        }
+        console.error("Error creating team member:", error);
+        res.status(500).json({ message: "Failed to create team member" });
+      }
+    },
+  );
+
+  put(
+    "/admin/team-members/:id",
+    requireAuth,
+    requireRole("admin"),
+    async (req: Request, res: Response) => {
+      try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) {
+          return res.status(400).json({ message: "Invalid team member ID" });
+        }
+        const { insertTeamMemberSchema } = await import("../shared/schema.js");
+        const validated = insertTeamMemberSchema.partial().parse(req.body);
+        const updated = await storage.updateTeamMember(id, validated);
+        if (!updated) {
+          return res.status(404).json({ message: "Team member not found" });
+        }
+        res.json(updated);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return res.status(400).json({ message: "Validation error", errors: error.errors });
+        }
+        console.error(`Error updating team member ${req.params.id}:`, error);
+        res.status(500).json({ message: "Failed to update team member" });
+      }
+    },
+  );
+
+  del(
+    "/admin/team-members/:id",
+    requireAuth,
+    requireRole("admin"),
+    async (req: Request, res: Response) => {
+      try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) {
+          return res.status(400).json({ message: "Invalid team member ID" });
+        }
+        const deleted = await storage.deleteTeamMember(id);
+        if (!deleted) {
+          return res.status(404).json({ message: "Team member not found" });
+        }
+        res.json({ message: "Team member deleted" });
+      } catch (error) {
+        console.error(`Error deleting team member ${req.params.id}:`, error);
+        res.status(500).json({ message: "Failed to delete team member" });
+      }
+    },
+  );
+
   // ── Loyalty Routes ─────────────────────────────────────────────────────────
 
   router.get("/loyalty/account", requireAuth, async (req: Request, res: Response) => {
