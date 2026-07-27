@@ -1,13 +1,23 @@
-import { Resend } from 'resend';
+import nodemailer from "nodemailer";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || "smtp-relay.brevo.com",
+  port: Number(process.env.SMTP_PORT) || 587,
+  secure: false,
+  auth: {
+    user: process.env.SMTP_LOGIN,
+    pass: process.env.SMTP_KEY,
+  },
+});
+
+const FROM_ADDRESS = process.env.SMTP_FROM || "RetailTrove <noreply@retailtrove.com>";
 
 export async function sendWelcomeEmail(email: string): Promise<void> {
   try {
-    await resend.emails.send({
-      from: 'RetailTrove <onboarding@resend.dev>', // Replace with your verified domain
+    await transporter.sendMail({
+      from: FROM_ADDRESS,
       to: email,
-      subject: 'Welcome to RetailTrove Newsletter! 🎉',
+      subject: "Welcome to RetailTrove Newsletter!",
       html: `
         <!DOCTYPE html>
         <html>
@@ -21,16 +31,13 @@ export async function sendWelcomeEmail(email: string): Promise<void> {
               <tr>
                 <td align="center">
                   <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-                    <!-- Header -->
                     <tr>
                       <td style="background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%); padding: 40px 30px; text-align: center;">
                         <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">
-                          Welcome to RetailTrove! 🎉
+                          Welcome to RetailTrove!
                         </h1>
                       </td>
                     </tr>
-
-                    <!-- Content -->
                     <tr>
                       <td style="padding: 40px 30px;">
                         <h2 style="margin: 0 0 20px 0; color: #1f2937; font-size: 22px;">
@@ -45,25 +52,20 @@ export async function sendWelcomeEmail(email: string): Promise<void> {
                           <li>Monthly curated collections and style guides</li>
                           <li>Behind-the-scenes updates and company news</li>
                         </ul>
-
-                        <!-- CTA Button -->
                         <table cellpadding="0" cellspacing="0" style="margin: 30px 0;">
                           <tr>
                             <td style="background-color: #f59e0b; border-radius: 6px; text-align: center;">
                               <a href="https://retailtrove.vercel.app/shop" style="display: inline-block; padding: 14px 32px; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 16px;">
-                                Start Shopping Now →
+                                Start Shopping Now
                               </a>
                             </td>
                           </tr>
                         </table>
-
                         <p style="margin: 24px 0 0 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
                           Keep an eye on your inbox for our first newsletter coming your way soon!
                         </p>
                       </td>
                     </tr>
-
-                    <!-- Footer -->
                     <tr>
                       <td style="background-color: #f9fafb; padding: 30px; text-align: center; border-top: 1px solid #e5e7eb;">
                         <p style="margin: 0 0 10px 0; color: #6b7280; font-size: 14px;">
@@ -90,46 +92,43 @@ export async function sendWelcomeEmail(email: string): Promise<void> {
     });
     console.log(`Welcome email sent to: ${email}`);
   } catch (error) {
-    console.error('Failed to send welcome email:', error);
-    // Don't throw - we don't want to fail the subscription if email fails
+    console.error("Failed to send welcome email:", error);
   }
 }
 
 export async function sendNewsletterEmail(
   subscribers: string[],
   subject: string,
-  content: string
+  content: string,
 ): Promise<void> {
   try {
-    // Send to all subscribers in batches
-    const batchSize = 50; // Resend free tier allows good batch sizes
+    const batchSize = 50;
     for (let i = 0; i < subscribers.length; i += batchSize) {
       const batch = subscribers.slice(i, i + batchSize);
-
       await Promise.all(
-        batch.map(email =>
-          resend.emails.send({
-            from: 'RetailTrove <onboarding@resend.dev>',
+        batch.map((email) =>
+          transporter.sendMail({
+            from: FROM_ADDRESS,
             to: email,
-            subject: subject,
+            subject,
             html: content,
-          })
-        )
+          }),
+        ),
       );
     }
     console.log(`Newsletter sent to ${subscribers.length} subscribers`);
   } catch (error) {
-    console.error('Failed to send newsletter:', error);
+    console.error("Failed to send newsletter:", error);
     throw error;
   }
 }
 
 export async function sendPasswordResetEmail(email: string, resetUrl: string): Promise<void> {
   try {
-    await resend.emails.send({
-      from: 'RetailTrove <onboarding@resend.dev>',
+    await transporter.sendMail({
+      from: FROM_ADDRESS,
       to: email,
-      subject: 'Reset Your Password — RetailTrove',
+      subject: "Reset Your Password — RetailTrove",
       html: `
         <!DOCTYPE html>
         <html>
@@ -193,7 +192,6 @@ export async function sendPasswordResetEmail(email: string, resetUrl: string): P
     });
     console.log(`Password reset email sent to: ${email}`);
   } catch (error) {
-    console.error('Failed to send password reset email:', error);
-    // Don't throw — we don't want email failure to block the flow
+    console.error("Failed to send password reset email:", error);
   }
 }

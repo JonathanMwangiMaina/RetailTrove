@@ -28,8 +28,7 @@ export default function Footer() {
     retry: false,
   });
 
-  const getSetting = (key: string) =>
-    settings.find((s) => s.key === key)?.value ?? "";
+  const getSetting = (key: string) => settings.find((s) => s.key === key)?.value ?? "";
 
   const footerAbout =
     footerAboutData?.content ??
@@ -53,9 +52,7 @@ export default function Footer() {
             <h3 className="text-white font-bold text-xl tracking-tight">
               Retail<span className="text-emerald-500">Trove</span>
             </h3>
-            <p className="text-slate-400 text-sm leading-relaxed">
-              {footerAbout}
-            </p>
+            <p className="text-slate-400 text-sm leading-relaxed">{footerAbout}</p>
 
             {socials.length > 0 && (
               <div className="flex space-x-3 pt-2">
@@ -133,9 +130,7 @@ export default function Footer() {
 
           {/* Support & Legal Links */}
           <div>
-            <h4 className="text-white font-semibold text-base mb-4">
-              Customer Support
-            </h4>
+            <h4 className="text-white font-semibold text-base mb-4">Customer Support</h4>
             <nav className="flex flex-col space-y-2.5">
               <Link
                 href="/faq"
@@ -214,9 +209,7 @@ export default function Footer() {
         {/* Bottom Copyright */}
         <div className="border-t border-slate-800 mt-6 pt-6 flex flex-col sm:flex-row justify-between items-center text-slate-400 text-xs">
           <p>© {new Date().getFullYear()} RetailTrove. All rights reserved.</p>
-          <p className="mt-2 sm:mt-0">
-            Engineered for speed, security, and reliability.
-          </p>
+          <p className="mt-2 sm:mt-0">Engineered for speed, security, and reliability.</p>
         </div>
       </div>
     </footer>

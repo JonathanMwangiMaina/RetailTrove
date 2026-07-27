@@ -6,7 +6,18 @@
  * @module Schema
  */
 
-import { pgTable, text, serial, integer, boolean, numeric, timestamp, uuid, varchar, jsonb } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  serial,
+  integer,
+  boolean,
+  numeric,
+  timestamp,
+  uuid,
+  varchar,
+  jsonb,
+} from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { relations } from "drizzle-orm";
 import { z } from "zod";
@@ -76,10 +87,10 @@ export const orders = pgTable("orders", {
   createdAt: timestamp("created_at").defaultNow(),
   userId: uuid("user_id"),
   paymentStatus: text("payment_status").default("pending"),
-  paymentProvider: text("payment_provider"),           // "lemonsqueezy" | "mpesa" | null
-  stripeSessionId: text("stripe_session_id"),          // Lemon Squeezy checkout ID / M-Pesa CheckoutRequestID
+  paymentProvider: text("payment_provider"), // "lemonsqueezy" | "mpesa" | null
+  stripeSessionId: text("stripe_session_id"), // Lemon Squeezy checkout ID / M-Pesa CheckoutRequestID
   stripePaymentIntentId: text("stripe_payment_intent_id"), // Lemon Squeezy order ID / M-Pesa MerchantRequestID
-  mpesaReceiptNumber: text("mpesa_receipt_number"),    // M-Pesa receipt (e.g. "QHJ7A1BCDE")
+  mpesaReceiptNumber: text("mpesa_receipt_number"), // M-Pesa receipt (e.g. "QHJ7A1BCDE")
 });
 
 /**
@@ -161,7 +172,9 @@ export const faqs = pgTable("faqs", {
  */
 export const userVisits = pgTable("user_visits", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").references(() => users.id).notNull(),
+  userId: integer("user_id")
+    .references(() => users.id)
+    .notNull(),
   path: text("path").notNull(),
   visitedAt: timestamp("visited_at").defaultNow(),
 });
@@ -177,6 +190,20 @@ export const newsletterSubscribers = pgTable("newsletter_subscribers", {
   subscribedAt: timestamp("subscribed_at").defaultNow(),
 });
 
+/**
+ * Testimonials Table (`testimonials`)
+ * Customer testimonials displayed on the homepage.
+ */
+export const testimonials = pgTable("testimonials", {
+  id: serial("id").primaryKey(),
+  customerName: text("customer_name").notNull(),
+  rating: integer("rating").notNull(),
+  comment: text("comment").notNull(),
+  status: text("status").default("pending"),
+  productId: integer("product_id"),
+  submittedBy: integer("submitted_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
 
 /**
  * Password Reset Tokens Table (`password_reset_tokens`)
@@ -184,13 +211,14 @@ export const newsletterSubscribers = pgTable("newsletter_subscribers", {
  */
 export const passwordResetTokens = pgTable("password_reset_tokens", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").references(() => users.id).notNull(),
+  userId: integer("user_id")
+    .references(() => users.id)
+    .notNull(),
   token: varchar("token", { length: 64 }).notNull().unique(),
   expiresAt: timestamp("expires_at").notNull(),
   used: boolean("used").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
-
 
 /**
  * Loyalty Accounts Table (`loyalty_accounts`)
@@ -198,7 +226,10 @@ export const passwordResetTokens = pgTable("password_reset_tokens", {
  */
 export const loyaltyAccounts = pgTable("loyalty_accounts", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").references(() => users.id).notNull().unique(),
+  userId: integer("user_id")
+    .references(() => users.id)
+    .notNull()
+    .unique(),
   points: integer("points").default(0).notNull(),
   tier: text("tier").default("bronze").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
@@ -211,7 +242,9 @@ export const loyaltyAccounts = pgTable("loyalty_accounts", {
  */
 export const loyaltyTransactions = pgTable("loyalty_transactions", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").references(() => users.id).notNull(),
+  userId: integer("user_id")
+    .references(() => users.id)
+    .notNull(),
   type: text("type").notNull(), // 'earned' | 'redeemed' | 'adjusted'
   points: integer("points").notNull(),
   description: text("description").notNull(),
@@ -231,7 +264,6 @@ export const auditLogs = pgTable("audit_logs", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-
 /* ============================================================================
  * 2. DRIZZLE RELATIONS
  * ============================================================================ */
@@ -241,7 +273,10 @@ export const usersRelations = relations(users, ({ many, one }) => ({
   visits: many(userVisits),
   faqs: many(faqs),
   passwordResetTokens: many(passwordResetTokens),
-  loyaltyAccount: one(loyaltyAccounts, { fields: [users.id], references: [loyaltyAccounts.userId] }),
+  loyaltyAccount: one(loyaltyAccounts, {
+    fields: [users.id],
+    references: [loyaltyAccounts.userId],
+  }),
   loyaltyTransactions: many(loyaltyTransactions),
   auditLogs: many(auditLogs),
 }));
@@ -285,7 +320,6 @@ export const loyaltyTransactionsRelations = relations(loyaltyTransactions, ({ on
 export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
   user: one(users, { fields: [auditLogs.userId], references: [users.id] }),
 }));
-
 
 /* ============================================================================
  * 3. ZOD VALIDATION SCHEMAS (MUTATION & SELECTION)
@@ -396,6 +430,16 @@ export const insertNewsletterSubscriberSchema = createInsertSchema(newsletterSub
 });
 export const selectNewsletterSubscriberSchema = createSelectSchema(newsletterSubscribers);
 
+// ── Testimonials Schemas ──────────────────────────────────────────────────
+
+export const insertTestimonialSchema = createInsertSchema(testimonials, {
+  rating: z.number().int().min(1).max(5),
+}).omit({
+  id: true,
+  createdAt: true,
+});
+export const selectTestimonialSchema = createSelectSchema(testimonials);
+
 // ── Password Reset Tokens Schemas ─────────────────────────────────────────
 
 export const insertPasswordResetTokenSchema = createInsertSchema(passwordResetTokens).omit({
@@ -432,7 +476,6 @@ export const insertAuditLogSchema = createInsertSchema(auditLogs, {
 }).omit({ id: true, createdAt: true });
 
 export const selectAuditLogSchema = createSelectSchema(auditLogs);
-
 
 /* ============================================================================
  * 4. INFERRED TYPESCRIPT TYPES
@@ -481,6 +524,10 @@ export type InsertUserVisit = z.infer<typeof insertUserVisitSchema>;
 /** Newsletter subscriber entity types */
 export type NewsletterSubscriber = z.infer<typeof selectNewsletterSubscriberSchema>;
 export type InsertNewsletterSubscriber = z.infer<typeof insertNewsletterSubscriberSchema>;
+
+/** Testimonial entity types */
+export type Testimonial = z.infer<typeof selectTestimonialSchema>;
+export type InsertTestimonial = z.infer<typeof insertTestimonialSchema>;
 
 /** Composite cart item with joined product data */
 export type CartItemWithProduct = CartItem & { product: Product };

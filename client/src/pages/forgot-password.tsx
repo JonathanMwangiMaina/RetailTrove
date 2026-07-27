@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -9,6 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Loader2, ArrowLeft, Mail } from "lucide-react";
 
 export default function ForgotPasswordPage() {
+  useEffect(() => {
+    document.title = "Forgot Password - RetailTrove";
+  }, []);
   const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
@@ -53,7 +56,8 @@ export default function ForgotPasswordPage() {
               <div className="text-center space-y-4">
                 <div className="rounded-lg bg-green-50 border border-green-200 p-4">
                   <p className="text-sm text-green-800">
-                    If an account with that email exists, a password reset link has been sent. Check your inbox and follow the instructions.
+                    If an account with that email exists, a password reset link has been sent. Check
+                    your inbox and follow the instructions.
                   </p>
                 </div>
                 <p className="text-sm text-muted-foreground">
@@ -78,7 +82,9 @@ export default function ForgotPasswordPage() {
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? (
-                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sending reset link…</>
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sending reset link…
+                    </>
                   ) : (
                     "Send reset link"
                   )}
@@ -87,7 +93,10 @@ export default function ForgotPasswordPage() {
             )}
 
             <div className="mt-6 text-center">
-              <Link href="/login" className="inline-flex items-center text-sm text-primary-600 hover:text-primary-800">
+              <Link
+                href="/login"
+                className="inline-flex items-center text-sm text-primary-600 hover:text-primary-800"
+              >
                 <ArrowLeft className="h-4 w-4 mr-1" />
                 Back to sign in
               </Link>

@@ -247,7 +247,7 @@ export const COUNTRIES: Country[] = [
 ];
 
 export const COUNTRIES_BY_NAME: Country[] = [...COUNTRIES].sort((a, b) =>
-  a.name.localeCompare(b.name)
+  a.name.localeCompare(b.name),
 );
 
 export function getCountryByCode(code: string): Country | undefined {

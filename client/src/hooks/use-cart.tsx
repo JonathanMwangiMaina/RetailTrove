@@ -1,15 +1,5 @@
-import { 
-  createContext, 
-  useContext, 
-  useState, 
-  useEffect, 
-  ReactNode 
-} from "react";
-import { 
-  Product, 
-  CartItemWithProduct, 
-  InsertCartItem 
-} from "@shared/schema";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { Product, CartItemWithProduct, InsertCartItem } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -30,7 +20,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartItemWithProduct[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
-  
+
   // Get a unique cart ID for this session
   const getCartId = () => {
     let cartId = localStorage.getItem("cartId");
@@ -40,18 +30,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
     return cartId;
   };
-  
+
   // Calculate derived values
   const subtotal = cart.reduce(
     (total, item) => total + Number(item.product.price) * item.quantity,
-    0
+    0,
   );
-  
-  const totalItems = cart.reduce(
-    (total, item) => total + item.quantity,
-    0
-  );
-  
+
+  const totalItems = cart.reduce((total, item) => total + item.quantity, 0);
+
   // Fetch cart on mount
   useEffect(() => {
     const fetchCart = async () => {
@@ -60,7 +47,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         const res = await fetch(`/api/cart/${cartId}`, {
           credentials: "include",
         });
-        
+
         if (res.ok) {
           const data = await res.json();
           setCart(data);
@@ -76,18 +63,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
       }
     };
-    
+
     fetchCart();
   }, []);
-  
+
   // Add item to cart
   const addToCart = async (product: Product, quantity: number = 1) => {
     try {
       const cartId = getCartId();
-      
+
       // Check if product is already in cart
-      const existingItem = cart.find(item => item.product.id === product.id);
-      
+      const existingItem = cart.find((item) => item.product.id === product.id);
+
       if (existingItem) {
         // Update quantity if already in cart
         await updateQuantity(existingItem.id, existingItem.quantity + quantity);
@@ -98,13 +85,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
           quantity,
           cartId,
         };
-        
+
         const res = await apiRequest("POST", "/api/cart", cartItem);
         const newItem = await res.json();
-        
+
         // We need to combine with product info
-        setCart(prev => [...prev, { ...newItem, product }]);
-        
+        setCart((prev) => [...prev, { ...newItem, product }]);
+
         toast({
           title: "Added to cart",
           description: `${product.name} has been added to your cart`,
@@ -119,7 +106,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       });
     }
   };
-  
+
   // Update quantity
   const updateQuantity = async (itemId: number, quantity: number) => {
     try {
@@ -127,15 +114,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
         await removeFromCart(itemId);
         return;
       }
-      
+
       const res = await apiRequest("PUT", `/api/cart/${itemId}`, { quantity });
-      
+
       if (res.ok) {
-        setCart(prev => 
-          prev.map(item => 
-            item.id === itemId ? { ...item, quantity } : item
-          )
-        );
+        setCart((prev) => prev.map((item) => (item.id === itemId ? { ...item, quantity } : item)));
       }
     } catch (error) {
       console.error("Error updating cart:", error);
@@ -146,14 +129,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
       });
     }
   };
-  
+
   // Remove from cart
   const removeFromCart = async (itemId: number) => {
     try {
       await apiRequest("DELETE", `/api/cart/${itemId}`, undefined);
-      
-      setCart(prev => prev.filter(item => item.id !== itemId));
-      
+
+      setCart((prev) => prev.filter((item) => item.id !== itemId));
+
       toast({
         title: "Removed from cart",
         description: "Item has been removed from your cart",
@@ -167,7 +150,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       });
     }
   };
-  
+
   // Clear cart — server-side and local
   const clearCart = async () => {
     try {
@@ -187,7 +170,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       });
     }
   };
-  
+
   return (
     <CartContext.Provider
       value={{
@@ -208,10 +191,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
 export function useCart() {
   const context = useContext(CartContext);
-  
+
   if (context === undefined) {
     throw new Error("useCart must be used within a CartProvider");
   }
-  
+
   return context;
 }

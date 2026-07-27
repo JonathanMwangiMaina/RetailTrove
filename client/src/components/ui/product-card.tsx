@@ -17,19 +17,21 @@ export function ProductCard({ product }: ProductCardProps) {
     <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden group">
       <Link href={`/product/${product.id}`}>
         <div className="relative h-64 overflow-hidden cursor-pointer">
-          <img 
-            src={product.imageUrl} 
-            alt={product.name} 
+          <img
+            src={product.imageUrl}
+            alt={product.name}
             className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
           />
           {product.badge && (
-            <div className={`absolute top-2 right-2 ${
-              product.badge === 'NEW' 
-                ? 'bg-accent-500' 
-                : product.badge === 'SALE' 
-                  ? 'bg-secondary-500' 
-                  : 'bg-primary-500'
-            } text-white text-xs font-semibold px-2 py-1 rounded`}>
+            <div
+              className={`absolute top-2 right-2 ${
+                product.badge === "NEW"
+                  ? "bg-accent-500"
+                  : product.badge === "SALE"
+                    ? "bg-secondary-500"
+                    : "bg-primary-500"
+              } text-white text-xs font-semibold px-2 py-1 rounded`}
+            >
               {product.badge}
             </div>
           )}

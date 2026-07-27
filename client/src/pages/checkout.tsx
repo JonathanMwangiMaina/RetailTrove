@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useCart } from "@/hooks/use-cart";
 import { CartItem } from "@/components/ui/cart-item";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { 
+import {
   Form,
   FormControl,
   FormField,
@@ -12,7 +12,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { 
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -40,6 +40,9 @@ const checkoutFormSchema = insertOrderSchema.extend({
 type CheckoutFormValues = z.infer<typeof checkoutFormSchema>;
 
 export default function Checkout() {
+  useEffect(() => {
+    document.title = "Checkout - RetailTrove";
+  }, []);
   const { cart, subtotal, clearCart } = useCart();
   const { toast } = useToast();
   const { formatPrice } = useCurrency();
@@ -53,7 +56,7 @@ export default function Checkout() {
   const tax = subtotal * 0.1;
   // Calculate total
   const total = subtotal + tax;
-  
+
   const form = useForm<CheckoutFormValues>({
     resolver: zodResolver(checkoutFormSchema),
     defaultValues: {
@@ -70,7 +73,7 @@ export default function Checkout() {
       total: total.toString(),
     },
   });
-  
+
   const onSubmit = async (values: CheckoutFormValues) => {
     // Don't submit if cart is empty
     if (cart.length === 0) {
@@ -98,7 +101,7 @@ export default function Checkout() {
       values.total = total.toString();
 
       // Create order items from cart
-      const orderItems = cart.map(item => ({
+      const orderItems = cart.map((item) => ({
         productId: item.product.id,
         productName: item.product.name,
         price: item.product.price,
@@ -130,6 +133,7 @@ export default function Checkout() {
         const { url } = await checkoutRes.json();
         clearCart();
         // Redirect to Lemon Squeezy hosted checkout
+        // eslint-disable-next-line react-hooks/immutability
         window.location.href = url;
         return;
       }
@@ -150,7 +154,8 @@ export default function Checkout() {
 
         toast({
           title: "STK push sent!",
-          description: "Check your phone for the M-Pesa payment prompt. Enter your PIN to complete.",
+          description:
+            "Check your phone for the M-Pesa payment prompt. Enter your PIN to complete.",
         });
 
         // Clear cart and redirect to confirmation after a delay
@@ -171,7 +176,7 @@ export default function Checkout() {
       setIsSubmitting(false);
     }
   };
-  
+
   return (
     <div className="py-12 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -179,7 +184,7 @@ export default function Checkout() {
           {/* Left column - Checkout form */}
           <div className="lg:col-span-7">
             <h2 className="text-2xl font-bold text-primary-900 mb-8">Checkout</h2>
-            
+
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
                 {/* Contact Information */}
@@ -199,7 +204,7 @@ export default function Checkout() {
                         </FormItem>
                       )}
                     />
-                    
+
                     <FormField
                       control={form.control}
                       name="lastName"
@@ -213,7 +218,7 @@ export default function Checkout() {
                         </FormItem>
                       )}
                     />
-                    
+
                     <FormField
                       control={form.control}
                       name="email"
@@ -227,7 +232,7 @@ export default function Checkout() {
                         </FormItem>
                       )}
                     />
-                    
+
                     <FormField
                       control={form.control}
                       name="phone"
@@ -243,7 +248,7 @@ export default function Checkout() {
                     />
                   </div>
                 </div>
-                
+
                 {/* Shipping Address */}
                 <div className="bg-white rounded-lg border border-gray-200 p-6 mb-8">
                   <h3 className="text-lg font-medium text-primary-900 mb-4">Shipping Address</h3>
@@ -261,7 +266,7 @@ export default function Checkout() {
                         </FormItem>
                       )}
                     />
-                    
+
                     <FormField
                       control={form.control}
                       name="apartment"
@@ -275,7 +280,7 @@ export default function Checkout() {
                         </FormItem>
                       )}
                     />
-                    
+
                     <FormField
                       control={form.control}
                       name="city"
@@ -289,7 +294,7 @@ export default function Checkout() {
                         </FormItem>
                       )}
                     />
-                    
+
                     <FormField
                       control={form.control}
                       name="state"
@@ -303,7 +308,7 @@ export default function Checkout() {
                         </FormItem>
                       )}
                     />
-                    
+
                     <FormField
                       control={form.control}
                       name="postalCode"
@@ -317,17 +322,14 @@ export default function Checkout() {
                         </FormItem>
                       )}
                     />
-                    
+
                     <FormField
                       control={form.control}
                       name="country"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Country</FormLabel>
-                          <Select 
-                            onValueChange={field.onChange} 
-                            defaultValue={field.value}
-                          >
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <FormControl>
                               <SelectTrigger>
                                 <SelectValue placeholder="Select a country" />
@@ -335,7 +337,9 @@ export default function Checkout() {
                             </FormControl>
                             <SelectContent className="max-h-[300px]">
                               {COUNTRIES_BY_NAME.map((c) => (
-                                <SelectItem key={c.code} value={c.name}>{c.name}</SelectItem>
+                                <SelectItem key={c.code} value={c.name}>
+                                  {c.name}
+                                </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
@@ -345,13 +349,15 @@ export default function Checkout() {
                     />
                   </div>
                 </div>
-                
+
                 {/* Payment Method */}
                 <div className="bg-white rounded-lg border border-gray-200 p-6">
                   <h3 className="text-lg font-medium text-primary-900 mb-4">Payment Method</h3>
                   <div className="space-y-3">
                     {/* Lemon Squeezy (Card) */}
-                    <label className={`flex items-center gap-3 border rounded-md p-4 cursor-pointer transition-colors ${paymentMethod === "lemonsqueezy" ? "border-primary-500 bg-primary-50" : "border-gray-200 hover:border-gray-300"}`}>
+                    <label
+                      className={`flex items-center gap-3 border rounded-md p-4 cursor-pointer transition-colors ${paymentMethod === "lemonsqueezy" ? "border-primary-500 bg-primary-50" : "border-gray-200 hover:border-gray-300"}`}
+                    >
                       <input
                         type="radio"
                         name="payment-method"
@@ -360,8 +366,12 @@ export default function Checkout() {
                         className="h-4 w-4 text-primary-600"
                       />
                       <div className="flex-1">
-                        <span className="text-sm font-medium text-gray-900">Credit / Debit Card</span>
-                        <p className="text-xs text-gray-500 mt-0.5">Powered by Lemon Squeezy — secure hosted checkout</p>
+                        <span className="text-sm font-medium text-gray-900">
+                          Credit / Debit Card
+                        </span>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          Powered by Lemon Squeezy — secure hosted checkout
+                        </p>
                       </div>
                       <img
                         src="https://cdn.prod.website-files.com/6347244ba8d63489ba51c08e/6a30261d7c3d5620431187e0_ls-logo-stripe-company.svg"
@@ -371,7 +381,9 @@ export default function Checkout() {
                     </label>
 
                     {/* M-Pesa */}
-                    <label className={`flex items-center gap-3 border rounded-md p-4 cursor-pointer transition-colors ${paymentMethod === "mpesa" ? "border-primary-500 bg-primary-50" : "border-gray-200 hover:border-gray-300"}`}>
+                    <label
+                      className={`flex items-center gap-3 border rounded-md p-4 cursor-pointer transition-colors ${paymentMethod === "mpesa" ? "border-primary-500 bg-primary-50" : "border-gray-200 hover:border-gray-300"}`}
+                    >
                       <input
                         type="radio"
                         name="payment-method"
@@ -381,7 +393,9 @@ export default function Checkout() {
                       />
                       <div className="flex-1">
                         <span className="text-sm font-medium text-gray-900">M-Pesa</span>
-                        <p className="text-xs text-gray-500 mt-0.5">Pay via Safaricom M-Pesa STK Push</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          Pay via Safaricom M-Pesa STK Push
+                        </p>
                       </div>
                       <img
                         src="https://upload.wikimedia.org/wikipedia/commons/1/15/M-PESA_LOGO-01.svg"
@@ -393,7 +407,10 @@ export default function Checkout() {
                     {/* M-Pesa phone input */}
                     {paymentMethod === "mpesa" && (
                       <div className="border rounded-md p-4 bg-gray-50 mt-2">
-                        <Label htmlFor="mpesa-phone" className="block text-sm font-medium text-gray-700 mb-1">
+                        <Label
+                          htmlFor="mpesa-phone"
+                          className="block text-sm font-medium text-gray-700 mb-1"
+                        >
                           M-Pesa Phone Number
                         </Label>
                         <Input
@@ -405,7 +422,8 @@ export default function Checkout() {
                           className="mt-1"
                         />
                         <p className="text-xs text-gray-500 mt-2">
-                          You will receive an STK push prompt on this number to complete the payment.
+                          You will receive an STK push prompt on this number to complete the
+                          payment.
                         </p>
                       </div>
                     )}
@@ -416,20 +434,24 @@ export default function Checkout() {
                         <div className="flex items-center gap-3">
                           <Loader2Icon className="h-5 w-5 animate-spin text-blue-600" />
                           <div>
-                            <p className="text-sm font-medium text-blue-900">Waiting for M-Pesa confirmation...</p>
-                            <p className="text-xs text-blue-700">Check your phone and enter your PIN</p>
+                            <p className="text-sm font-medium text-blue-900">
+                              Waiting for M-Pesa confirmation...
+                            </p>
+                            <p className="text-xs text-blue-700">
+                              Check your phone and enter your PIN
+                            </p>
                           </div>
                         </div>
                       </div>
                     )}
                   </div>
                 </div>
-                
+
                 {/* Submit button - only visible on mobile */}
                 <div className="mt-10 lg:hidden">
-                  <Button 
-                    type="submit" 
-                    className="w-full" 
+                  <Button
+                    type="submit"
+                    className="w-full"
                     disabled={isSubmitting || cart.length === 0}
                   >
                     {isSubmitting ? (
@@ -437,14 +459,28 @@ export default function Checkout() {
                         <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
                         Processing...
                       </>
+                    ) : paymentMethod === "mpesa" ? (
+                      "Pay with M-Pesa"
                     ) : (
-                      paymentMethod === "mpesa" ? "Pay with M-Pesa" : "Pay with Card"
+                      "Pay with Card"
                     )}
                   </Button>
                   <p className="mt-4 text-xs text-center text-gray-500">
                     By placing your order, you agree to our{" "}
-                    <span className="text-secondary-600 hover:text-secondary-500 cursor-pointer" onClick={() => alert('Terms & Conditions - Coming Soon')}>Terms & Conditions</span> and{" "}
-                    <span className="text-secondary-600 hover:text-secondary-500 cursor-pointer" onClick={() => alert('Privacy Policy - Coming Soon')}>Privacy Policy</span>.
+                    <span
+                      className="text-secondary-600 hover:text-secondary-500 cursor-pointer"
+                      onClick={() => alert("Terms & Conditions - Coming Soon")}
+                    >
+                      Terms & Conditions
+                    </span>{" "}
+                    and{" "}
+                    <span
+                      className="text-secondary-600 hover:text-secondary-500 cursor-pointer"
+                      onClick={() => alert("Privacy Policy - Coming Soon")}
+                    >
+                      Privacy Policy
+                    </span>
+                    .
                   </p>
                 </div>
               </form>
@@ -455,7 +491,7 @@ export default function Checkout() {
           <div className="mt-10 lg:mt-0 lg:col-span-5">
             <div className="bg-gray-50 rounded-lg border border-gray-200 p-6 sticky top-20">
               <h2 className="text-lg font-medium text-primary-900 mb-6">Order Summary</h2>
-              
+
               <div className="flow-root">
                 {cart.length === 0 ? (
                   <div className="text-center py-6">
@@ -507,15 +543,29 @@ export default function Checkout() {
                       <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
                       Processing...
                     </>
+                  ) : paymentMethod === "mpesa" ? (
+                    "Pay with M-Pesa"
                   ) : (
-                    paymentMethod === "mpesa" ? "Pay with M-Pesa" : "Pay with Card"
+                    "Pay with Card"
                   )}
                 </Button>
                 <div className="mt-4 text-center">
                   <p className="text-xs text-gray-500">
                     By placing your order, you agree to our{" "}
-                    <span className="text-secondary-600 hover:text-secondary-500 cursor-pointer" onClick={() => alert('Terms & Conditions - Coming Soon')}>Terms & Conditions</span> and{" "}
-                    <span className="text-secondary-600 hover:text-secondary-500 cursor-pointer" onClick={() => alert('Privacy Policy - Coming Soon')}>Privacy Policy</span>.
+                    <span
+                      className="text-secondary-600 hover:text-secondary-500 cursor-pointer"
+                      onClick={() => alert("Terms & Conditions - Coming Soon")}
+                    >
+                      Terms & Conditions
+                    </span>{" "}
+                    and{" "}
+                    <span
+                      className="text-secondary-600 hover:text-secondary-500 cursor-pointer"
+                      onClick={() => alert("Privacy Policy - Coming Soon")}
+                    >
+                      Privacy Policy
+                    </span>
+                    .
                   </p>
                 </div>
               </div>

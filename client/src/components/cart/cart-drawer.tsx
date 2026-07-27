@@ -11,7 +11,7 @@ interface CartDrawerProps {
 }
 
 export default function CartDrawer({ open, setOpen }: CartDrawerProps) {
-  const { cart, subtotal, totalItems } = useCart();
+  const { cart, subtotal } = useCart();
   const { formatPrice } = useCurrency();
 
   if (!open) return null;
@@ -19,11 +19,11 @@ export default function CartDrawer({ open, setOpen }: CartDrawerProps) {
   return (
     <div className="fixed inset-0 overflow-hidden z-40">
       <div className="absolute inset-0 overflow-hidden">
-        <div 
+        <div
           className="absolute inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
           onClick={() => setOpen(false)}
         ></div>
-        
+
         <div className="fixed inset-y-0 right-0 pl-10 max-w-full flex">
           <div className="w-screen max-w-md transform transition ease-in-out duration-500">
             <div className="h-full flex flex-col bg-white shadow-xl overflow-y-scroll">
@@ -48,8 +48,12 @@ export default function CartDrawer({ open, setOpen }: CartDrawerProps) {
                     {cart.length === 0 ? (
                       <div className="text-center py-12">
                         <ShoppingBagIcon className="h-12 w-12 mx-auto text-gray-400" />
-                        <h3 className="mt-2 text-sm font-medium text-gray-900">Your cart is empty</h3>
-                        <p className="mt-1 text-sm text-gray-500">Start adding some products to your cart</p>
+                        <h3 className="mt-2 text-sm font-medium text-gray-900">
+                          Your cart is empty
+                        </h3>
+                        <p className="mt-1 text-sm text-gray-500">
+                          Start adding some products to your cart
+                        </p>
                         <div className="mt-6">
                           <Button
                             onClick={() => setOpen(false)}
@@ -76,7 +80,9 @@ export default function CartDrawer({ open, setOpen }: CartDrawerProps) {
                     <p>Subtotal</p>
                     <p>{formatPrice(subtotal)}</p>
                   </div>
-                  <p className="mt-0.5 text-sm text-gray-500">Shipping and taxes calculated at checkout.</p>
+                  <p className="mt-0.5 text-sm text-gray-500">
+                    Shipping and taxes calculated at checkout.
+                  </p>
                   <div className="mt-6">
                     <Link href="/checkout">
                       <Button

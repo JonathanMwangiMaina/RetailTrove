@@ -1,17 +1,43 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ShoppingBag, Loader2 } from "lucide-react";
 import { Link } from "wouter";
+import zxcvbn from "zxcvbn";
+
+const STRENGTH_LABELS = ["Very Weak", "Weak", "Fair", "Strong", "Very Strong"];
+const STRENGTH_COLORS = [
+  "bg-red-500",
+  "bg-orange-500",
+  "bg-yellow-500",
+  "bg-lime-500",
+  "bg-emerald-500",
+];
 
 export default function LoginPage() {
+  useEffect(() => {
+    document.title = "Login - RetailTrove";
+  }, []);
   const [, navigate] = useLocation();
   const { login, register } = useAuth();
   const { toast } = useToast();
@@ -25,6 +51,16 @@ export default function LoginPage() {
   const [regName, setRegName] = useState("");
   const [regRole, setRegRole] = useState("customer");
   const [regLoading, setRegLoading] = useState(false);
+
+  const passwordStrength = useMemo(() => {
+    if (!regPassword) return null;
+    const result = zxcvbn(regPassword);
+    return {
+      score: result.score,
+      label: STRENGTH_LABELS[result.score],
+      color: STRENGTH_COLORS[result.score],
+    };
+  }, [regPassword]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -42,6 +78,16 @@ export default function LoginPage() {
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
+    const result = zxcvbn(regPassword);
+    if (result.score < 2) {
+      toast({
+        title: "Weak password",
+        description:
+          "Please choose a stronger password with a mix of letters, numbers, and symbols.",
+        variant: "destructive",
+      });
+      return;
+    }
     setRegLoading(true);
     try {
       await register(regEmail, regPassword, regName, regRole);
@@ -104,20 +150,21 @@ export default function LoginPage() {
                       required
                     />
                     <div className="text-right">
-                      <Link href="/forgot-password" className="text-xs text-primary-600 hover:text-primary-800">
+                      <Link
+                        href="/forgot-password"
+                        className="text-xs text-primary-600 hover:text-primary-800"
+                      >
                         Forgot your password?
                       </Link>
                     </div>
-                  </div>
-                  <div className="text-xs text-muted-foreground bg-blue-50 border border-blue-200 rounded p-2 space-y-1">
-                    <p><strong>Demo admin:</strong> admin@retailtrove.com / ChronicleBookKasuku26%</p>
-                    <p><strong>Demo vendor:</strong> vendor@retailtrove.com / vendor123</p>
                   </div>
                 </CardContent>
                 <CardFooter>
                   <Button type="submit" className="w-full" disabled={loginLoading}>
                     {loginLoading ? (
-                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Signing in…</>
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Signing in…
+                      </>
                     ) : (
                       <>
                         <ShoppingBag className="h-4 w-4 mr-2" /> Sign In
@@ -170,6 +217,26 @@ export default function LoginPage() {
                       required
                       minLength={6}
                     />
+                    {passwordStrength && (
+                      <div className="space-y-1">
+                        <div className="flex gap-1">
+                          {Array.from({ length: 4 }).map((_, i) => (
+                            <div
+                              key={i}
+                              className={`h-1.5 flex-1 rounded-full transition-colors ${
+                                i < passwordStrength.score ? passwordStrength.color : "bg-gray-200"
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        <p
+                          className={`text-xs font-medium ${passwordStrength.score < 2 ? "text-red-600" : "text-gray-600"}`}
+                        >
+                          {passwordStrength.label}
+                          {passwordStrength.score < 2 && " — please choose a stronger password"}
+                        </p>
+                      </div>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label>Account Type</Label>
@@ -187,7 +254,9 @@ export default function LoginPage() {
                 <CardFooter>
                   <Button type="submit" className="w-full" disabled={regLoading}>
                     {regLoading ? (
-                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Creating account…</>
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Creating account…
+                      </>
                     ) : (
                       "Create Account"
                     )}

@@ -2,7 +2,7 @@
  * @file server/db.ts
  * @description PostgreSQL database client initialization and Drizzle ORM instance binding.
  * Configured for serverless deployment target (Vercel) with strict SSL verification and connection pooling.
- * 
+ *
  * @module Server/Database
  */
 
@@ -45,9 +45,9 @@ export const pool =
       ca: SUPABASE_CA_CERT,
       rejectUnauthorized: true, // Enforce strict certificate authority verification
     },
-    max: 5,                      // Max connections per serverless container lambda instance
-    idleTimeoutMillis: 30000,    // Close idle connections after 30 seconds
-    connectionTimeoutMillis: 5000,// Abort connection attempts after 5 seconds
+    max: 5, // Max connections per serverless container lambda instance
+    idleTimeoutMillis: 30000, // Close idle connections after 30 seconds
+    connectionTimeoutMillis: 5000, // Abort connection attempts after 5 seconds
   });
 
 // Persist the pool instance globally in non-production environments to avoid memory/connection leaks

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -13,19 +13,27 @@ export default function ProductPage() {
   const { addToCart } = useCart();
   const { formatPrice } = useCurrency();
   const [selectedImage, setSelectedImage] = useState(0);
-  
+
   // Mock additional product images (in a real app, these would come from the product data)
   const additionalImages = [
     "https://images.unsplash.com/photo-1623998021446-45cd9b013eee?ixlib=rb-1.2.1&auto=format&fit=crop&w=200&q=80",
     "https://images.unsplash.com/photo-1622434641406-a158123450f9?ixlib=rb-1.2.1&auto=format&fit=crop&w=200&q=80",
-    "https://images.unsplash.com/photo-1526045612212-70caf35c14df?ixlib=rb-1.2.1&auto=format&fit=crop&w=200&q=80"
+    "https://images.unsplash.com/photo-1526045612212-70caf35c14df?ixlib=rb-1.2.1&auto=format&fit=crop&w=200&q=80",
   ];
-  
+
   // Fetch product data
-  const { data: product, isLoading, error } = useQuery<ProductType>({
+  const {
+    data: product,
+    isLoading,
+    error,
+  } = useQuery<ProductType>({
     queryKey: [`/api/products/${id}`],
   });
-  
+
+  useEffect(() => {
+    document.title = product ? `${product.name} - RetailTrove` : "Product - RetailTrove";
+  }, [product]);
+
   if (isLoading) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -39,7 +47,7 @@ export default function ProductPage() {
               ))}
             </div>
           </div>
-          
+
           {/* Loading skeleton for product info */}
           <div className="mt-10 lg:mt-0 lg:max-w-lg lg:self-start">
             <Skeleton className="h-6 w-32 mb-2" />
@@ -55,7 +63,7 @@ export default function ProductPage() {
       </div>
     );
   }
-  
+
   if (error || !product) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
@@ -67,127 +75,161 @@ export default function ProductPage() {
       </div>
     );
   }
-  
+
   // Generate images array - main image first, then additional images
   const allImages = [product.imageUrl, ...additionalImages];
 
-  return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <div className="lg:grid lg:grid-cols-2 lg:gap-x-8">
-        {/* Product Images */}
-        <div className="lg:max-w-lg lg:self-end">
-          <div className="rounded-lg overflow-hidden mb-4">
-            <img 
-              src={allImages[selectedImage]} 
-              alt={product.name} 
-              className="w-full h-96 object-cover"
-            />
-          </div>
-          <div className="grid grid-cols-4 gap-4">
-            {allImages.map((image, index) => (
-              <button 
-                key={index}
-                onClick={() => setSelectedImage(index)} 
-                className={`rounded-md overflow-hidden border-2 ${
-                  selectedImage === index ? "border-secondary-500" : "border-gray-200"
-                }`}
-              >
-                <img 
-                  src={image} 
-                  alt={`${product.name} - View ${index + 1}`} 
-                  className="w-full h-20 object-cover"
-                />
-              </button>
-            ))}
-          </div>
-        </div>
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.name,
+    description: product.description,
+    image: allImages,
+    offers: {
+      "@type": "Offer",
+      price: product.price,
+      priceCurrency: "USD",
+      availability: product.inStock
+        ? "https://schema.org/InStock"
+        : "https://schema.org/OutOfStock",
+    },
+    brand: {
+      "@type": "Brand",
+      name: "RetailTrove",
+    },
+  };
 
-        {/* Product Info */}
-        <div className="mt-10 lg:mt-0 lg:max-w-lg lg:self-start">
-          <div className="flex items-center">
-            <div className="flex items-center">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <StarIcon 
-                  key={i} 
-                  className={`h-5 w-5 ${
-                    i < Math.floor(Number(product.rating)) 
-                      ? "text-yellow-400" 
-                      : "text-gray-300"
-                  }`} 
-                  fill="currentColor" 
-                />
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="lg:grid lg:grid-cols-2 lg:gap-x-8">
+          {/* Product Images */}
+          <div className="lg:max-w-lg lg:self-end">
+            <div className="rounded-lg overflow-hidden mb-4">
+              <img
+                src={allImages[selectedImage]}
+                alt={product.name}
+                className="w-full h-96 object-cover"
+              />
+            </div>
+            <div className="grid grid-cols-4 gap-4">
+              {allImages.map((image, index) => (
+                <button
+                  key={index}
+                  onClick={() => setSelectedImage(index)}
+                  className={`rounded-md overflow-hidden border-2 ${
+                    selectedImage === index ? "border-secondary-500" : "border-gray-200"
+                  }`}
+                >
+                  <img
+                    src={image}
+                    alt={`${product.name} - View ${index + 1}`}
+                    className="w-full h-20 object-cover"
+                  />
+                </button>
               ))}
             </div>
-            <p className="ml-2 text-sm text-gray-500">{Math.floor(Number(product.rating) * 8 + 4)} reviews</p>
           </div>
 
-          <div className="mt-6">
-            <h1 className="text-3xl font-bold text-primary-900">{product.name}</h1>
-            <h2 className="sr-only">Product information</h2>
-            <div className="mt-2 flex items-center">
-              <p className="text-3xl text-primary-900">{formatPrice(Number(product.price))}</p>
-              {product.originalPrice && (
-                <p className="ml-2 text-lg text-gray-500 line-through">
-                  {formatPrice(Number(product.originalPrice))}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-6">
-            <h3 className="text-sm font-medium text-primary-900">Description</h3>
-            <div className="mt-2 text-base text-gray-500 space-y-4">
-              <p>{product.description}</p>
-            </div>
-          </div>
-
-          <div className="mt-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-medium text-primary-900">Color</h3>
-              <a href="#" className="text-sm font-medium text-secondary-600 hover:text-secondary-500">Size guide</a>
+          {/* Product Info */}
+          <div className="mt-10 lg:mt-0 lg:max-w-lg lg:self-start">
+            <div className="flex items-center">
+              <div className="flex items-center">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <StarIcon
+                    key={i}
+                    className={`h-5 w-5 ${
+                      i < Math.floor(Number(product.rating)) ? "text-yellow-400" : "text-gray-300"
+                    }`}
+                    fill="currentColor"
+                  />
+                ))}
+              </div>
+              <p className="ml-2 text-sm text-gray-500">
+                {Math.floor(Number(product.rating) * 8 + 4)} reviews
+              </p>
             </div>
 
-            <div className="mt-2">
-              <div className="flex items-center space-x-3">
-                <button className="relative -m-0.5 p-0.5 rounded-full ring-2 ring-secondary-500 focus:outline-none">
-                  <span className="block h-5 w-5 rounded-full bg-gray-800"></span>
-                </button>
-                <button className="relative -m-0.5 p-0.5 rounded-full ring-2 ring-transparent hover:ring-gray-300 focus:outline-none">
-                  <span className="block h-5 w-5 rounded-full bg-gray-500"></span>
-                </button>
-                <button className="relative -m-0.5 p-0.5 rounded-full ring-2 ring-transparent hover:ring-gray-300 focus:outline-none">
-                  <span className="block h-5 w-5 rounded-full bg-amber-700"></span>
-                </button>
+            <div className="mt-6">
+              <h1 className="text-3xl font-bold text-primary-900">{product.name}</h1>
+              <h2 className="sr-only">Product information</h2>
+              <div className="mt-2 flex items-center">
+                <p className="text-3xl text-primary-900">{formatPrice(Number(product.price))}</p>
+                {product.originalPrice && (
+                  <p className="ml-2 text-lg text-gray-500 line-through">
+                    {formatPrice(Number(product.originalPrice))}
+                  </p>
+                )}
               </div>
             </div>
-          </div>
 
-          <div className="mt-8 flex flex-col space-y-4">
-            <Button
-              onClick={() => addToCart(product)}
-              size="lg" 
-              className="w-full bg-secondary-600 hover:bg-secondary-700 text-white"
-            >
-              Add to cart
-            </Button>
-            <Button variant="outline" className="flex items-center justify-center text-secondary-600 hover:text-secondary-500">
-              <HeartIcon className="h-5 w-5 mr-2" />
-              Add to wishlist
-            </Button>
-          </div>
-
-          <div className="mt-8 border-t border-gray-200 pt-8">
-            <div className="flex items-center">
-              <CheckIcon className="h-5 w-5 text-green-500" />
-              <p className="ml-2 text-sm text-gray-500">In stock and ready to ship</p>
+            <div className="mt-6">
+              <h3 className="text-sm font-medium text-primary-900">Description</h3>
+              <div className="mt-2 text-base text-gray-500 space-y-4">
+                <p>{product.description}</p>
+              </div>
             </div>
-            <div className="mt-4 flex items-center">
-              <GlobeIcon className="h-5 w-5 text-gray-400" />
-              <p className="ml-2 text-sm text-gray-500">Free shipping worldwide</p>
+
+            <div className="mt-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium text-primary-900">Color</h3>
+                <a
+                  href="#"
+                  className="text-sm font-medium text-secondary-600 hover:text-secondary-500"
+                >
+                  Size guide
+                </a>
+              </div>
+
+              <div className="mt-2">
+                <div className="flex items-center space-x-3">
+                  <button className="relative -m-0.5 p-0.5 rounded-full ring-2 ring-secondary-500 focus:outline-none">
+                    <span className="block h-5 w-5 rounded-full bg-gray-800"></span>
+                  </button>
+                  <button className="relative -m-0.5 p-0.5 rounded-full ring-2 ring-transparent hover:ring-gray-300 focus:outline-none">
+                    <span className="block h-5 w-5 rounded-full bg-gray-500"></span>
+                  </button>
+                  <button className="relative -m-0.5 p-0.5 rounded-full ring-2 ring-transparent hover:ring-gray-300 focus:outline-none">
+                    <span className="block h-5 w-5 rounded-full bg-amber-700"></span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 flex flex-col space-y-4">
+              <Button
+                onClick={() => addToCart(product)}
+                size="lg"
+                className="w-full bg-secondary-600 hover:bg-secondary-700 text-white"
+              >
+                Add to cart
+              </Button>
+              <Button
+                variant="outline"
+                className="flex items-center justify-center text-secondary-600 hover:text-secondary-500"
+              >
+                <HeartIcon className="h-5 w-5 mr-2" />
+                Add to wishlist
+              </Button>
+            </div>
+
+            <div className="mt-8 border-t border-gray-200 pt-8">
+              <div className="flex items-center">
+                <CheckIcon className="h-5 w-5 text-green-500" />
+                <p className="ml-2 text-sm text-gray-500">In stock and ready to ship</p>
+              </div>
+              <div className="mt-4 flex items-center">
+                <GlobeIcon className="h-5 w-5 text-gray-400" />
+                <p className="ml-2 text-sm text-gray-500">Free shipping worldwide</p>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

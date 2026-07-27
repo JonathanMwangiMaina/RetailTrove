@@ -1,9 +1,13 @@
+import { useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import { Loader2 } from "lucide-react";
 import LoyaltyDashboard from "@/components/loyalty/loyalty-dashboard";
 
 export default function AccountPage() {
+  useEffect(() => {
+    document.title = "My Account - RetailTrove";
+  }, []);
   const { user, isLoading } = useAuth();
   const [, navigate] = useLocation();
 

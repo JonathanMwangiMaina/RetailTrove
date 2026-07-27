@@ -9,7 +9,7 @@ import {
 } from "../shared/schema.js";
 import { requireAuth, requireRole } from "./auth.js";
 import { z } from "zod";
-import { authLimiter, writeLimiter } from "./middleware/rate-limiter.js";
+import { writeLimiter } from "./middleware/rate-limiter.js";
 import { logAudit } from "./middleware/audit.js";
 import { createLemonSqueezyCheckout, initiateMpesaStkPush } from "./payment-service.js";
 
@@ -43,9 +43,34 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
       const category = req.query.category as string | undefined;
       const q = req.query.q as string | undefined;
+      const minPrice = req.query.minPrice ? parseFloat(req.query.minPrice as string) : undefined;
+      const maxPrice = req.query.maxPrice ? parseFloat(req.query.maxPrice as string) : undefined;
+      const minRating = req.query.minRating ? parseFloat(req.query.minRating as string) : undefined;
+      const inStock =
+        req.query.inStock === "true" ? true : req.query.inStock === "false" ? false : undefined;
 
-      if (cursor || limit || category || q) {
-        const result = await storage.getProductsPaginated({ cursor, limit, category, q });
+      const hasFilters = !!(
+        cursor ||
+        limit ||
+        category ||
+        q ||
+        minPrice !== undefined ||
+        maxPrice !== undefined ||
+        minRating !== undefined ||
+        inStock !== undefined
+      );
+
+      if (hasFilters) {
+        const result = await storage.getProductsPaginated({
+          cursor,
+          limit,
+          category,
+          q,
+          minPrice,
+          maxPrice,
+          minRating,
+          inStock,
+        });
         res.json(result);
       } else {
         const products = await storage.getAllProducts();
@@ -100,7 +125,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
         (p) =>
           p.name.toLowerCase().includes(q) ||
           p.description.toLowerCase().includes(q) ||
-          p.category.toLowerCase().includes(q)
+          p.category.toLowerCase().includes(q),
       );
       res.json(results);
     } catch (error) {
@@ -235,6 +260,19 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
       if (isNaN(id)) {
         return res.status(400).json({ message: "Invalid cart item ID" });
       }
+      const cartItem = await storage.getCartItemById(id);
+      if (!cartItem) {
+        return res.status(404).json({ message: "Cart item not found" });
+      }
+      if (
+        req.session?.userId &&
+        cartItem.userId &&
+        String(cartItem.userId) !== String(req.session.userId)
+      ) {
+        return res
+          .status(403)
+          .json({ message: "You do not have permission to modify this cart item" });
+      }
       const { quantity } = req.body;
       if (typeof quantity !== "number" || quantity < 1) {
         return res.status(400).json({ message: "Quantity must be a positive number" });
@@ -255,6 +293,19 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
       const id = parseInt(req.params.id, 10);
       if (isNaN(id)) {
         return res.status(400).json({ message: "Invalid cart item ID" });
+      }
+      const cartItem = await storage.getCartItemById(id);
+      if (!cartItem) {
+        return res.status(404).json({ message: "Cart item not found" });
+      }
+      if (
+        req.session?.userId &&
+        cartItem.userId &&
+        String(cartItem.userId) !== String(req.session.userId)
+      ) {
+        return res
+          .status(403)
+          .json({ message: "You do not have permission to modify this cart item" });
       }
       const deleted = await storage.deleteCartItem(id);
       if (!deleted) {
@@ -298,7 +349,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
         const qty = item.quantity ?? 1;
         expectedSubtotal += unitPrice * qty;
       }
-      const expectedTotal = expectedSubtotal * 1.10; // 10 % tax
+      const expectedTotal = expectedSubtotal * 1.1; // 10 % tax
       const clientTotal = Number(validatedOrder.total ?? 0);
 
       if (clientTotal > 0 && Math.abs(clientTotal - expectedTotal) > 0.02) {
@@ -330,9 +381,9 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     }
   });
 
-  router.get("/orders", requireAuth, async (_req: Request, res: Response) => {
+  router.get("/orders", requireAuth, async (req: Request, res: Response) => {
     try {
-      const orders = await storage.getAllOrders();
+      const orders = await storage.getOrdersByUserId(req.session.userId);
       res.json(orders);
     } catch (error) {
       console.error("Error fetching orders:", error);
@@ -371,7 +422,12 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
         stripeSessionId: result.url, // store checkout URL as reference
       });
 
-      logAudit(req, { action: "checkout_initiated", entityType: "order", entityId: order.id, changes: { provider: "lemonsqueezy" } });
+      logAudit(req, {
+        action: "checkout_initiated",
+        entityType: "order",
+        entityId: order.id,
+        changes: { provider: "lemonsqueezy" },
+      });
 
       res.json({ url: result.url });
     } catch (error) {
@@ -413,7 +469,12 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
         stripePaymentIntentId: result.MerchantRequestID,
       });
 
-      logAudit(req, { action: "checkout_initiated", entityType: "order", entityId: order.id, changes: { provider: "mpesa", phone } });
+      logAudit(req, {
+        action: "checkout_initiated",
+        entityType: "order",
+        entityId: order.id,
+        changes: { provider: "mpesa", phone },
+      });
 
       res.json({
         MerchantRequestID: result.MerchantRequestID,
@@ -428,29 +489,39 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
 
   // ── Admin Routes ────────────────────────────────────────────────────────────
 
-  router.get("/admin/users", requireAuth, requireRole("admin"), async (_req: Request, res: Response) => {
-    try {
-      const users = await storage.getAllUsers();
-      const sanitized = users.map(({ passwordHash, ...user }) => user);
-      res.json(sanitized);
-    } catch (error) {
-      console.error("Error fetching users:", error);
-      res.json([]);
-    }
-  });
+  router.get(
+    "/admin/users",
+    requireAuth,
+    requireRole("admin"),
+    async (_req: Request, res: Response) => {
+      try {
+        const users = await storage.getAllUsers();
+        const sanitized = users.map(({ passwordHash, ...user }) => user);
+        res.json(sanitized);
+      } catch (error) {
+        console.error("Error fetching users:", error);
+        res.json([]);
+      }
+    },
+  );
 
-  router.get("/admin/users/customers", requireAuth, requireRole("admin"), async (_req: Request, res: Response) => {
-    try {
-      const users = await storage.getAllUsers();
-      const customers = users
-        .filter((u) => u.role === "customer")
-        .map(({ passwordHash, ...user }) => user);
-      res.json(customers);
-    } catch (error) {
-      console.error("Error fetching customers:", error);
-      res.json([]);
-    }
-  });
+  router.get(
+    "/admin/users/customers",
+    requireAuth,
+    requireRole("admin"),
+    async (_req: Request, res: Response) => {
+      try {
+        const users = await storage.getAllUsers();
+        const customers = users
+          .filter((u) => u.role === "customer")
+          .map(({ passwordHash, ...user }) => user);
+        res.json(customers);
+      } catch (error) {
+        console.error("Error fetching customers:", error);
+        res.json([]);
+      }
+    },
+  );
 
   post("/admin/users", requireAuth, requireRole("admin"), async (req: Request, res: Response) => {
     try {
@@ -483,114 +554,279 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     }
   });
 
-  put("/admin/users/:id", requireAuth, requireRole("admin"), async (req: Request, res: Response) => {
-    try {
-      const id = parseInt(req.params.id, 10);
-      if (isNaN(id)) {
-        return res.status(400).json({ message: "Invalid user ID" });
-      }
+  put(
+    "/admin/users/:id",
+    requireAuth,
+    requireRole("admin"),
+    async (req: Request, res: Response) => {
+      try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) {
+          return res.status(400).json({ message: "Invalid user ID" });
+        }
 
-      const updateData: any = {};
-      if (req.body.name !== undefined) updateData.name = req.body.name;
-      if (req.body.email !== undefined) updateData.email = req.body.email;
-      if (req.body.role !== undefined) updateData.role = req.body.role;
-      if (req.body.status !== undefined) updateData.status = req.body.status;
-      if (req.body.isApproved !== undefined) updateData.isApproved = req.body.isApproved;
-      if (req.body.password) {
-        const bcrypt = await import("bcryptjs");
-        updateData.passwordHash = await bcrypt.hash(req.body.password, 10);
-      }
+        const updateData: any = {};
+        if (req.body.name !== undefined) updateData.name = req.body.name;
+        if (req.body.email !== undefined) updateData.email = req.body.email;
+        if (req.body.role !== undefined) updateData.role = req.body.role;
+        if (req.body.status !== undefined) updateData.status = req.body.status;
+        if (req.body.isApproved !== undefined) updateData.isApproved = req.body.isApproved;
+        if (req.body.password) {
+          const bcrypt = await import("bcryptjs");
+          updateData.passwordHash = await bcrypt.hash(req.body.password, 10);
+        }
 
-      const updated = await storage.updateUser(id, updateData);
-      if (!updated) {
-        return res.status(404).json({ message: "User not found" });
-      }
+        const updated = await storage.updateUser(id, updateData);
+        if (!updated) {
+          return res.status(404).json({ message: "User not found" });
+        }
 
-      const { passwordHash: _, ...sanitized } = updated as Record<string, any>;
-      logAudit(req, { action: "user_updated", entityType: "user", entityId: id });
-      res.json(sanitized);
-    } catch (error) {
-      console.error(`Error updating user ${req.params.id}:`, error);
-      res.status(500).json({ message: "Failed to update user" });
-    }
-  });
-
-  del("/admin/users/:id", requireAuth, requireRole("admin"), async (req: Request, res: Response) => {
-    try {
-      const id = parseInt(req.params.id, 10);
-      if (isNaN(id)) {
-        return res.status(400).json({ message: "Invalid user ID" });
+        const { passwordHash: _, ...sanitized } = updated as Record<string, any>;
+        logAudit(req, { action: "user_updated", entityType: "user", entityId: id });
+        res.json(sanitized);
+      } catch (error) {
+        console.error(`Error updating user ${req.params.id}:`, error);
+        res.status(500).json({ message: "Failed to update user" });
       }
-      if (id === req.session.userId) {
-        return res.status(400).json({ message: "Cannot delete your own account" });
-      }
+    },
+  );
 
-      const deleted = await storage.deleteUser(id);
-      if (!deleted) {
-        return res.status(404).json({ message: "User not found" });
-      }
-      logAudit(req, { action: "user_deleted", entityType: "user", entityId: id });
-      res.json({ message: "User deleted" });
-    } catch (error) {
-      console.error(`Error deleting user ${req.params.id}:`, error);
-      res.status(500).json({ message: "Failed to delete user" });
-    }
-  });
+  del(
+    "/admin/users/:id",
+    requireAuth,
+    requireRole("admin"),
+    async (req: Request, res: Response) => {
+      try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) {
+          return res.status(400).json({ message: "Invalid user ID" });
+        }
+        if (id === req.session.userId) {
+          return res.status(400).json({ message: "Cannot delete your own account" });
+        }
 
-  router.get("/admin/products/pending", requireAuth, requireRole("admin"), async (_req: Request, res: Response) => {
-    try {
-      const pending = await storage.getPendingProducts();
-      res.json(pending);
-    } catch (error) {
-      console.error("Error fetching pending products:", error);
-      res.json([]);
-    }
-  });
-
-  put("/admin/products/:id/approve", requireAuth, requireRole("admin"), async (req: Request, res: Response) => {
-    try {
-      const id = parseInt(req.params.id, 10);
-      if (isNaN(id)) {
-        return res.status(400).json({ message: "Invalid product ID" });
+        const deleted = await storage.deleteUser(id);
+        if (!deleted) {
+          return res.status(404).json({ message: "User not found" });
+        }
+        logAudit(req, { action: "user_deleted", entityType: "user", entityId: id });
+        res.json({ message: "User deleted" });
+      } catch (error) {
+        console.error(`Error deleting user ${req.params.id}:`, error);
+        res.status(500).json({ message: "Failed to delete user" });
       }
-      const { status } = req.body;
-      if (!["approved", "rejected"].includes(status)) {
-        return res.status(400).json({ message: "Status must be 'approved' or 'rejected'" });
-      }
+    },
+  );
 
-      const updated = await storage.approveProduct(id, status);
-      if (!updated) {
-        return res.status(404).json({ message: "Product not found" });
+  router.get(
+    "/admin/products/pending",
+    requireAuth,
+    requireRole("admin"),
+    async (_req: Request, res: Response) => {
+      try {
+        const pending = await storage.getPendingProducts();
+        res.json(pending);
+      } catch (error) {
+        console.error("Error fetching pending products:", error);
+        res.json([]);
       }
-      logAudit(req, { action: `product_${status}`, entityType: "product", entityId: id });
-      res.json(updated);
-    } catch (error) {
-      console.error(`Error approving product ${req.params.id}:`, error);
-      res.status(500).json({ message: "Failed to approve product" });
-    }
-  });
+    },
+  );
 
-  router.get("/admin/visits", requireAuth, requireRole("admin"), async (_req: Request, res: Response) => {
-    try {
-      const visits = await storage.getAllVisits();
-      res.json(visits);
-    } catch (error) {
-      console.error("Error fetching visits:", error);
-      res.json([]);
-    }
-  });
+  put(
+    "/admin/products/:id/approve",
+    requireAuth,
+    requireRole("admin"),
+    async (req: Request, res: Response) => {
+      try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) {
+          return res.status(400).json({ message: "Invalid product ID" });
+        }
+        const { status } = req.body;
+        if (!["approved", "rejected"].includes(status)) {
+          return res.status(400).json({ message: "Status must be 'approved' or 'rejected'" });
+        }
+
+        const updated = await storage.approveProduct(id, status);
+        if (!updated) {
+          return res.status(404).json({ message: "Product not found" });
+        }
+        logAudit(req, { action: `product_${status}`, entityType: "product", entityId: id });
+        res.json(updated);
+      } catch (error) {
+        console.error(`Error approving product ${req.params.id}:`, error);
+        res.status(500).json({ message: "Failed to approve product" });
+      }
+    },
+  );
+
+  router.get(
+    "/admin/visits",
+    requireAuth,
+    requireRole("admin"),
+    async (_req: Request, res: Response) => {
+      try {
+        const visits = await storage.getAllVisits();
+        res.json(visits);
+      } catch (error) {
+        console.error("Error fetching visits:", error);
+        res.json([]);
+      }
+    },
+  );
+
+  router.get(
+    "/admin/low-stock",
+    requireAuth,
+    requireRole("admin"),
+    async (req: Request, res: Response) => {
+      try {
+        const threshold = req.query.threshold ? parseInt(req.query.threshold as string, 10) : 5;
+        const items = await storage.getLowStockProducts(threshold);
+        res.json(items);
+      } catch (error) {
+        console.error("Error fetching low-stock products:", error);
+        res.json([]);
+      }
+    },
+  );
+
+  router.get(
+    "/admin/analytics/summary",
+    requireAuth,
+    requireRole("admin"),
+    async (_req: Request, res: Response) => {
+      try {
+        const [orders, users, productsList, visits] = await Promise.all([
+          storage.getAllOrders(),
+          storage.getAllUsers(),
+          storage.getAllProducts(),
+          storage.getAllVisits(),
+        ]);
+        const totalRevenue = orders.reduce((sum, o) => sum + Number(o.total ?? 0), 0);
+        const paidOrders = orders.filter((o) => o.paymentStatus === "paid");
+        const paidRevenue = paidOrders.reduce((sum, o) => sum + Number(o.total ?? 0), 0);
+        const totalStock = productsList.reduce((sum, p) => sum + (p.stockQuantity ?? 0), 0);
+        const lowStock = productsList.filter(
+          (p) => (p.stockQuantity ?? 0) > 0 && (p.stockQuantity ?? 0) <= 5,
+        ).length;
+        const outOfStock = productsList.filter(
+          (p) => !p.inStock || (p.stockQuantity ?? 0) === 0,
+        ).length;
+
+        res.json({
+          totalOrders: orders.length,
+          paidOrders: paidOrders.length,
+          totalRevenue: Number(totalRevenue.toFixed(2)),
+          paidRevenue: Number(paidRevenue.toFixed(2)),
+          totalCustomers: users.filter((u) => u.role === "customer").length,
+          totalVendors: users.filter((u) => u.role === "vendor").length,
+          totalProducts: productsList.length,
+          totalStock,
+          lowStockCount: lowStock,
+          outOfStockCount: outOfStock,
+          totalVisits: visits.length,
+        });
+      } catch (error) {
+        console.error("Error fetching analytics summary:", error);
+        res.status(500).json({ message: "Failed to fetch analytics" });
+      }
+    },
+  );
+
+  router.get(
+    "/admin/analytics/sales-trend",
+    requireAuth,
+    requireRole("admin"),
+    async (_req: Request, res: Response) => {
+      try {
+        const orders = await storage.getAllOrders();
+        const byDate: Record<string, { orders: number; revenue: number }> = {};
+        for (const o of orders) {
+          const key = o.createdAt ? new Date(o.createdAt).toISOString().slice(0, 10) : "unknown";
+          if (!byDate[key]) byDate[key] = { orders: 0, revenue: 0 };
+          byDate[key].orders += 1;
+          byDate[key].revenue += Number(o.total ?? 0);
+        }
+        const trend = Object.entries(byDate)
+          .map(([date, v]) => ({ date, orders: v.orders, revenue: Number(v.revenue.toFixed(2)) }))
+          .sort((a, b) => a.date.localeCompare(b.date))
+          .slice(-30);
+        res.json(trend);
+      } catch (error) {
+        console.error("Error fetching sales trend:", error);
+        res.json([]);
+      }
+    },
+  );
+
+  router.get(
+    "/admin/analytics/top-products",
+    requireAuth,
+    requireRole("admin"),
+    async (_req: Request, res: Response) => {
+      try {
+        const productsList = await storage.getAllProducts();
+        const topProducts = productsList
+          .map((p) => ({
+            id: p.id,
+            name: p.name,
+            price: Number(p.price),
+            rating: Number(p.rating ?? 5),
+            stockQuantity: p.stockQuantity ?? 0,
+            category: p.category,
+          }))
+          .sort((a, b) => b.rating - a.rating)
+          .slice(0, 10);
+        res.json(topProducts);
+      } catch (error) {
+        console.error("Error fetching top products:", error);
+        res.json([]);
+      }
+    },
+  );
+
+  router.get(
+    "/admin/analytics/visits-trend",
+    requireAuth,
+    requireRole("admin"),
+    async (_req: Request, res: Response) => {
+      try {
+        const visits = await storage.getAllVisits();
+        const byDate: Record<string, number> = {};
+        for (const v of visits) {
+          const key = v.visitedAt ? new Date(v.visitedAt).toISOString().slice(0, 10) : "unknown";
+          byDate[key] = (byDate[key] ?? 0) + 1;
+        }
+        const trend = Object.entries(byDate)
+          .map(([date, count]) => ({ date, count }))
+          .sort((a, b) => a.date.localeCompare(b.date))
+          .slice(-30);
+        res.json(trend);
+      } catch (error) {
+        console.error("Error fetching visits trend:", error);
+        res.json([]);
+      }
+    },
+  );
 
   // ── Vendor Routes ───────────────────────────────────────────────────────────
 
-  router.get("/vendor/products", requireAuth, requireRole("vendor"), async (req: Request, res: Response) => {
-    try {
-      const products = await storage.getVendorProducts(req.session.userId);
-      res.json(products);
-    } catch (error) {
-      console.error("Error fetching vendor products:", error);
-      res.json([]);
-    }
-  });
+  router.get(
+    "/vendor/products",
+    requireAuth,
+    requireRole("vendor"),
+    async (req: Request, res: Response) => {
+      try {
+        const products = await storage.getVendorProducts(req.session.userId);
+        res.json(products);
+      } catch (error) {
+        console.error("Error fetching vendor products:", error);
+        res.json([]);
+      }
+    },
+  );
 
   // ── FAQ Routes ──────────────────────────────────────────────────────────────
 
@@ -693,20 +929,25 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     }
   });
 
-  put("/site-settings/:key", requireAuth, requireRole("admin"), async (req: Request, res: Response) => {
-    try {
-      const { key } = req.params;
-      const { value } = req.body;
-      if (value === undefined) {
-        return res.status(400).json({ message: "Value is required" });
+  put(
+    "/site-settings/:key",
+    requireAuth,
+    requireRole("admin"),
+    async (req: Request, res: Response) => {
+      try {
+        const { key } = req.params;
+        const { value } = req.body;
+        if (value === undefined) {
+          return res.status(400).json({ message: "Value is required" });
+        }
+        const updated = await storage.updateSiteSetting(key, value);
+        res.json(updated);
+      } catch (error) {
+        console.error(`Error updating site setting ${req.params.key}:`, error);
+        res.status(500).json({ message: "Failed to update setting" });
       }
-      const updated = await storage.updateSiteSetting(key, value);
-      res.json(updated);
-    } catch (error) {
-      console.error(`Error updating site setting ${req.params.key}:`, error);
-      res.status(500).json({ message: "Failed to update setting" });
-    }
-  });
+    },
+  );
 
   router.get("/banner", async (_req: Request, res: Response) => {
     try {
@@ -739,20 +980,25 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     }
   });
 
-  put("/site-content/:type", requireAuth, requireRole("admin"), async (req: Request, res: Response) => {
-    try {
-      const { type } = req.params;
-      const { content } = req.body;
-      if (content === undefined) {
-        return res.status(400).json({ message: "Content is required" });
+  put(
+    "/site-content/:type",
+    requireAuth,
+    requireRole("admin"),
+    async (req: Request, res: Response) => {
+      try {
+        const { type } = req.params;
+        const { content } = req.body;
+        if (content === undefined) {
+          return res.status(400).json({ message: "Content is required" });
+        }
+        const updated = await storage.updateSiteContent(type, content);
+        res.json(updated);
+      } catch (error) {
+        console.error(`Error updating site content ${req.params.type}:`, error);
+        res.status(500).json({ message: "Failed to update content" });
       }
-      const updated = await storage.updateSiteContent(type, content);
-      res.json(updated);
-    } catch (error) {
-      console.error(`Error updating site content ${req.params.type}:`, error);
-      res.status(500).json({ message: "Failed to update content" });
-    }
-  });
+    },
+  );
 
   // ── Visit Routes ────────────────────────────────────────────────────────────
 
@@ -790,32 +1036,138 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     }
   });
 
-  router.get("/admin/newsletter/subscribers", requireAuth, requireRole("admin"), async (_req: Request, res: Response) => {
+  router.get(
+    "/admin/newsletter/subscribers",
+    requireAuth,
+    requireRole("admin"),
+    async (_req: Request, res: Response) => {
+      try {
+        const subscribers = await storage.getNewsletterSubscribers();
+        res.json(subscribers);
+      } catch (error) {
+        console.error("Error fetching newsletter subscribers:", error);
+        res.json([]);
+      }
+    },
+  );
+
+  del(
+    "/admin/newsletter/subscribers/:id",
+    requireAuth,
+    requireRole("admin"),
+    async (req: Request, res: Response) => {
+      try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) {
+          return res.status(400).json({ message: "Invalid subscriber ID" });
+        }
+        const deleted = await storage.deleteNewsletterSubscriber(id);
+        if (!deleted) {
+          return res.status(404).json({ message: "Subscriber not found" });
+        }
+        res.json({ message: "Subscriber removed" });
+      } catch (error) {
+        console.error(`Error deleting subscriber ${req.params.id}:`, error);
+        res.status(500).json({ message: "Failed to delete subscriber" });
+      }
+    },
+  );
+
+  // ── Testimonial Routes ────────────────────────────────────────────────────
+
+  router.get("/testimonials", async (_req: Request, res: Response) => {
     try {
-      const subscribers = await storage.getNewsletterSubscribers();
-      res.json(subscribers);
+      const testimonials = await storage.getPublicTestimonials();
+      res.json(testimonials);
     } catch (error) {
-      console.error("Error fetching newsletter subscribers:", error);
+      console.error("Error fetching testimonials:", error);
       res.json([]);
     }
   });
 
-  del("/admin/newsletter/subscribers/:id", requireAuth, requireRole("admin"), async (req: Request, res: Response) => {
-    try {
-      const id = parseInt(req.params.id, 10);
-      if (isNaN(id)) {
-        return res.status(400).json({ message: "Invalid subscriber ID" });
+  router.get(
+    "/admin/testimonials",
+    requireAuth,
+    requireRole("admin"),
+    async (_req: Request, res: Response) => {
+      try {
+        const testimonials = await storage.getAllTestimonials();
+        res.json(testimonials);
+      } catch (error) {
+        console.error("Error fetching all testimonials:", error);
+        res.json([]);
       }
-      const deleted = await storage.deleteNewsletterSubscriber(id);
-      if (!deleted) {
-        return res.status(404).json({ message: "Subscriber not found" });
+    },
+  );
+
+  post(
+    "/admin/testimonials",
+    requireAuth,
+    requireRole("admin"),
+    async (req: Request, res: Response) => {
+      try {
+        const { insertTestimonialSchema } = await import("../shared/schema.js");
+        const validated = insertTestimonialSchema.parse(req.body);
+        const testimonial = await storage.createTestimonial(validated);
+        res.status(201).json(testimonial);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return res.status(400).json({ message: "Validation error", errors: error.errors });
+        }
+        console.error("Error creating testimonial:", error);
+        res.status(500).json({ message: "Failed to create testimonial" });
       }
-      res.json({ message: "Subscriber removed" });
-    } catch (error) {
-      console.error(`Error deleting subscriber ${req.params.id}:`, error);
-      res.status(500).json({ message: "Failed to delete subscriber" });
-    }
-  });
+    },
+  );
+
+  put(
+    "/admin/testimonials/:id",
+    requireAuth,
+    requireRole("admin"),
+    async (req: Request, res: Response) => {
+      try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) {
+          return res.status(400).json({ message: "Invalid testimonial ID" });
+        }
+        const { insertTestimonialSchema } = await import("../shared/schema.js");
+        const validated = insertTestimonialSchema.partial().parse(req.body);
+        const updated = await storage.updateTestimonial(id, validated);
+        if (!updated) {
+          return res.status(404).json({ message: "Testimonial not found" });
+        }
+        res.json(updated);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return res.status(400).json({ message: "Validation error", errors: error.errors });
+        }
+        console.error(`Error updating testimonial ${req.params.id}:`, error);
+        res.status(500).json({ message: "Failed to update testimonial" });
+      }
+    },
+  );
+
+  del(
+    "/admin/testimonials/:id",
+    requireAuth,
+    requireRole("admin"),
+    async (req: Request, res: Response) => {
+      try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) {
+          return res.status(400).json({ message: "Invalid testimonial ID" });
+        }
+        const deleted = await storage.deleteTestimonial(id);
+        if (!deleted) {
+          return res.status(404).json({ message: "Testimonial not found" });
+        }
+        res.json({ message: "Testimonial deleted" });
+      } catch (error) {
+        console.error(`Error deleting testimonial ${req.params.id}:`, error);
+        res.status(500).json({ message: "Failed to delete testimonial" });
+      }
+    },
+  );
 
   // ── Loyalty Routes ─────────────────────────────────────────────────────────
 
@@ -862,32 +1214,42 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     }
   });
 
-  router.get("/admin/loyalty/accounts", requireAuth, requireRole("admin"), async (_req: Request, res: Response) => {
-    try {
-      const accounts = await storage.getAllLoyaltyAccounts();
-      res.json(accounts);
-    } catch (error) {
-      console.error("Error fetching loyalty accounts:", error);
-      res.json([]);
-    }
-  });
+  router.get(
+    "/admin/loyalty/accounts",
+    requireAuth,
+    requireRole("admin"),
+    async (_req: Request, res: Response) => {
+      try {
+        const accounts = await storage.getAllLoyaltyAccounts();
+        res.json(accounts);
+      } catch (error) {
+        console.error("Error fetching loyalty accounts:", error);
+        res.json([]);
+      }
+    },
+  );
 
   // ── Admin Audit Logs ──────────────────────────────────────────────────────
 
-  router.get("/admin/audit-logs", requireAuth, requireRole("admin"), async (req: Request, res: Response) => {
-    try {
-      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
-      const offset = parseInt(req.query.offset as string) || 0;
-      const entityType = req.query.entityType as string | undefined;
-      const userId = req.query.userId ? parseInt(req.query.userId as string) : undefined;
+  router.get(
+    "/admin/audit-logs",
+    requireAuth,
+    requireRole("admin"),
+    async (req: Request, res: Response) => {
+      try {
+        const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+        const offset = parseInt(req.query.offset as string) || 0;
+        const entityType = req.query.entityType as string | undefined;
+        const userId = req.query.userId ? parseInt(req.query.userId as string) : undefined;
 
-      const logs = await storage.getAuditLogs({ limit, offset, entityType, userId });
-      res.json(logs);
-    } catch (error) {
-      console.error("Error fetching audit logs:", error);
-      res.json([]);
-    }
-  });
+        const logs = await storage.getAuditLogs({ limit, offset, entityType, userId });
+        res.json(logs);
+      } catch (error) {
+        console.error("Error fetching audit logs:", error);
+        res.json([]);
+      }
+    },
+  );
 
   // ── Mount Sub-router to Express App ────────────────────────────────────────
   app.use("/api", router);

@@ -2,14 +2,19 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run build:client",
   "outputDirectory": "dist/public",
+  "functions": {
+    "api/index.ts": {
+      "maxDuration": 30
+    }
+  },
   "rewrites": [
     {
       "source": "/api/(.*)",
       "destination": "/api/index"
     },
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "source": "/((?!api/).*)",
+      "destination": "/api/prerender"
     }
   ]
 }

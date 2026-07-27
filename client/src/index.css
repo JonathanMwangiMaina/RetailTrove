@@ -54,7 +54,7 @@
   body {
     @apply font-sans bg-gray-50 text-primary-900;
   }
-  
+
   /* Custom colors to match the design */
   :root {
     --primary-DEFAULT: 222.2 47.4% 11.2%;
@@ -68,7 +68,7 @@
     --primary-700: 216 33.3% 17.1%;
     --primary-800: 222.2 47.4% 11.2%;
     --primary-900: 224 71.4% 4.1%;
-    
+
     --accent-DEFAULT: 346 77.3% 49.8%;
     --accent-50: 0 100% 98%;
     --accent-100: 0 100% 95.9%;
@@ -80,7 +80,7 @@
     --accent-700: 336 77.4% 33.3%;
     --accent-800: 336 69.8% 30.6%;
     --accent-900: 336 82.6% 25.7%;
-    
+
     --secondary-DEFAULT: 226 70% 55.9%;
     --secondary-50: 226 70% 95.9%;
     --secondary-100: 226 70% 91.8%;

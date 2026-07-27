@@ -1,10 +1,7 @@
 import { csrfSync } from "csrf-sync";
 import type { Request, Response } from "express";
 
-const {
-  generateToken,
-  csrfSynchronisedProtection,
-} = csrfSync({
+const { generateToken, csrfSynchronisedProtection } = csrfSync({
   ignoredMethods: ["GET", "HEAD", "OPTIONS"],
   getTokenFromRequest: (req: Request) => {
     return (req.headers["x-csrf-token"] as string) || "";

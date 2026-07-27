@@ -9,6 +9,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   SearchIcon,
   ShoppingBagIcon,
   MenuIcon,
@@ -60,11 +68,9 @@ export default function Header() {
   const [cartOpen, setCartOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [profileOpen, setProfileOpen] = useState(false);
   const [editingBanner, setEditingBanner] = useState(false);
   const [bannerDraft, setBannerDraft] = useState("");
 
-  const profileRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const { data: banner } = useQuery<BannerData>({
@@ -103,25 +109,13 @@ export default function Header() {
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
-        setProfileOpen(false);
         setSearchOpen(false);
         setMobileMenuOpen(false);
       }
     }
 
-    function handleClickOutside(e: MouseEvent) {
-      if (
-        profileRef.current &&
-        !profileRef.current.contains(e.target as Node)
-      ) {
-        setProfileOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside);
     document.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
@@ -149,15 +143,13 @@ export default function Header() {
 
   async function handleLogout() {
     await logout();
-    setProfileOpen(false);
     toast({ title: "Signed out", description: "See you next time!" });
     navigate("/");
   }
 
   const canEditBanner = user?.role === "admin" || user?.role === "vendor";
   const bannerBg = banner?.bgColor ?? "#0f172a";
-  const bannerText =
-    banner?.text ?? "Free shipping on all orders over $50! Use code: FREESHIP";
+  const bannerText = banner?.text ?? "Free shipping on all orders over $50! Use code: FREESHIP";
   const bannerActive = banner?.isActive !== false;
 
   const navLinks = [
@@ -267,81 +259,71 @@ export default function Header() {
 
               {/* Profile / Account Dropdown */}
               {user ? (
-                <div className="relative hidden sm:block" ref={profileRef}>
-                  <button
-                    onClick={() => setProfileOpen(!profileOpen)}
-                    className="flex items-center gap-2 focus:outline-none p-1 rounded-full hover:bg-slate-100 transition-colors"
-                    title={user.name}
-                    aria-expanded={profileOpen}
-                  >
-                    <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm ${roleColor(
-                        user.role
-                      )}`}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      className="flex items-center gap-2 focus:outline-none p-1 rounded-full hover:bg-slate-100 transition-colors"
+                      title={user.name}
                     >
-                      {getInitials(user.name)}
-                    </div>
-                    <span className="hidden lg:block text-sm font-medium text-slate-800 max-w-[100px] truncate">
-                      {user.name.split(" ")[0]}
-                    </span>
-                  </button>
-
-                  {/* Profile Menu Popover */}
-                  {profileOpen && (
-                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-slate-100 py-1 z-50 animate-in fade-in slide-in-from-top-1 duration-150">
-                      <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/50">
-                        <p className="text-sm font-semibold text-slate-900 truncate">
-                          {user.name}
-                        </p>
-                        <p className="text-xs text-slate-500 truncate">
-                          {user.email}
-                        </p>
-                        <span
-                          className={`inline-block mt-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full text-white ${roleColor(
-                            user.role
-                          )}`}
-                        >
-                          {user.role}
-                        </span>
-                        {loyaltyAccount && (
-                          <span className="inline-block mt-1 ml-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
-                            <Star className="inline h-2.5 w-2.5 mr-0.5 -mt-px" />{loyaltyAccount.points} pts
-                          </span>
-                        )}
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm ${roleColor(
+                          user.role,
+                        )}`}
+                      >
+                        {getInitials(user.name)}
                       </div>
-
+                      <span className="hidden lg:block text-sm font-medium text-slate-800 max-w-[100px] truncate">
+                        {user.name.split(" ")[0]}
+                      </span>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel>
+                      <p className="text-sm font-semibold text-slate-900 truncate">{user.name}</p>
+                      <p className="text-xs text-slate-500 truncate">{user.email}</p>
+                      <span
+                        className={`inline-block mt-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full text-white ${roleColor(
+                          user.role,
+                        )}`}
+                      >
+                        {user.role}
+                      </span>
+                      {loyaltyAccount && (
+                        <span className="inline-block mt-1 ml-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                          <Star className="inline h-2.5 w-2.5 mr-0.5 -mt-px" />
+                          {loyaltyAccount.points} pts
+                        </span>
+                      )}
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
                       <Link href="/account">
-                        <span
-                          onClick={() => setProfileOpen(false)}
-                          className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 cursor-pointer"
-                        >
+                        <span className="flex items-center gap-2 cursor-pointer">
                           <UserIcon className="h-4 w-4 text-slate-500" />
                           My Account
                         </span>
                       </Link>
-
-                      {(user.role === "admin" || user.role === "vendor") && (
+                    </DropdownMenuItem>
+                    {(user.role === "admin" || user.role === "vendor") && (
+                      <DropdownMenuItem asChild>
                         <Link href={dashboardHref(user.role)}>
-                          <span
-                            onClick={() => setProfileOpen(false)}
-                            className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 cursor-pointer"
-                          >
+                          <span className="flex items-center gap-2 cursor-pointer">
                             <LayoutDashboardIcon className="h-4 w-4 text-slate-500" />
                             Dashboard
                           </span>
                         </Link>
-                      )}
-
-                      <button
-                        onClick={handleLogout}
-                        className="flex items-center gap-2 px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 cursor-pointer w-full text-left"
-                      >
-                        <LogOutIcon className="h-4 w-4 text-rose-500" />
-                        Sign Out
-                      </button>
-                    </div>
-                  )}
-                </div>
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={handleLogout}
+                      className="text-rose-600 focus:text-rose-600 focus:bg-rose-50 cursor-pointer"
+                    >
+                      <LogOutIcon className="h-4 w-4 mr-2" />
+                      Sign Out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               ) : (
                 <Link href="/login">
                   <Button
@@ -380,11 +362,7 @@ export default function Header() {
                 aria-label="Toggle navigation menu"
                 aria-expanded={mobileMenuOpen}
               >
-                {mobileMenuOpen ? (
-                  <XIcon className="h-6 w-6" />
-                ) : (
-                  <MenuIcon className="h-6 w-6" />
-                )}
+                {mobileMenuOpen ? <XIcon className="h-6 w-6" /> : <MenuIcon className="h-6 w-6" />}
               </Button>
             </div>
           </div>
@@ -413,15 +391,13 @@ export default function Header() {
                 <div className="flex items-center gap-3 px-3 mb-3">
                   <div
                     className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold ${roleColor(
-                      user.role
+                      user.role,
                     )}`}
                   >
                     {getInitials(user.name)}
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-slate-900">
-                      {user.name}
-                    </p>
+                    <p className="text-sm font-semibold text-slate-900">{user.name}</p>
                     <p className="text-xs text-slate-500 capitalize flex items-center gap-1.5">
                       {user.role}
                       {loyaltyAccount && (

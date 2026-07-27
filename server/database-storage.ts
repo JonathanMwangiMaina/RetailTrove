@@ -15,13 +15,13 @@ import {
   loyaltyAccounts,
   loyaltyTransactions,
   auditLogs,
+  testimonials,
   type Product,
   type InsertProduct,
   type User,
   type InsertUser,
   type Order,
   type InsertOrder,
-  type OrderItem,
   type InsertOrderItem,
   type CartItem,
   type InsertCartItem,
@@ -29,22 +29,20 @@ import {
   type BannerSettings,
   type InsertBannerSettings,
   type SiteContent,
-  type InsertSiteContent,
   type SiteSettings,
-  type InsertSiteSettings,
   type Faq,
   type InsertFaq,
   type UserVisit,
-  type InsertUserVisit,
   type NewsletterSubscriber,
-  type InsertNewsletterSubscriber,
   type PasswordResetToken,
   type LoyaltyAccount,
   type LoyaltyTransaction,
   type AuditLog,
   type InsertAuditLog,
+  type Testimonial,
+  type InsertTestimonial,
 } from "../shared/schema.js";
-import { eq, and, or, sql, gt, ilike } from "drizzle-orm";
+import { eq, and, or, sql, gt, gte, lte, ilike } from "drizzle-orm";
 import { IStorage } from "./storage.js";
 
 export class DatabaseStorage implements IStorage {
@@ -92,15 +90,19 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(products)
-      .where(
-        or(
-          eq(products.approvalStatus, "approved"),
-          eq(products.approvalStatus, "APPROVED")
-        )
-      );
+      .where(or(eq(products.approvalStatus, "approved"), eq(products.approvalStatus, "APPROVED")));
   }
 
-  async getProductsPaginated(params: { cursor?: number; limit?: number; category?: string; q?: string }): Promise<{ data: Product[]; nextCursor: number | null }> {
+  async getProductsPaginated(params: {
+    cursor?: number;
+    limit?: number;
+    category?: string;
+    q?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    minRating?: number;
+    inStock?: boolean;
+  }): Promise<{ data: Product[]; nextCursor: number | null }> {
     const limit = Math.min(params.limit ?? 20, 100);
     const conditions = [
       or(eq(products.approvalStatus, "approved"), eq(products.approvalStatus, "APPROVED")),
@@ -119,8 +121,20 @@ export class DatabaseStorage implements IStorage {
           ilike(products.name, pattern),
           ilike(products.description, pattern),
           ilike(products.category, pattern),
-        )!
+        )!,
       );
+    }
+    if (params.minPrice !== undefined) {
+      conditions.push(gte(products.price, String(params.minPrice)));
+    }
+    if (params.maxPrice !== undefined) {
+      conditions.push(lte(products.price, String(params.maxPrice)));
+    }
+    if (params.minRating !== undefined) {
+      conditions.push(gte(products.rating, String(params.minRating)));
+    }
+    if (params.inStock !== undefined) {
+      conditions.push(eq(products.inStock, params.inStock));
     }
 
     const rows = await db
@@ -144,11 +158,8 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(products.featured, true),
-          or(
-            eq(products.approvalStatus, "approved"),
-            eq(products.approvalStatus, "APPROVED")
-          )
-        )
+          or(eq(products.approvalStatus, "approved"), eq(products.approvalStatus, "APPROVED")),
+        ),
       );
   }
 
@@ -159,11 +170,8 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(products.newArrival, true),
-          or(
-            eq(products.approvalStatus, "approved"),
-            eq(products.approvalStatus, "APPROVED")
-          )
-        )
+          or(eq(products.approvalStatus, "approved"), eq(products.approvalStatus, "APPROVED")),
+        ),
       );
   }
 
@@ -174,11 +182,8 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(products.category, category),
-          or(
-            eq(products.approvalStatus, "approved"),
-            eq(products.approvalStatus, "APPROVED")
-          )
-        )
+          or(eq(products.approvalStatus, "approved"), eq(products.approvalStatus, "APPROVED")),
+        ),
       );
   }
 
@@ -206,10 +211,7 @@ export class DatabaseStorage implements IStorage {
       ...(product.originalPrice ? { originalPrice: String(product.originalPrice) } : {}),
     };
 
-    const [newProduct] = await db
-      .insert(products)
-      .values(valuesToInsert)
-      .returning();
+    const [newProduct] = await db.insert(products).values(valuesToInsert).returning();
 
     return newProduct;
   }
@@ -219,7 +221,8 @@ export class DatabaseStorage implements IStorage {
     if (data.name !== undefined) updateData.name = data.name;
     if (data.description !== undefined) updateData.description = data.description;
     if (data.price !== undefined) updateData.price = String(data.price);
-    if (data.originalPrice !== undefined) updateData.originalPrice = data.originalPrice ? String(data.originalPrice) : null;
+    if (data.originalPrice !== undefined)
+      updateData.originalPrice = data.originalPrice ? String(data.originalPrice) : null;
     if (data.imageUrl !== undefined) updateData.imageUrl = data.imageUrl;
     if (data.category !== undefined) updateData.category = data.category;
     if (data.subcategory !== undefined) updateData.subcategory = data.subcategory ?? null;
@@ -236,7 +239,11 @@ export class DatabaseStorage implements IStorage {
       return this.getProductById(id);
     }
 
-    const [updated] = await db.update(products).set(updateData).where(eq(products.id, id)).returning();
+    const [updated] = await db
+      .update(products)
+      .set(updateData)
+      .where(eq(products.id, id))
+      .returning();
     return updated;
   }
 
@@ -246,10 +253,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPendingProducts(): Promise<Product[]> {
-    return await db
-      .select()
-      .from(products)
-      .where(eq(products.approvalStatus, "pending"));
+    return await db.select().from(products).where(eq(products.approvalStatus, "pending"));
   }
 
   async approveProduct(id: number, status: string): Promise<Product | undefined> {
@@ -262,10 +266,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getVendorProducts(vendorId: number): Promise<Product[]> {
-    return await db
-      .select()
-      .from(products)
-      .where(eq(products.vendorId, vendorId));
+    return await db.select().from(products).where(eq(products.vendorId, vendorId));
   }
 
   // ── Cart Operations ────────────────────────────────────────────────────────
@@ -305,13 +306,21 @@ export class DatabaseStorage implements IStorage {
     return items as CartItemWithProduct[];
   }
 
+  async getCartItemById(id: number): Promise<CartItem | undefined> {
+    const [item] = await db.select().from(cartItems).where(eq(cartItems.id, id));
+    return item;
+  }
+
   async addToCart(item: InsertCartItem): Promise<CartItem> {
-    const [newItem] = await db.insert(cartItems).values({
-      productId: item.productId,
-      quantity: item.quantity ?? 1,
-      cartId: item.cartId,
-      userId: item.userId ?? null,
-    }).returning();
+    const [newItem] = await db
+      .insert(cartItems)
+      .values({
+        productId: item.productId,
+        quantity: item.quantity ?? 1,
+        cartId: item.cartId,
+        userId: item.userId ?? null,
+      })
+      .returning();
     return newItem;
   }
 
@@ -337,25 +346,28 @@ export class DatabaseStorage implements IStorage {
 
   async createOrder(order: InsertOrder, items: InsertOrderItem[]): Promise<Order> {
     return await db.transaction(async (tx) => {
-      const [newOrder] = await tx.insert(orders).values({
-        firstName: order.firstName,
-        lastName: order.lastName,
-        email: order.email,
-        phone: order.phone,
-        address: order.address,
-        apartment: order.apartment ?? null,
-        city: order.city,
-        state: order.state,
-        postalCode: order.postalCode,
-        country: order.country,
-        total: order.total ? String(order.total) : null,
-        userId: order.userId ?? null,
-        paymentStatus: order.paymentStatus ?? "pending",
-        paymentProvider: order.paymentProvider ?? null,
-        stripeSessionId: order.stripeSessionId ?? null,
-        stripePaymentIntentId: order.stripePaymentIntentId ?? null,
-        mpesaReceiptNumber: order.mpesaReceiptNumber ?? null,
-      }).returning();
+      const [newOrder] = await tx
+        .insert(orders)
+        .values({
+          firstName: order.firstName,
+          lastName: order.lastName,
+          email: order.email,
+          phone: order.phone,
+          address: order.address,
+          apartment: order.apartment ?? null,
+          city: order.city,
+          state: order.state,
+          postalCode: order.postalCode,
+          country: order.country,
+          total: order.total ? String(order.total) : null,
+          userId: order.userId ?? null,
+          paymentStatus: order.paymentStatus ?? "pending",
+          paymentProvider: order.paymentProvider ?? null,
+          stripeSessionId: order.stripeSessionId ?? null,
+          stripePaymentIntentId: order.stripePaymentIntentId ?? null,
+          mpesaReceiptNumber: order.mpesaReceiptNumber ?? null,
+        })
+        .returning();
 
       if (items.length > 0) {
         await tx.insert(orderItems).values(
@@ -365,12 +377,48 @@ export class DatabaseStorage implements IStorage {
             productName: item.productName,
             price: item.price ? String(item.price) : null,
             quantity: item.quantity ?? 1,
-          }))
+          })),
         );
+
+        // Decrement stock for each ordered item
+        for (const item of items) {
+          const qty = item.quantity ?? 1;
+          await tx
+            .update(products)
+            .set({
+              stockQuantity: sql`GREATEST(${products.stockQuantity} - ${qty}, 0)`,
+              inStock: sql`CASE WHEN ${products.stockQuantity} - ${qty} <= 0 THEN false ELSE ${products.inStock} END`,
+            })
+            .where(eq(products.id, item.productId));
+        }
       }
 
       return newOrder;
     });
+  }
+
+  async decrementStock(productId: number, quantity: number): Promise<Product | undefined> {
+    const [updated] = await db
+      .update(products)
+      .set({
+        stockQuantity: sql`GREATEST(${products.stockQuantity} - ${quantity}, 0)`,
+        inStock: sql`CASE WHEN ${products.stockQuantity} - ${quantity} <= 0 THEN false ELSE ${products.inStock} END`,
+      })
+      .where(eq(products.id, productId))
+      .returning();
+    return updated;
+  }
+
+  async getLowStockProducts(threshold = 5): Promise<Product[]> {
+    return await db
+      .select()
+      .from(products)
+      .where(
+        and(
+          or(eq(products.approvalStatus, "approved"), eq(products.approvalStatus, "APPROVED")),
+          lte(products.stockQuantity, threshold),
+        ),
+      );
   }
 
   async getAllOrders(): Promise<Order[]> {
@@ -382,18 +430,34 @@ export class DatabaseStorage implements IStorage {
     return order;
   }
 
-  async updateOrderPayment(id: number, data: {
-    paymentStatus?: string;
-    paymentProvider?: string;
-    stripeSessionId?: string;
-    stripePaymentIntentId?: string;
-    mpesaReceiptNumber?: string;
-  }): Promise<Order | undefined> {
+  async getOrderByStripeSessionId(sessionId: string): Promise<Order | undefined> {
+    const [order] = await db.select().from(orders).where(eq(orders.stripeSessionId, sessionId));
+    return order;
+  }
+
+  async getOrdersByUserId(userId: number): Promise<Order[]> {
+    return await db
+      .select()
+      .from(orders)
+      .where(eq(orders.userId, String(userId)));
+  }
+
+  async updateOrderPayment(
+    id: number,
+    data: {
+      paymentStatus?: string;
+      paymentProvider?: string;
+      stripeSessionId?: string;
+      stripePaymentIntentId?: string;
+      mpesaReceiptNumber?: string;
+    },
+  ): Promise<Order | undefined> {
     const updates: Record<string, any> = {};
     if (data.paymentStatus !== undefined) updates.paymentStatus = data.paymentStatus;
     if (data.paymentProvider !== undefined) updates.paymentProvider = data.paymentProvider;
     if (data.stripeSessionId !== undefined) updates.stripeSessionId = data.stripeSessionId;
-    if (data.stripePaymentIntentId !== undefined) updates.stripePaymentIntentId = data.stripePaymentIntentId;
+    if (data.stripePaymentIntentId !== undefined)
+      updates.stripePaymentIntentId = data.stripePaymentIntentId;
     if (data.mpesaReceiptNumber !== undefined) updates.mpesaReceiptNumber = data.mpesaReceiptNumber;
 
     if (Object.keys(updates).length === 0) return this.getOrderById(id);
@@ -419,10 +483,7 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return updated;
     } else {
-      const [created] = await db
-        .insert(siteSettings)
-        .values({ key, value })
-        .returning();
+      const [created] = await db.insert(siteSettings).values({ key, value }).returning();
       return created;
     }
   }
@@ -477,10 +538,7 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return updated;
     } else {
-      const [created] = await db
-        .insert(siteContent)
-        .values({ type, content })
-        .returning();
+      const [created] = await db.insert(siteContent).values({ type, content }).returning();
       return created;
     }
   }
@@ -492,27 +550,24 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPublicFaqs(): Promise<Faq[]> {
-    return await db
-      .select()
-      .from(faqs)
-      .where(eq(faqs.status, "approved"));
+    return await db.select().from(faqs).where(eq(faqs.status, "approved"));
   }
 
   async getVendorFaqs(vendorId: number): Promise<Faq[]> {
-    return await db
-      .select()
-      .from(faqs)
-      .where(eq(faqs.submittedBy, vendorId));
+    return await db.select().from(faqs).where(eq(faqs.submittedBy, vendorId));
   }
 
   async createFaq(faq: InsertFaq): Promise<Faq> {
-    const [newFaq] = await db.insert(faqs).values({
-      question: faq.question,
-      answer: faq.answer,
-      status: faq.status ?? "pending",
-      submittedBy: faq.submittedBy ?? null,
-      displayOrder: faq.displayOrder ?? 0,
-    }).returning();
+    const [newFaq] = await db
+      .insert(faqs)
+      .values({
+        question: faq.question,
+        answer: faq.answer,
+        status: faq.status ?? "pending",
+        submittedBy: faq.submittedBy ?? null,
+        displayOrder: faq.displayOrder ?? 0,
+      })
+      .returning();
     return newFaq;
   }
 
@@ -579,10 +634,7 @@ export class DatabaseStorage implements IStorage {
       return existing[0];
     }
 
-    const [subscriber] = await db
-      .insert(newsletterSubscribers)
-      .values({ email })
-      .returning();
+    const [subscriber] = await db.insert(newsletterSubscribers).values({ email }).returning();
     return subscriber;
   }
 
@@ -592,6 +644,38 @@ export class DatabaseStorage implements IStorage {
 
   async deleteNewsletterSubscriber(id: number): Promise<boolean> {
     const result = await db.delete(newsletterSubscribers).where(eq(newsletterSubscribers.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  // ── Testimonial Operations ───────────────────────────────────────────────
+
+  async getPublicTestimonials(): Promise<Testimonial[]> {
+    return await db.select().from(testimonials).where(eq(testimonials.status, "approved"));
+  }
+
+  async getAllTestimonials(): Promise<Testimonial[]> {
+    return await db.select().from(testimonials);
+  }
+
+  async createTestimonial(testimonial: InsertTestimonial): Promise<Testimonial> {
+    const [newTestimonial] = await db.insert(testimonials).values(testimonial).returning();
+    return newTestimonial;
+  }
+
+  async updateTestimonial(
+    id: number,
+    data: Partial<InsertTestimonial>,
+  ): Promise<Testimonial | undefined> {
+    const [updated] = await db
+      .update(testimonials)
+      .set(data)
+      .where(eq(testimonials.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTestimonial(id: number): Promise<boolean> {
+    const result = await db.delete(testimonials).where(eq(testimonials.id, id));
     return (result.rowCount ?? 0) > 0;
   }
 
@@ -658,9 +742,23 @@ export class DatabaseStorage implements IStorage {
     const existing = await this.getAllFaqs();
     if (existing.length === 0) {
       const defaults = [
-        { question: "What is your return policy?", answer: "You can return any item within 30 days of purchase for a full refund.", displayOrder: 1 },
-        { question: "How long does shipping take?", answer: "Standard shipping takes 5-7 business days. Express shipping takes 2-3 business days.", displayOrder: 2 },
-        { question: "Do you ship internationally?", answer: "Yes, we ship to over 50 countries worldwide. Shipping costs vary by destination.", displayOrder: 3 },
+        {
+          question: "What is your return policy?",
+          answer: "You can return any item within 30 days of purchase for a full refund.",
+          displayOrder: 1,
+        },
+        {
+          question: "How long does shipping take?",
+          answer:
+            "Standard shipping takes 5-7 business days. Express shipping takes 2-3 business days.",
+          displayOrder: 2,
+        },
+        {
+          question: "Do you ship internationally?",
+          answer:
+            "Yes, we ship to over 50 countries worldwide. Shipping costs vary by destination.",
+          displayOrder: 3,
+        },
       ];
       for (const faq of defaults) {
         await db.insert(faqs).values({ ...faq, status: "approved" });
@@ -670,7 +768,11 @@ export class DatabaseStorage implements IStorage {
 
   // ── Password Reset Token Operations ───────────────────────────────────────
 
-  async createResetToken(userId: number, token: string, expiresAt: Date): Promise<PasswordResetToken> {
+  async createResetToken(
+    userId: number,
+    token: string,
+    expiresAt: Date,
+  ): Promise<PasswordResetToken> {
     const [record] = await db
       .insert(passwordResetTokens)
       .values({ userId, token, expiresAt, used: false })
@@ -773,7 +875,9 @@ export class DatabaseStorage implements IStorage {
       .limit(limit);
   }
 
-  async getAllLoyaltyAccounts(): Promise<(LoyaltyAccount & { userName: string; userEmail: string })[]> {
+  async getAllLoyaltyAccounts(): Promise<
+    (LoyaltyAccount & { userName: string; userEmail: string })[]
+  > {
     const rows = await db
       .select({
         id: loyaltyAccounts.id,
@@ -796,7 +900,12 @@ export class DatabaseStorage implements IStorage {
     await db.insert(auditLogs).values(entry);
   }
 
-  async getAuditLogs(filters: { userId?: number; entityType?: string; limit?: number; offset?: number }): Promise<AuditLog[]> {
+  async getAuditLogs(filters: {
+    userId?: number;
+    entityType?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<AuditLog[]> {
     const conditions = [];
     if (filters.userId !== undefined) conditions.push(eq(auditLogs.userId, filters.userId));
     if (filters.entityType) conditions.push(eq(auditLogs.entityType, filters.entityType));

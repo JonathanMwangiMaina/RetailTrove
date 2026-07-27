@@ -90,10 +90,7 @@ export async function createLemonSqueezyCheckout(params: {
  * Verify a Lemon Squeezy webhook signature.
  * Uses the raw body buffer and the `x-signature` header.
  */
-export function verifyLemonSqueezyWebhook(
-  rawBody: Buffer,
-  signature: string | undefined,
-): boolean {
+export function verifyLemonSqueezyWebhook(rawBody: Buffer, signature: string | undefined): boolean {
   if (!LS_WEBHOOK_SECRET || !signature) return false;
 
   const hmac = crypto.createHmac("sha256", LS_WEBHOOK_SECRET);
@@ -169,10 +166,10 @@ function eatTimestamp(date: Date): string {
  * or `{ error }` on failure.
  */
 export async function initiateMpesaStkPush(params: {
-  phone: string;       // 254XXXXXXXXX
-  amount: number;      // whole KES
+  phone: string; // 254XXXXXXXXX
+  amount: number; // whole KES
   orderId: number;
-  accountRef: string;  // max 12 chars
+  accountRef: string; // max 12 chars
 }): Promise<{ MerchantRequestID?: string; CheckoutRequestID?: string; error?: string }> {
   if (!MPESA_CONSUMER_KEY) return { error: "MPESA_CONSUMER_KEY is not configured" };
   if (!MPESA_CONSUMER_SECRET) return { error: "MPESA_CONSUMER_SECRET is not configured" };

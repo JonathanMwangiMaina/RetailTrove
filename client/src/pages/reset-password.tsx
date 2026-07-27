@@ -9,6 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Loader2, ArrowLeft, CheckCircle2, AlertTriangle } from "lucide-react";
 
 export default function ResetPasswordPage() {
+  useEffect(() => {
+    document.title = "Reset Password - RetailTrove";
+  }, []);
   const [, params] = useLocation();
   const { toast } = useToast();
   const [password, setPassword] = useState("");
@@ -19,21 +22,26 @@ export default function ResetPasswordPage() {
 
   const urlParams = new URLSearchParams(window.location.search);
   const token = urlParams.get("token");
-
-  useEffect(() => {
-    if (!token) {
-      setError("No reset token found. Please request a new password reset link.");
-    }
-  }, [token]);
+  const initialError = !token
+    ? "No reset token found. Please request a new password reset link."
+    : null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (password !== confirmPassword) {
-      toast({ title: "Passwords don't match", description: "Please make sure both passwords are the same.", variant: "destructive" });
+      toast({
+        title: "Passwords don't match",
+        description: "Please make sure both passwords are the same.",
+        variant: "destructive",
+      });
       return;
     }
     if (password.length < 6) {
-      toast({ title: "Password too short", description: "Password must be at least 6 characters.", variant: "destructive" });
+      toast({
+        title: "Password too short",
+        description: "Password must be at least 6 characters.",
+        variant: "destructive",
+      });
       return;
     }
     setLoading(true);
@@ -47,7 +55,7 @@ export default function ResetPasswordPage() {
     }
   }
 
-  if (error && !token) {
+  if (error || initialError) {
     return (
       <div className="min-h-[calc(100vh-8rem)] flex items-center justify-center bg-gray-50 px-4">
         <div className="w-full max-w-md">
@@ -64,7 +72,7 @@ export default function ResetPasswordPage() {
                 <AlertTriangle className="h-6 w-6 text-red-600" />
               </div>
               <CardTitle>Invalid Reset Link</CardTitle>
-              <CardDescription>{error}</CardDescription>
+              <CardDescription>{error || initialError}</CardDescription>
             </CardHeader>
             <CardContent className="text-center">
               <Link href="/forgot-password">
@@ -91,9 +99,7 @@ export default function ResetPasswordPage() {
         <Card>
           <CardHeader className="text-center">
             <CardTitle>Set a new password</CardTitle>
-            <CardDescription>
-              Enter your new password below.
-            </CardDescription>
+            <CardDescription>Enter your new password below.</CardDescription>
           </CardHeader>
           <CardContent>
             {success ? (
@@ -141,7 +147,9 @@ export default function ResetPasswordPage() {
                 </div>
                 <Button type="submit" className="w-full" disabled={loading || !token}>
                   {loading ? (
-                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Resetting…</>
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Resetting…
+                    </>
                   ) : (
                     "Reset password"
                   )}
@@ -150,7 +158,10 @@ export default function ResetPasswordPage() {
             )}
 
             <div className="mt-6 text-center">
-              <Link href="/login" className="inline-flex items-center text-sm text-primary-600 hover:text-primary-800">
+              <Link
+                href="/login"
+                className="inline-flex items-center text-sm text-primary-600 hover:text-primary-800"
+              >
                 <ArrowLeft className="h-4 w-4 mr-1" />
                 Back to sign in
               </Link>

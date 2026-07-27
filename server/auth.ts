@@ -6,9 +6,11 @@
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import zxcvbn from "zxcvbn";
 import { storage } from "./storage.js";
 import { insertUserSchema } from "../shared/schema.js";
 import { sendPasswordResetEmail } from "./email.js";
+import { authLimiter } from "./middleware/rate-limiter.js";
 
 /* ============================================================================
  * 1. SESSION TYPE DECLARATION
@@ -78,6 +80,15 @@ export function setupAuth(app: Express) {
         return res.status(400).json({ message: "Password is required" });
       }
 
+      const strength = zxcvbn(parsedInput.password);
+      if (strength.score < 2) {
+        return res
+          .status(400)
+          .json({
+            message: "Password is too weak. Please use a mix of letters, numbers, and symbols.",
+          });
+      }
+
       const passwordHash = await hashPassword(parsedInput.password);
 
       const newUser = await storage.createUser({
@@ -111,7 +122,7 @@ export function setupAuth(app: Express) {
         return res.status(400).json({ message: "Password is required" });
       }
 
-      let user = authUserId
+      const user = authUserId
         ? await storage.getUserByAuthUserId(authUserId)
         : await storage.getUserByEmail(email);
 
@@ -153,7 +164,7 @@ export function setupAuth(app: Express) {
         return res.status(401).json({ message: "User session invalid" });
       }
 
-      const { passwordHash, password, ...sanitizedUser } = user as Record<string, any>;
+      const { passwordHash: _ph, password: _pw, ...sanitizedUser } = user as Record<string, any>;
       res.json(sanitizedUser);
     } catch (error) {
       console.error("Error fetching active user session:", error);
@@ -187,7 +198,9 @@ export function setupAuth(app: Express) {
 
       // Always return success to prevent email enumeration
       if (!user) {
-        return res.json({ message: "If an account with that email exists, a reset link has been sent." });
+        return res.json({
+          message: "If an account with that email exists, a reset link has been sent.",
+        });
       }
 
       const token = crypto.randomBytes(32).toString("hex");
@@ -195,9 +208,10 @@ export function setupAuth(app: Express) {
 
       await storage.createResetToken(user.id, token, expiresAt);
 
-      const baseUrl = process.env.APP_URL || process.env.VERCEL_URL
-        ? `https://${process.env.VERCEL_URL}`
-        : "http://localhost:5000";
+      const baseUrl =
+        process.env.APP_URL || process.env.VERCEL_URL
+          ? `https://${process.env.VERCEL_URL}`
+          : "http://localhost:5000";
       const resetUrl = `${baseUrl}/reset-password?token=${token}`;
 
       await sendPasswordResetEmail(email, resetUrl);
@@ -219,6 +233,15 @@ export function setupAuth(app: Express) {
 
       if (password.length < 6) {
         return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+
+      const strength = zxcvbn(password);
+      if (strength.score < 2) {
+        return res
+          .status(400)
+          .json({
+            message: "Password is too weak. Please use a mix of letters, numbers, and symbols.",
+          });
       }
 
       const resetToken = await storage.getResetToken(token);
@@ -246,12 +269,12 @@ export function setupAuth(app: Express) {
     }
   };
 
-  router.post("/register", handleRegister);
-  router.post("/login", handleLogin);
+  router.post("/register", authLimiter, handleRegister);
+  router.post("/login", authLimiter, handleLogin);
   router.get("/me", handleGetCurrentUser);
   router.post("/logout", handleLogout);
-  router.post("/forgot-password", handleForgotPassword);
-  router.post("/reset-password", handleResetPassword);
+  router.post("/forgot-password", authLimiter, handleForgotPassword);
+  router.post("/reset-password", authLimiter, handleResetPassword);
 
   app.use("/api/auth", router);
 }

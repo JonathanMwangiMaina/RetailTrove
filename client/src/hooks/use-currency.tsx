@@ -1,5 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { formatPrice as formatPriceUtil, convertCurrency, getCurrency, type Currency } from "@/lib/currencies";
+import {
+  formatPrice as formatPriceUtil,
+  convertCurrency,
+  getCurrency,
+  type Currency,
+} from "@/lib/currencies";
 
 const DEFAULT_CURRENCY = "USD";
 
@@ -8,8 +13,7 @@ export function useCurrency() {
     queryKey: ["/api/site-settings"],
   });
 
-  const currencyCode =
-    settings?.find((s) => s.key === "site_currency")?.value || DEFAULT_CURRENCY;
+  const currencyCode = settings?.find((s) => s.key === "site_currency")?.value || DEFAULT_CURRENCY;
 
   const currency: Currency | undefined = getCurrency(currencyCode);
 

@@ -4,7 +4,12 @@ import xss from "xss";
 function sanitizeValue(value: unknown): unknown {
   if (typeof value === "string") return xss(value);
   if (Array.isArray(value)) return value.map(sanitizeValue);
-  if (value && typeof value === "object" && !(value instanceof Date) && !(value instanceof Buffer)) {
+  if (
+    value &&
+    typeof value === "object" &&
+    !(value instanceof Date) &&
+    !(value instanceof Buffer)
+  ) {
     const sanitized: Record<string, unknown> = {};
     for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
       sanitized[key] = sanitizeValue(val);

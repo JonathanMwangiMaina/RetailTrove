@@ -37,7 +37,7 @@ describe("COUNTRIES_BY_NAME", () => {
   it("is sorted alphabetically by name", () => {
     for (let i = 1; i < COUNTRIES_BY_NAME.length; i++) {
       expect(
-        COUNTRIES_BY_NAME[i - 1].name.localeCompare(COUNTRIES_BY_NAME[i].name)
+        COUNTRIES_BY_NAME[i - 1].name.localeCompare(COUNTRIES_BY_NAME[i].name),
       ).toBeLessThanOrEqual(0);
     }
   });

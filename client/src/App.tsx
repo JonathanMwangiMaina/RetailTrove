@@ -8,6 +8,7 @@ import Footer from "@/components/layout/footer";
 import { CartProvider } from "@/hooks/use-cart";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 // ── Lazy-loaded Page Components for Code Splitting ──────────────────────────
 const Home = lazy(() => import("@/pages/home"));
@@ -54,28 +55,36 @@ function Router() {
   return (
     <>
       <VisitTracker />
-      <Suspense fallback={<PageLoader />}>
-        <Switch>
-          <Route path="/" component={Home} />
-          <Route path="/shop" component={Shop} />
-          <Route path="/shop/:category" component={Shop} />
-          <Route path="/product/:id" component={Product} />
-          <Route path="/checkout" component={Checkout} />
-          <Route path="/order-confirmation" component={OrderConfirmation} />
-          <Route path="/about" component={About} />
-          <Route path="/contact" component={Contact} />
-          <Route path="/faq" component={FaqPage} />
-          <Route path="/privacy" component={Privacy} />
-          <Route path="/terms" component={Terms} />
-          <Route path="/login" component={LoginPage} />
-          <Route path="/forgot-password" component={ForgotPasswordPage} />
-          <Route path="/reset-password" component={ResetPasswordPage} />
-          <Route path="/admin" component={AdminPage} />
-          <Route path="/vendor" component={VendorPage} />
-          <Route path="/account" component={AccountPage} />
-          <Route component={NotFound} />
-        </Switch>
-      </Suspense>
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-[9999] focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:shadow-md"
+      >
+        Skip to main content
+      </a>
+      <ErrorBoundary>
+        <Suspense fallback={<PageLoader />}>
+          <Switch>
+            <Route path="/" component={Home} />
+            <Route path="/shop" component={Shop} />
+            <Route path="/shop/:category" component={Shop} />
+            <Route path="/product/:id" component={Product} />
+            <Route path="/checkout" component={Checkout} />
+            <Route path="/order-confirmation" component={OrderConfirmation} />
+            <Route path="/about" component={About} />
+            <Route path="/contact" component={Contact} />
+            <Route path="/faq" component={FaqPage} />
+            <Route path="/privacy" component={Privacy} />
+            <Route path="/terms" component={Terms} />
+            <Route path="/login" component={LoginPage} />
+            <Route path="/forgot-password" component={ForgotPasswordPage} />
+            <Route path="/reset-password" component={ResetPasswordPage} />
+            <Route path="/admin" component={AdminPage} />
+            <Route path="/vendor" component={VendorPage} />
+            <Route path="/account" component={AccountPage} />
+            <Route component={NotFound} />
+          </Switch>
+        </Suspense>
+      </ErrorBoundary>
     </>
   );
 }
@@ -88,7 +97,7 @@ function App() {
           <Toaster />
           <div className="flex flex-col min-h-screen">
             <Header />
-            <main className="flex-grow">
+            <main id="main-content" className="flex-grow">
               <Router />
             </main>
             <Footer />

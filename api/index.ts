@@ -63,59 +63,71 @@ app.post(
 );
 
 // ── M-Pesa Callback ─────────────────────────────────────────────────────────
-app.post(
-  "/api/mpesa/callback",
-  express.json(),
-  async (req: Request, res: Response) => {
-    res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
+app.post("/api/mpesa/callback", express.json(), async (req: Request, res: Response) => {
+  res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
 
-    try {
-      const { Body } = req.body;
-      const { stkCallback } = Body ?? {};
-      if (!stkCallback) return;
+  try {
+    const { Body } = req.body;
+    const { stkCallback } = Body ?? {};
+    if (!stkCallback) return;
 
-      const { ResultCode, ResultDesc, CallbackMetadata } = stkCallback;
+    const { ResultCode, ResultDesc, CallbackMetadata } = stkCallback;
 
-      const allOrders = await storage.getAllOrders();
-      const order = allOrders.find(
-        (o) => o.stripeSessionId === stkCallback.CheckoutRequestID,
+    const order = await storage.getOrderByStripeSessionId(stkCallback.CheckoutRequestID);
+
+    if (!order) {
+      console.warn(
+        `[M-Pesa] No order found for CheckoutRequestID: ${stkCallback.CheckoutRequestID}`,
       );
-
-      if (!order) {
-        console.warn(`[M-Pesa] No order found for CheckoutRequestID: ${stkCallback.CheckoutRequestID}`);
-        return;
-      }
-
-      if (ResultCode === 0) {
-        const metadata: Record<string, any> = {};
-        (CallbackMetadata?.Item ?? []).forEach((item: any) => {
-          metadata[item.Name] = item.Value;
-        });
-
-        await storage.updateOrderPayment(order.id, {
-          paymentStatus: "paid",
-          mpesaReceiptNumber: metadata.MpesaReceiptNumber ?? null,
-        });
-        console.log(`[M-Pesa] Order #${order.id} paid — receipt: ${metadata.MpesaReceiptNumber}`);
-      } else {
-        await storage.updateOrderPayment(order.id, { paymentStatus: "failed" });
-        console.warn(`[M-Pesa] Order #${order.id} failed: ${ResultDesc} (code: ${ResultCode})`);
-      }
-    } catch (err: any) {
-      console.error("[M-Pesa] callback processing error:", err.message);
+      return;
     }
-  },
-);
+
+    if (ResultCode === 0) {
+      const metadata: Record<string, any> = {};
+      (CallbackMetadata?.Item ?? []).forEach((item: any) => {
+        metadata[item.Name] = item.Value;
+      });
+
+      await storage.updateOrderPayment(order.id, {
+        paymentStatus: "paid",
+        mpesaReceiptNumber: metadata.MpesaReceiptNumber ?? null,
+      });
+      console.log(`[M-Pesa] Order #${order.id} paid — receipt: ${metadata.MpesaReceiptNumber}`);
+    } else {
+      await storage.updateOrderPayment(order.id, { paymentStatus: "failed" });
+      console.warn(`[M-Pesa] Order #${order.id} failed: ${ResultDesc} (code: ${ResultCode})`);
+    }
+  } catch (err: any) {
+    console.error("[M-Pesa] callback processing error:", err.message);
+  }
+});
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-app.use(helmet({
-  contentSecurityPolicy: false,
-  hsts: false,
-  frameguard: { action: "deny" },
-  referrerPolicy: { policy: "strict-origin-when-cross-origin" },
-}));
+const isDev = process.env.NODE_ENV !== "production";
+
+app.use(
+  helmet({
+    contentSecurityPolicy: isDev
+      ? false
+      : {
+          directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            imgSrc: ["'self'", "data:", "https:"],
+            connectSrc: ["'self'"],
+            fontSrc: ["'self'"],
+            objectSrc: ["'none'"],
+            frameAncestors: ["'none'"],
+          },
+        },
+    hsts: isDev ? false : { maxAge: 31536000, includeSubDomains: true },
+    frameguard: { action: "deny" },
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+  }),
+);
 
 app.use((req: Request, _res: Response, next: NextFunction) => {
   req.headers["x-request-id"] = req.headers["x-request-id"] || crypto.randomUUID();

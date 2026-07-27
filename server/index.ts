@@ -23,23 +23,27 @@ if (!SESSION_SECRET) {
 
 const isDev = process.env.NODE_ENV !== "production";
 
-app.use(helmet({
-  contentSecurityPolicy: isDev ? false : {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'"],
-      fontSrc: ["'self'"],
-      objectSrc: ["'none'"],
-      frameAncestors: ["'none'"],
-    },
-  },
-  hsts: isDev ? false : { maxAge: 31536000, includeSubDomains: true },
-  frameguard: { action: "deny" },
-  referrerPolicy: { policy: "strict-origin-when-cross-origin" },
-}));
+app.use(
+  helmet({
+    contentSecurityPolicy: isDev
+      ? false
+      : {
+          directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            imgSrc: ["'self'", "data:", "https:"],
+            connectSrc: ["'self'"],
+            fontSrc: ["'self'"],
+            objectSrc: ["'none'"],
+            frameAncestors: ["'none'"],
+          },
+        },
+    hsts: isDev ? false : { maxAge: 31536000, includeSubDomains: true },
+    frameguard: { action: "deny" },
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+  }),
+);
 
 // ── Lemon Squeezy Webhook (must be before express.json to get raw body) ──────
 app.post(
@@ -60,7 +64,6 @@ app.post(
       const orderId = Number(payload?.meta?.custom_data?.order_id);
 
       if (eventName === "order_created") {
-        const attrs = payload?.data?.attributes;
         if (orderId) {
           await storage.updateOrderPayment(orderId, {
             paymentStatus: "paid",
@@ -85,50 +88,52 @@ app.post(
 );
 
 // ── M-Pesa Callback ─────────────────────────────────────────────────────────
-app.post(
-  "/api/mpesa/callback",
-  express.json(),
-  async (req: Request, res: Response) => {
-    // Always respond 200 immediately — Safaricom retries aggressively on failure
-    res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
+app.post("/api/mpesa/callback", express.json(), async (req: Request, res: Response) => {
+  // Always respond 200 immediately — Safaricom retries aggressively on failure
+  res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
 
-    try {
-      const { Body } = req.body;
-      const { stkCallback } = Body ?? {};
-      if (!stkCallback) return;
+  try {
+    const { Body } = req.body;
+    const { stkCallback } = Body ?? {};
+    if (!stkCallback) return;
 
-      const { ResultCode, ResultDesc, MerchantRequestID, CheckoutRequestID, CallbackMetadata } = stkCallback;
+    const {
+      ResultCode,
+      ResultDesc,
+      MerchantRequestID: _mrid,
+      CheckoutRequestID,
+      CallbackMetadata,
+    } = stkCallback;
 
-      // Find order by CheckoutRequestID (stored in stripe_session_id)
-      const allOrders = await storage.getAllOrders();
-      const order = allOrders.find((o) => o.stripeSessionId === CheckoutRequestID);
+    const order = await storage.getOrderByStripeSessionId(CheckoutRequestID);
 
-      if (!order) {
-        console.warn(`[M-Pesa] No order found for CheckoutRequestID: ${CheckoutRequestID}`);
-        return;
-      }
-
-      if (ResultCode === 0) {
-        // Extract receipt number from callback metadata
-        const metadata: Record<string, any> = {};
-        (CallbackMetadata?.Item ?? []).forEach((item: any) => {
-          metadata[item.Name] = item.Value;
-        });
-
-        await storage.updateOrderPayment(order.id, {
-          paymentStatus: "paid",
-          mpesaReceiptNumber: metadata.MpesaReceiptNumber ?? null,
-        });
-        console.log(`[M-Pesa] Order #${order.id} paid — receipt: ${metadata.MpesaReceiptNumber}`);
-      } else {
-        await storage.updateOrderPayment(order.id, { paymentStatus: "failed" });
-        console.warn(`[M-Pesa] Order #${order.id} payment failed: ${ResultDesc} (code: ${ResultCode})`);
-      }
-    } catch (err: any) {
-      console.error("[M-Pesa] callback processing error:", err.message);
+    if (!order) {
+      console.warn(`[M-Pesa] No order found for CheckoutRequestID: ${CheckoutRequestID}`);
+      return;
     }
-  },
-);
+
+    if (ResultCode === 0) {
+      // Extract receipt number from callback metadata
+      const metadata: Record<string, any> = {};
+      (CallbackMetadata?.Item ?? []).forEach((item: any) => {
+        metadata[item.Name] = item.Value;
+      });
+
+      await storage.updateOrderPayment(order.id, {
+        paymentStatus: "paid",
+        mpesaReceiptNumber: metadata.MpesaReceiptNumber ?? null,
+      });
+      console.log(`[M-Pesa] Order #${order.id} paid — receipt: ${metadata.MpesaReceiptNumber}`);
+    } else {
+      await storage.updateOrderPayment(order.id, { paymentStatus: "failed" });
+      console.warn(
+        `[M-Pesa] Order #${order.id} payment failed: ${ResultDesc} (code: ${ResultCode})`,
+      );
+    }
+  } catch (err: any) {
+    console.error("[M-Pesa] callback processing error:", err.message);
+  }
+});
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
@@ -157,7 +162,7 @@ app.use(
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
     },
-  })
+  }),
 );
 
 app.use(globalLimiter);

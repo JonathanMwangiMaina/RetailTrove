@@ -13,7 +13,6 @@ import type {
   InsertProduct,
   Order,
   InsertOrder,
-  OrderItem,
   InsertOrderItem,
   CartItem,
   InsertCartItem,
@@ -21,20 +20,18 @@ import type {
   BannerSettings,
   InsertBannerSettings,
   SiteContent,
-  InsertSiteContent,
   SiteSettings,
-  InsertSiteSettings,
   Faq,
   InsertFaq,
   UserVisit,
-  InsertUserVisit,
   NewsletterSubscriber,
-  InsertNewsletterSubscriber,
   PasswordResetToken,
   LoyaltyAccount,
   LoyaltyTransaction,
   AuditLog,
   InsertAuditLog,
+  Testimonial,
+  InsertTestimonial,
 } from "../shared/schema.js";
 import { databaseStorage } from "./database-storage.js";
 
@@ -56,7 +53,16 @@ export interface IStorage {
   // ── Product Operations ─────────────────────────────────────────────────────
 
   getAllProducts(): Promise<Product[]>;
-  getProductsPaginated(params: { cursor?: number; limit?: number; category?: string; q?: string }): Promise<{ data: Product[]; nextCursor: number | null }>;
+  getProductsPaginated(params: {
+    cursor?: number;
+    limit?: number;
+    category?: string;
+    q?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    minRating?: number;
+    inStock?: boolean;
+  }): Promise<{ data: Product[]; nextCursor: number | null }>;
   getFeaturedProducts(): Promise<Product[]>;
   getNewArrivals(): Promise<Product[]>;
   getProductsByCategory(category: string): Promise<Product[]>;
@@ -71,6 +77,7 @@ export interface IStorage {
   // ── Cart Operations ────────────────────────────────────────────────────────
 
   getCart(cartId: string): Promise<CartItemWithProduct[]>;
+  getCartItemById(id: number): Promise<CartItem | undefined>;
   addToCart(item: InsertCartItem): Promise<CartItem>;
   updateCartItem(id: number, quantity: number): Promise<CartItem | undefined>;
   deleteCartItem(id: number): Promise<boolean>;
@@ -81,13 +88,21 @@ export interface IStorage {
   createOrder(order: InsertOrder, items: InsertOrderItem[]): Promise<Order>;
   getAllOrders(): Promise<Order[]>;
   getOrderById(id: number): Promise<Order | undefined>;
-  updateOrderPayment(id: number, data: {
-    paymentStatus?: string;
-    paymentProvider?: string;
-    stripeSessionId?: string;
-    stripePaymentIntentId?: string;
-    mpesaReceiptNumber?: string;
-  }): Promise<Order | undefined>;
+  getOrderByStripeSessionId(sessionId: string): Promise<Order | undefined>;
+  getOrdersByUserId(userId: number): Promise<Order[]>;
+  decrementStock(productId: number, quantity: number): Promise<Product | undefined>;
+  getLowStockProducts(threshold?: number): Promise<Product[]>;
+
+  updateOrderPayment(
+    id: number,
+    data: {
+      paymentStatus?: string;
+      paymentProvider?: string;
+      stripeSessionId?: string;
+      stripePaymentIntentId?: string;
+      mpesaReceiptNumber?: string;
+    },
+  ): Promise<Order | undefined>;
 
   // ── CMS & Settings Operations ──────────────────────────────────────────────
 
@@ -118,6 +133,14 @@ export interface IStorage {
   getNewsletterSubscribers(): Promise<NewsletterSubscriber[]>;
   deleteNewsletterSubscriber(id: number): Promise<boolean>;
 
+  // ── Testimonial Operations ───────────────────────────────────────────────
+
+  getPublicTestimonials(): Promise<Testimonial[]>;
+  getAllTestimonials(): Promise<Testimonial[]>;
+  createTestimonial(testimonial: InsertTestimonial): Promise<Testimonial>;
+  updateTestimonial(id: number, data: Partial<InsertTestimonial>): Promise<Testimonial | undefined>;
+  deleteTestimonial(id: number): Promise<boolean>;
+
   // ── Password Reset Token Operations ───────────────────────────────────────
 
   createResetToken(userId: number, token: string, expiresAt: Date): Promise<PasswordResetToken>;
@@ -127,15 +150,29 @@ export interface IStorage {
   // ── Loyalty Operations ────────────────────────────────────────────────────
 
   getLoyaltyAccount(userId: number): Promise<LoyaltyAccount>;
-  addLoyaltyPoints(userId: number, points: number, description: string, orderId?: number): Promise<LoyaltyTransaction>;
-  redeemLoyaltyPoints(userId: number, points: number, description: string): Promise<LoyaltyTransaction>;
+  addLoyaltyPoints(
+    userId: number,
+    points: number,
+    description: string,
+    orderId?: number,
+  ): Promise<LoyaltyTransaction>;
+  redeemLoyaltyPoints(
+    userId: number,
+    points: number,
+    description: string,
+  ): Promise<LoyaltyTransaction>;
   getLoyaltyTransactions(userId: number, limit?: number): Promise<LoyaltyTransaction[]>;
   getAllLoyaltyAccounts(): Promise<(LoyaltyAccount & { userName: string; userEmail: string })[]>;
 
   // ── Audit Log Operations ──────────────────────────────────────────────────
 
   createAuditLog(entry: InsertAuditLog): Promise<void>;
-  getAuditLogs(filters: { userId?: number; entityType?: string; limit?: number; offset?: number }): Promise<AuditLog[]>;
+  getAuditLogs(filters: {
+    userId?: number;
+    entityType?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<AuditLog[]>;
 
   // ── Bootstrap & Seed Handlers ──────────────────────────────────────────────
 

@@ -9,21 +9,111 @@ This project does not currently use semantic versioning — entries are dated.
 
 ## [Unreleased]
 
+### Added
+
+#### Advanced Product Filtering (Shop)
+- **Server-side filtering** on `GET /api/products`: new query params `minPrice`, `maxPrice`, `minRating`, `inStock` — all evaluated in PostgreSQL via Drizzle `gte`/`lte` conditions
+- **Price range slider** (KES 0–1000) in shop sidebar using `<Slider>` component
+- **Star rating filter** (0–5 minimum) with clickable star buttons
+- **In Stock Only toggle** using `<Switch>` component
+- **Clear all filters** button appears when any filter is active; also shown in empty-state
+- **Mobile filter drawer**: responsive `<Button>` toggles filter sidebar on small screens
+- Filter state reflected in query params for URL shareability
+- `FilterSidebar` extracted as standalone component (avoids React static-component lint errors)
+
+#### Inventory Management
+- **`decrementStock(productId, quantity)`** storage method: atomically decrements `stockQuantity` via `GREATEST(stock_quantity - qty, 0)` and auto-sets `inStock = false` when stock reaches 0
+- **Order creation now decrements stock**: `POST /api/orders` decrements each ordered item's stock within the same DB transaction as order + order_items insert — prevents overselling
+- **`getLowStockProducts(threshold)`** storage method: returns approved products at or below a stock threshold
+- **`GET /api/admin/low-stock`** endpoint: returns low-stock products (default threshold: 5)
+- **Low stock alert banner** in admin inventory tab: shows count of products with ≤5 units remaining
+- **Stock summary stats** in inventory tab: total units, out-of-stock count, low-stock count
+- **Stock filter buttons** in inventory tab: "All", "Low Stock", "Out of Stock" quick filters
+
+#### Analytics Dashboard
+- **4 new admin analytics endpoints:**
+  - `GET /api/admin/analytics/summary` — total revenue, paid revenue, orders, customers, vendors, products, total stock, low-stock count, out-of-stock count, total visits
+  - `GET /api/admin/analytics/sales-trend` — orders + revenue grouped by day (last 30 days)
+  - `GET /api/admin/analytics/top-products` — top 10 products by rating with price, stock, and category
+  - `GET /api/admin/analytics/visits-trend` — page visits grouped by day (last 30 days)
+- **Analytics admin tab** (`client/src/pages/admin/analytics-tab.tsx`):
+  - 6 summary metric cards (revenue, orders, customers, visits, products, low stock)
+  - Revenue trend line chart (recharts `<LineChart>`) — blue = revenue, green = orders
+  - Visits trend bar chart (recharts `<BarChart>`)
+  - Top products list with rating, stock, and category
+  - Loading skeletons while data fetches
+- **"Analytics" tab** added to admin dashboard shell (`admin.tsx`)
+
+#### Code Quality
+- **ESLint 10** (flat config) + **Prettier 3** configured across the project
+  - `eslint.config.mjs`: `@typescript-eslint`, `react-hooks`, `react-refresh`, `eslint-config-prettier`
+  - `.prettierrc`: 100 char width, double quotes, trailing commas, semicolons, LF
+  - Scripts: `lint`, `lint:fix`, `format`, `format:check`
+- All lint errors resolved (68 → 0 errors); warnings are all pre-existing `no-explicit-any`
+- Full Prettier formatting applied across client, server, api, shared directories
+
+#### SEO & Performance
+- **Edge prerendering** (`api/prerender.ts`): detects bot/crawler user agents and serves static HTML with Open Graph + Twitter Card meta tags for all public routes; non-bot visitors receive the normal SPA
+- **JSON-LD structured data**: Organization schema on home page, Product schema on product pages, FAQPage schema on FAQ page
+- **robots.txt** blocking admin/vendor/account/checkout/api paths
+- **sitemap.xml** with all public routes
+- **Dynamic page titles** on all 16 page components
+
+#### Password Security
+- **zxcvbn password strength validation**: server-side in `handleRegister` and `handleResetPassword` (rejects score < 2); real-time strength meter on registration form with colored bar and score text
+
+#### Testimonials System
+- `testimonials` table (`id`, `customerName`, `rating`, `comment`, `status`, `productId`, `submittedBy`, `createdAt`)
+- Public `GET /api/testimonials` returns approved testimonials; admin CRUD endpoints
+- Dynamic testimonials on home page with loading skeletons
+- SQL seed file for 4 initial testimonials (`migrations/seed_testimonials.sql`)
+
+#### Admin Page Refactor
+- Split monolithic `admin.tsx` (1107 lines) into 16 files: `constants.ts`, `types.ts`, `product-form-fields.tsx`, and 13 tab components (inventory, pending, orders, members, users, activity, faq, content, social, banner, newsletter, currency, audit)
+
+#### Database
+- **24 performance indexes** applied via Supabase SQL Editor (`migrations/0002_add_performance_indexes.sql`)
+- **4 new tables** created: `password_reset_tokens`, `loyalty_accounts`, `loyalty_transactions`, `audit_logs`
+
+#### Email Provider Migration
+- Replaced Resend with **Nodemailer + Brevo SMTP** (`server/email.ts` rewritten)
+- `nodemailer` + `@types/nodemailer` added; `resend` removed
+
+#### Cart & Order Security
+- Cart ownership verification: `PUT /api/cart/:id` and `DELETE /api/cart/:id` now verify `getCartItemById()` ownership (403 if mismatch)
+- Orders scoped to authenticated user: `GET /api/orders` filtered by `req.session.userId`
+
+### Changed
+- Profile dropdown in header: replaced custom div-based popover with **Radix DropdownMenu** (removed manual `profileRef`/click-outside/Escape useEffect)
+- Removed hardcoded demo credentials from login page (per user request)
+- `GET /api/products` now supports `minPrice`, `maxPrice`, `minRating`, `inStock` query params for server-side filtering
+- Shop page (`shop.tsx`) now sends filter params to server instead of client-side filtering; client only handles sort order
+- `vendor.tsx`: fixed all `any` types with proper interfaces (`VendorProduct`, `VendorFaq`, `Customer`, `ProductFormData`); `ProductForm` moved outside component; hooks reordered
+- Admin inventory tab: enhanced with low stock alerts, stock summary, and stock filter buttons
+
 ### Removed
+- `server/seed-testimonials.ts` (redundant — schema, storage, and DB now aligned)
 - 22 stale markdown docs (deployment checklists, migration logs, Vercel guides, planning docs)
 - `LOGIN_CREDENTIALS.txt` (plaintext credentials — security risk)
 - `import-to-supabase.sh` (one-time migration script, completed)
 - `esbuild.config.js` (unused — project uses Vite)
 - `serverless-http` dependency (incompatible with Vercel native runtime)
+- Demo credentials from login page (`admin@retailtrove.com` / `ChronicleBookKasuku26%`)
 
 ### Fixed
 - Vercel deployment: let Vercel compile `api/index.ts` natively instead of pre-bundling with esbuild
+- M-Pesa callback: now uses `getOrderByStripeSessionId()` direct DB lookup instead of relying on session state
+- CSP + HSTS headers enabled in production (`api/index.ts`)
+- `any` type annotations in `vendor.tsx` replaced with proper TypeScript interfaces
 
 ### Planned — Phase 4 (Performance & Scale)
 - Sentry error monitoring
 - Upgrade Express 4.21 → 5.x
 - Database read replicas
 - CDN image optimisation
+- Wishlists / favorites
+- Product variants (size, color, etc.)
+- Email notifications (shipping updates, marketing)
 
 ---
 

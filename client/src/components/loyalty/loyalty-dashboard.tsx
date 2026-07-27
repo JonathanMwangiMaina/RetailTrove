@@ -9,7 +9,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
 import { Star, TrendingUp, Gift, ArrowDownRight, ArrowUpRight, Loader2 } from "lucide-react";
 
@@ -32,7 +37,10 @@ interface LoyaltyTransaction {
   createdAt: string;
 }
 
-const TIER_CONFIG: Record<string, { label: string; color: string; next: number; nextTier: string }> = {
+const TIER_CONFIG: Record<
+  string,
+  { label: string; color: string; next: number; nextTier: string }
+> = {
   bronze: { label: "Bronze", color: "bg-orange-600", next: 500, nextTier: "Silver" },
   silver: { label: "Silver", color: "bg-gray-400", next: 2000, nextTier: "Gold" },
   gold: { label: "Gold", color: "bg-yellow-500", next: 5000, nextTier: "Platinum" },
@@ -91,7 +99,8 @@ export default function LoyaltyDashboard() {
   }
 
   const tier = TIER_CONFIG[account?.tier ?? "bronze"];
-  const progress = tier.next === Infinity ? 100 : Math.min(100, ((account?.points ?? 0) / tier.next) * 100);
+  const progress =
+    tier.next === Infinity ? 100 : Math.min(100, ((account?.points ?? 0) / tier.next) * 100);
 
   return (
     <div className="space-y-6">
@@ -149,10 +158,15 @@ export default function LoyaltyDashboard() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm font-medium">Progress to {tier.nextTier}</p>
-              <p className="text-sm text-muted-foreground">{account?.points ?? 0} / {tier.next} pts</p>
+              <p className="text-sm text-muted-foreground">
+                {account?.points ?? 0} / {tier.next} pts
+              </p>
             </div>
             <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-              <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${progress}%` }} />
+              <div
+                className="h-full bg-primary rounded-full transition-all"
+                style={{ width: `${progress}%` }}
+              />
             </div>
           </CardContent>
         </Card>
@@ -181,7 +195,11 @@ export default function LoyaltyDashboard() {
               onClick={() => {
                 const pts = parseInt(redeemAmount, 10);
                 if (!pts || pts < 1) {
-                  toast({ title: "Invalid amount", description: "Enter at least 1 point", variant: "destructive" });
+                  toast({
+                    title: "Invalid amount",
+                    description: "Enter at least 1 point",
+                    variant: "destructive",
+                  });
                   return;
                 }
                 redeemMutation.mutate(pts);
@@ -192,7 +210,9 @@ export default function LoyaltyDashboard() {
               Redeem
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground mt-2">100 points = {formatPrice(1.00)} store credit</p>
+          <p className="text-xs text-muted-foreground mt-2">
+            100 points = {formatPrice(1.0)} store credit
+          </p>
         </CardContent>
       </Card>
 
@@ -203,9 +223,13 @@ export default function LoyaltyDashboard() {
         </CardHeader>
         <CardContent>
           {txLoading ? (
-            <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
           ) : transactions.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">No transactions yet. Earn points by making purchases!</p>
+            <p className="text-center text-muted-foreground py-8">
+              No transactions yet. Earn points by making purchases!
+            </p>
           ) : (
             <div className="border rounded-md overflow-x-auto">
               <Table>
@@ -228,10 +252,15 @@ export default function LoyaltyDashboard() {
                         )}
                       </TableCell>
                       <TableCell className="text-sm">{tx.description}</TableCell>
-                      <TableCell className={`text-right font-medium ${tx.points > 0 ? "text-green-600" : "text-red-600"}`}>
-                        {tx.points > 0 ? "+" : ""}{tx.points}
+                      <TableCell
+                        className={`text-right font-medium ${tx.points > 0 ? "text-green-600" : "text-red-600"}`}
+                      >
+                        {tx.points > 0 ? "+" : ""}
+                        {tx.points}
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{timeAgo(tx.createdAt)}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {timeAgo(tx.createdAt)}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

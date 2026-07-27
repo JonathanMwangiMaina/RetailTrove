@@ -1,6 +1,6 @@
 # RetailTrove — Full-Stack E-Commerce Platform
 
-> **Status:** Phase 1 (Authentication, RBAC, Supabase PostgreSQL), Phase 2 (Payments — Lemon Squeezy + M-Pesa), and Phase 3 (Security Hardening & Quality) are all complete. Latest: **v0.4.0** — payments, helmet headers, CSRF, rate limiting, audit logging, multi-currency, loyalty system, and 35 Vitest tests.
+> **Status:** Phases 1–3 complete (Auth, RBAC, Payments, Security Hardening). Phase 4 in progress. Latest: **v0.4.0+** — advanced product filtering, inventory management with stock auto-decrement, analytics dashboard (recharts), ESLint + Prettier configured, edge prerendering, testimonials system, admin refactor.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19.1-61dafb)](https://react.dev/)
@@ -57,10 +57,10 @@ npm run db:push
 npm run dev
 ```
 
-**Demo Credentials:**
-- Admin: `admin@retailtrove.com` / `ChronicleBookKasuku26%`
-- Vendor: `vendor@retailtrove.com` / `vendor123`
-- Customer: Register via login page
+**Sign in/Register**
+- Admin: Register as admin (use "Admin" role)
+- Vendor: Register as vendor (use "Vendor" role)
+- Customer: Register as customer (default)
 
 ---
 
@@ -74,7 +74,7 @@ RetailTrove (branded as ModernRetail) is a production-ready, full-stack e-commer
 - Admin dashboard for product, user, content, and audit log management
 - Vendor portal for vendor-submitted product management and approval workflow
 - Role-based access control (Admin, Vendor, Customer)
-- Multi-currency system (155 currencies) with live conversion
+- Multi-currency system (170 currencies) with live conversion
 - Loyalty points system with tiered rewards
 - Security hardening: helmet, CSRF, rate limiting, input sanitisation, audit logging
 - Responsive design built on Tailwind CSS and Radix UI
@@ -125,7 +125,8 @@ The application runs as a monorepo with a unified Express backend serving both A
 | express-rate-limit | Rate limiting | 8.6.0 |
 | csrf-sync | CSRF protection | 4.2.1 |
 | xss | Input sanitisation | 1.0.15 |
-| resend | Transactional email | 6.12.4 |
+| nodemailer | Transactional email (Brevo SMTP) | 9.0.3 |
+| zxcvbn | Password strength validation | 4.4.2 |
 
 ---
 
@@ -135,6 +136,9 @@ The application runs as a monorepo with a unified Express backend serving both A
 retailtrove/
 │
 ├── client/                               # React frontend (Vite)
+│   ├── public/
+│   │   ├── robots.txt                    # SEO: blocks admin/vendor paths
+│   │   └── sitemap.xml                   # SEO: public route sitemap
 │   └── src/
 │       ├── App.tsx                       # Root routing & layout
 │       ├── main.tsx                      # React DOM entry + CSRF init
@@ -142,7 +146,7 @@ retailtrove/
 │       │
 │       ├── pages/                        # Route components
 │       │   ├── home.tsx                  # Landing page
-│       │   ├── shop.tsx                  # Product listing + filtering
+│       │   ├── shop.tsx                  # Product listing + advanced filtering (price, rating, stock)
 │       │   ├── product.tsx               # Product detail view
 │       │   ├── checkout.tsx              # Checkout (Lemon Squeezy / M-Pesa)
 │       │   ├── order-confirmation.tsx    # Post-purchase confirmation
@@ -151,6 +155,10 @@ retailtrove/
 │       │   ├── reset-password.tsx        # Password reset form
 │       │   ├── account.tsx               # Account page (loyalty dashboard)
 │       │   ├── admin.tsx                 # Admin dashboard (protected)
+│       │   ├── admin/
+│       │   │   ├── analytics-tab.tsx     # Analytics dashboard (recharts)
+│       │   │   ├── inventory-tab.tsx     # Inventory management with stock alerts
+│       │   │   └── ...                   # 13 other tab components
 │       │   ├── vendor.tsx                # Vendor dashboard (protected)
 │       │   ├── faq.tsx                   # Public FAQ listing
 │       │   ├── about.tsx                 # About page
@@ -177,19 +185,23 @@ retailtrove/
 │       │
 │       └── lib/
 │           ├── queryClient.ts            # TanStack Query + CSRF token
-│           ├── currencies.ts             # 155 currencies + formatPrice
+│           ├── currencies.ts             # 170 currencies + formatPrice
 │           ├── countries.ts              # 240 countries (ISO 3166-1)
 │           ├── utils.ts                  # Utility functions
 │           └── __tests__/                # Unit tests (currencies, countries)
 │
+├── api/                                # Vercel serverless functions
+│   ├── index.ts                        # Express app entry point
+│   └── prerender.ts                    # Edge function: bot prerendering
+│
 ├── server/
 │   ├── index.ts                          # Express bootstrap + webhooks
-│   ├── routes.ts                         # All API endpoints (~55+)
+│   ├── routes.ts                         # All API endpoints (~60+)
 │   ├── db.ts                             # Database connection (Supabase pooler)
 │   ├── storage.ts                        # IStorage interface + MemStorage
 │   ├── database-storage.ts               # DatabaseStorage implementation
-│   ├── auth.ts                           # Auth middleware + bcrypt
-│   ├── email.ts                          # Email utility (Resend)
+│   ├── auth.ts                           # Auth middleware + bcrypt + zxcvbn password validation
+│   ├── email.ts                          # Email utility (Nodemailer + Brevo SMTP)
 │   ├── payment-service.ts                # Lemon Squeezy + M-Pesa services
 │   ├── seed-supabase.ts                  # Refactored product seeder
 │   ├── vite.ts                           # Vite dev middleware
@@ -448,12 +460,14 @@ Routes are decoupled from the database via the repository pattern. `server/stora
 ```typescript
 interface IStorage {
   // Products
-  getProducts(): Promise<Product[]>
+  getAllProducts(): Promise<Product[]>
+  getProductsPaginated(params: { cursor?: number; limit?: number; category?: string; q?: string; minPrice?: number; maxPrice?: number; minRating?: number; inStock?: boolean }): Promise<{data: Product[], nextCursor: number | null}>
   getProductById(id: number): Promise<Product | undefined>
-  searchProducts(query: string): Promise<Product[]>
-  getProductsPaginated(cursor?: number, limit?: number, category?: string, q?: string): Promise<{data: Product[], nextCursor: number | null}>
+  // Inventory
+  decrementStock(productId: number, quantity: number): Promise<Product | undefined>
+  getLowStockProducts(threshold?: number): Promise<Product[]>
   // Users
-  getUser(id: string): Promise<User | undefined>
+  getUser(id: number | string): Promise<User | undefined>
   getUserByEmail(email: string): Promise<User | undefined>
   // ... 55+ methods
 }
@@ -471,7 +485,7 @@ Two implementations:
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/api/products` | All products |
+| GET | `/api/products` | All products (supports `cursor`, `limit`, `category`, `q`, `minPrice`, `maxPrice`, `minRating`, `inStock` query params) |
 | GET | `/api/products/featured` | Featured products |
 | GET | `/api/products/new-arrivals` | New arrival products |
 | GET | `/api/products/category/:category` | Products filtered by category |
@@ -516,9 +530,14 @@ Two implementations:
 | PUT | `/api/admin/products/:id/approve` | Approve/reject product |
 | GET | `/api/admin/visits` | All user visits |
 | GET | `/api/admin/users/:id/visits` | Visits for specific user |
+| GET | `/api/admin/low-stock` | Products with stock ≤ threshold (default: 5) |
 | GET | `/api/admin/newsletter/subscribers` | Newsletter subscribers |
 | DELETE | `/api/admin/newsletter/subscribers/:id` | Delete subscriber |
 | GET | `/api/admin/audit-logs` | Audit log entries (paginated) |
+| GET | `/api/admin/analytics/summary` | Dashboard metrics (revenue, orders, products, stock, visits) |
+| GET | `/api/admin/analytics/sales-trend` | Orders + revenue by day (last 30 days) |
+| GET | `/api/admin/analytics/top-products` | Top 10 products by rating |
+| GET | `/api/admin/analytics/visits-trend` | Page visits by day (last 30 days) |
 | PUT | `/api/admin/settings` | Update site settings (incl. `site_currency`) |
 
 ### Password Reset
@@ -584,7 +603,7 @@ Uses `wouter` for client-side SPA routing. All routes wrapped in:
 | Route | Component | Protection | Purpose |
 |---|---|---|---|
 | `/` | home.tsx | Public | Landing page with featured products |
-| `/shop` | shop.tsx | Public | Product browsing with filters |
+| `/shop` | shop.tsx | Public | Product browsing with advanced filters (price, rating, stock) |
 | `/product/:id` | product.tsx | Public | Product detail view |
 | `/checkout` | checkout.tsx | Public | Checkout (Lemon Squeezy / M-Pesa) |
 | `/order/:id` | order-confirmation.tsx | Public | Post-purchase confirmation |
@@ -592,7 +611,7 @@ Uses `wouter` for client-side SPA routing. All routes wrapped in:
 | `/forgot-password` | forgot-password.tsx | Public | Password reset request |
 | `/reset-password/:token` | reset-password.tsx | Public | Password reset form |
 | `/account` | account.tsx | Customer | Account page (loyalty dashboard) |
-| `/admin` | admin.tsx | Admin | Dashboard (users, products, orders, audit, currency) |
+| `/admin` | admin.tsx | Admin | Dashboard (users, products, orders, audit, analytics, currency) |
 | `/vendor` | vendor.tsx | Vendor | Vendor dashboard (products, FAQs) |
 | `/faq` | faq.tsx | Public | FAQ listing |
 | `/about` | about.tsx | Public | About page |
@@ -707,7 +726,10 @@ Copy `.env.example` to `.env` and populate:
 | SESSION_SECRET | `your-random-32-char-secret` | Cookie signing secret (min 32 chars) |
 | SUPABASE_CA_CERT | `-----BEGIN CERTIFICATE-----...` | Pinned CA certificate for strict SSL |
 | NODE_ENV | `development` or `production` | Environment mode |
-| RESEND_API_KEY | `re_...` | Resend email API key |
+| SMTP_HOST | `smtp-relay.brevo.com` | Brevo SMTP host |
+| SMTP_PORT | `587` | Brevo SMTP port |
+| SMTP_USER | `your@email.com` | Brevo SMTP username |
+| SMTP_PASS | `your-smtp-key` | Brevo SMTP password |
 | LEMONSQUEEZY_API_KEY | `ls_...` | Lemon Squeezy API key |
 | LEMONSQUEEZY_STORE_ID | `123` | Lemon Squeezy store ID |
 | LEMONSQUEEZY_VARIANT_ID | `456` | Lemon Squeezy product variant ID |
@@ -791,8 +813,8 @@ npm run test:watch  # Watch mode
 
 **Code Style:**
 - TypeScript strict mode enabled
-- Prettier formatting
-- ESLint rules enforced
+- ESLint 10 (flat config) + Prettier 3 enforced
+- Run `npm run lint` and `npm run format` before committing
 - Zod schema validation for all inputs
 
 ---
@@ -808,19 +830,20 @@ npm run test:watch  # Watch mode
 - [x] Upgrade React 18.3 → 19.x
 - [x] Upgrade Vite 5.4 → 8.x
 - [x] Remove stale markdown docs, unused esbuild config, plaintext credentials
-- [ ] Upgrade Express 4.21 → 5.x
+
 
 ### Features Not Yet Implemented
 
-- [x] ~~Payment processing (Lemon Squeezy + M-Pesa)~~ ✅
+- [x] Payment processing (Lemon Squeezy + M-Pesa)
+- [x] SEO optimization (meta tags, structured data) (JSON-LD, robots.txt, sitemap.xml, dynamic titles)
+- [x] Product reviews & ratings (testimonials system with approval workflow)
+- [x] Advanced filtering (price range, ratings, availability) — server-side filtering on shop page
+- [x] Inventory management (stock alerts, low stock) — auto-decrement on order, admin low-stock alerts
+- [x] Analytics dashboard — revenue/visits charts, top products, summary metrics in admin
 - [ ] Email notifications (shipping updates, marketing)
-- [ ] Product reviews & ratings (customer-submitted)
 - [ ] Wishlists / favorites
-- [ ] Advanced filtering (price range, ratings, availability)
 - [ ] Product variants (size, color, etc.)
-- [ ] Inventory management (stock alerts, low stock)
 - [ ] SEO optimization (meta tags, structured data)
-- [ ] Analytics dashboard
 
 ---
 
@@ -857,11 +880,14 @@ npm run test:watch  # Watch mode
 - [x] Cursor-based pagination
 - [x] 240 countries in checkout
 
-### Phase 4 — Planned
+### Phase 4 — In Progress
 
+- [x] Advanced product filtering (price range, ratings, stock availability)
+- [x] Inventory management (auto-decrement on order, low stock alerts)
+- [x] Analytics dashboard (recharts: revenue/visits trends, top products, summary metrics)
+- [x] ESLint 10 + Prettier 3 configured
 - [ ] Sentry error monitoring
-- [ ] Upgrade Express 4.21 → 5.x
-- [ ] Database read replicas
+- [ ] Redis cache layer
 - [ ] CDN image optimisation
 
 ---
@@ -870,12 +896,19 @@ npm run test:watch  # Watch mode
 
 See `CHANGELOG.md` for complete version history.
 
+### v0.4.0+ — Filtering, Inventory & Analytics (2026-07-27)
+
+- **Added:** Advanced product filtering — server-side price range, star rating, and in-stock filters on shop page
+- **Added:** Inventory management — `decrementStock()` on order creation, `getLowStockProducts()` endpoint, admin low-stock alerts and stock filter
+- **Added:** Analytics dashboard — 4 admin analytics endpoints (summary, sales-trend, top-products, visits-trend) with recharts visualizations
+- **Added:** ESLint 10 (flat config) + Prettier 3 configured across project
+
 ### v0.4.0 — Payments, Security Hardening & Quality (2026-07-26)
 
 - **Added:** Lemon Squeezy hosted checkout + M-Pesa STK Push payments
 - **Added:** Security hardening: helmet, CSRF, rate limiting, input sanitisation, audit logging
 - **Added:** Vitest test suite (35 tests)
-- **Added:** Multi-currency system (155 currencies), loyalty points, 240 countries
+- **Added:** Multi-currency system (170 currencies), loyalty points, 240 countries
 - **Added:** Password reset flow, structured error handler, cursor-based pagination
 - **Changed:** `GET /api/products` returns `{ data, nextCursor }` paginated response
 - **Removed:** PayPal simulation, stale markdown docs, unused esbuild config
@@ -898,6 +931,6 @@ For issues, feature requests, or questions:
 
 ---
 
-**Last Updated:** 2026-07-26
+**Last Updated:** 2026-07-27
 **Version:** 0.4.0
 **Maintainer:** Jonathan Maina
