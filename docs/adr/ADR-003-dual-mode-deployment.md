@@ -1,8 +1,9 @@
 # ADR-003: Dual-Mode Deployment (Dev Server + Vercel Serverless)
 
-**Status:** ✅ Accepted  
+**Status:** ✅ Implemented  
 **Date:** 2026-04-23  
-**Author:** Jonathan Maina
+**Author:** Jonathan Maina  
+**Last Updated:** 2026-07-29 — CI/CD pipeline active, Sentry guards added to both entry points, version v0.4.7
 
 ## Context
 

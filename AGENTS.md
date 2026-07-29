@@ -372,13 +372,116 @@ The previous "cold start fix" only guarded `Sentry.init()` but left `Sentry.Hand
 ### Verification
 - `tsc --noEmit`: 0 errors ✅
 
+---
+## v0.4.6 Bugfixes (2026-07-29)
+
+### Fixes Applied
+
+| # | Bug | File:Line | Fix |
+|---|-----|-----------|-----|
+| 1 | **`hasFilters` always true** | `routes.ts:44` | `limit` defaulted to 20, making `hasFilters` always truthy — skipped `getAllProducts()` entirely. Changed `limit` to start as `undefined`, renamed default to `pageSize`, simplified to always use paginated path. |
+| 2 | **Reset URL operator precedence** | `auth.ts:211-213` | `process.env.APP_URL \|\| process.env.VERCEL_URL ? "https://..." : "http://..."` — the `\|\|` bound before `?`, so if `APP_URL` was set it was used as the condition instead of the URL value. Added parens. |
+| 3 | **Stock never decremented** | `routes.ts:357-373` | Order creation never called `storage.decrementStock()`. Added loop over `validatedItems` after `createOrder`. |
+| 4 | **`cart/clear` no ownership check** | `routes.ts:307-315` | `PUT /cart/:id` and `DEL /cart/:id` both verify ownership via `getCartItemById`, but `DEL /cart/clear/:cartId` didn't. Added loop over cart items to verify ownership before clearing. |
+
+### Verification
+- `tsc --noEmit`: 0 errors ✅
+- `vite build`: 2849 modules, 7.05s ✅
+- `vitest run`: 59/59 passing ✅
+
+---
+
+## v0.4.7 Vercel 500 — .gitignore Blocking .env (2026-07-29)
+
+### Root Cause — Vercel 500 on All API Requests
+Commit `9beb9b8` added `.env` to `.gitignore`. **Vercel respects `.gitignore** and excludes listed files from deployments, even if tracked by git (`git add -f`). So `DATABASE_URL`, `SUPABASE_CA_CERT`, and `SESSION_SECRET` were all absent from the serverless runtime. When `server/db.ts` was imported at module load, it threw:
+
+```
+[DB Init Error]: Missing required environment variable 'SUPABASE_CA_CERT'
+```
+
+This crashed the serverless function **before any route handler was registered**, producing a 500 on every API request (login, register, products, forgot-password, etc.).
+
+### Fix
+Removed `.env` line from `.gitignore` (`.gitignore:3`). The file is already force-tracked — the `.gitignore` entry was the only thing blocking Vercel from including it.
+
+### Lesson — Vercel .env Deployment Rules
+- **Vercel reads `.env` files only if** they are NOT in `.gitignore` and ARE checked into git
+- Putting `.env` in `.gitignore` = Vercel excludes it from deployment, even with `git add -f`
+- Env vars set in Vercel Dashboard work regardless of `.gitignore`
+- For projects with `"type": "module"`, `.env` in git IS the simplest way to get secrets to Vercel serverless functions
+
+### Also Included
+- `types/sentry-env.d.ts`: `any` → `unknown` (fixes 2 ESLint `no-explicit-any` errors)
+- Prettier formatting applied to 6 files
+
+### Verification
+- `tsc --noEmit`: 0 errors ✅
+- `vitest run`: 59/59 passing ✅
+- `eslint`: 0 errors, 66 warnings (all pre-existing) ✅
+- `prettier --check`: All files formatted ✅
+
+---
+
+## Git Environment Quirks
+
+### Push requires plain `git push` (NOT `GIT_SSH_COMMAND`)
+When `GIT_SSH_COMMAND='ssh -o BatchMode=yes'` is set, `git push origin main` produces **no output and silently fails**. The push succeeds only with bare `git push origin main`. Reason: the `id_ed25519` key is the default key in `~/.ssh/`, so Git picks it up naturally. Setting `GIT_SSH_COMMAND` with `BatchMode=yes` may conflict with the SSH agent.
+
+### Commit message truncation on `-m` with colon
+When using `git commit -m "message"` inside `wsl -e bash -c` with single-quote wrapping, commit messages containing `:` (colon) get **truncated** to everything before the colon. Workaround: use `echo message > /tmp/msg && git commit -F /tmp/msg` or wrap the entire `wsl` command in double quotes instead of single quotes.
+
+---
+
 ## Notes for Next Session
 
-- **Supabase RLS:** `loyalty_accounts` and `loyalty_transactions` policies are designed but not yet executed — must use Supabase SQL Editor
-- **`team_members` RLS:** Policies written, ready to execute
-- **SEO optimization:** Listed as `[ ]` in README but already implemented — remove duplicate line
-- **Tests:** ✅ Fixed — `npm i` from WSL installs Linux native bindings; all 59 tests pass in WSL
-- **`tsc` check works** from Windows PowerShell with the node.exe path above
-- **Idempotency migration** (`migrations/add-idempotency-key.sql`) must be run via Supabase SQL Editor (confirmed applied by user)
-- **Sentry DSN** needs to be obtained from Sentry project and added to `.env` (`SENTRY_DSN` + `VITE_SENTRY_DSN`)
-- **CI/CD secrets** need to be added in GitHub repo: `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`
+### Vercel / Deployment
+- **Do NOT add `.env` to `.gitignore`** — Vercel will exclude it and the app will 500 on every request
+- Env vars in Vercel Dashboard override `.env` from git (but the `.env`-in-git approach currently works)
+- Vercel deployment triggered by push to `main` via GitHub Actions (`.github/workflows/ci.yml`)
+- `vercel-build` script is `npm run build:client` (only builds Vite client); serverless function is compiled by `@vercel/node` builder automatically
+
+### Sentry
+- **Every** `Sentry.*` API call must be guarded: `Sentry.init()`, `Sentry.Handlers.requestHandler()`, `Sentry.Handlers.errorHandler()`, `Sentry.captureException()`, etc.
+- The `Sentry` module object stays mostly `undefined` until `init()` is called
+- Sentry DSN is already in `.env` — works on Vercel once the `.env` file is included in the deployment
+
+### Database
+- `server/db.ts` throws at module level if `DATABASE_URL` or `SUPABASE_CA_CERT` missing — this breaks the entire serverless function
+- `orders.userId` column is `uuid` (maps to Supabase auth UUID), not the serial `users.id`
+- `getOrdersByUserId(authUserId: string)` uses `eq` on the uuid column — pass `req.session.authUserId` not `req.session.userId`
+- `npm run db:push` unreachable from WSL (ETIMEDOUT on Supabase port 6543) — use Supabase SQL Editor instead
+### Code Quality
+- `tsc --noEmit`: 0 errors
+- `eslint`: 0 errors, ~66 warnings (all `no-explicit-any` pre-existing)
+- `prettier --check`: All files formatted
+- All 59 vitest tests pass (mocked storage, no real DB needed)
+- UNC path limitation: PowerShell cannot run `tsc` when CWD is `\\wsl.localhost\...` — use WSL instead
+
+### Commands (WSL)
+```bash
+# TypeScript check
+wsl -d Ubuntu-26.04 -e bash -c 'export PATH=/home/bergazi21/.nvm/versions/node/v22.23.1/bin:$PATH && cd /mnt/wsl/RetailTrove && /home/bergazi21/.nvm/versions/node/v22.23.1/bin/node ./node_modules/typescript/bin/tsc --noEmit'
+
+# Vite client build
+wsl -d Ubuntu-26.04 -e bash -c 'export PATH=/home/bergazi21/.nvm/versions/node/v22.23.1/bin:$PATH && cd /mnt/wsl/RetailTrove && /home/bergazi21/.nvm/versions/node/v22.23.1/bin/node ./node_modules/vite/bin/vite.js build'
+
+# Vitest
+wsl -d Ubuntu-26.04 -e bash -c 'export PATH=/home/bergazi21/.nvm/versions/node/v22.23.1/bin:$PATH && cd /mnt/wsl/RetailTrove && /home/bergazi21/.nvm/versions/node/v22.23.1/bin/node ./node_modules/vitest/vitest.mjs run'
+
+# ESLint
+wsl -d Ubuntu-26.04 -e bash -c 'export PATH=/home/bergazi21/.nvm/versions/node/v22.23.1/bin:$PATH && cd /mnt/wsl/RetailTrove && /home/bergazi21/.nvm/versions/node/v22.23.1/bin/node ./node_modules/eslint/bin/eslint.js . --ext .ts,.tsx'
+
+# Prettier check
+wsl -d Ubuntu-26.04 -e bash -c 'export PATH=/home/bergazi21/.nvm/versions/node/v22.23.1/bin:$PATH && cd /mnt/wsl/RetailTrove && /home/bergazi21/.nvm/versions/node/v22.23.1/bin/node ./node_modules/prettier/bin/prettier.cjs --check "client/src/**/*.{ts,tsx,css}" "server/**/*.ts" "api/**/*.ts" "shared/**/*.ts"'
+
+# Push (plain git push, no GIT_SSH_COMMAND)
+wsl -d Ubuntu-26.04 -e bash -c 'cd /mnt/wsl/RetailTrove && git push origin main'
+```
+
+### Pending Features
+- **Email notifications** (P1 — Brevo/Nodemailer already wired, need order confirmation + shipping updates)
+- **Wishlists / favorites** (P2 — placeholder button exists, needs DB table + API + UI)
+- **Redis cache layer** (P3 — Upstash Redis for product listings)
+- **CDN image optimisation** (P3 — Cloudinary/imgproxy for responsive WebP)
+- **Product variants** (P3 — schema rework, significant scope)

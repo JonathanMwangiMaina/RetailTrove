@@ -1,8 +1,9 @@
 # ADR-006: Payment Idempotency Strategy
 
-**Status:** ✅ Accepted  
+**Status:** ✅ Implemented  
 **Date:** 2026-07-29  
-**Author:** Jonathan Maina
+**Author:** Jonathan Maina  
+**Last Updated:** 2026-07-29 — Migration `add-idempotency-key.sql` executed in Supabase SQL Editor
 
 ## Context
 

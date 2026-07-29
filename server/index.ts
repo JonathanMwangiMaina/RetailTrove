@@ -225,8 +225,27 @@ app.use(async (_req: Request, _res: Response, next: NextFunction) => {
   next();
 });
 
+let routesInitFailed = false;
+
 setupAuth(app);
-await registerRoutes(app, csrfSynchronisedProtection);
+try {
+  await registerRoutes(app, csrfSynchronisedProtection);
+} catch (error) {
+  routesInitFailed = true;
+  console.error("FATAL: Application routes failed to initialize:", error);
+  if (error instanceof Error && error.stack) {
+    console.error("STACK:", error.stack);
+  }
+}
+
+app.use("/api/*", (_req: Request, res: Response) => {
+  if (routesInitFailed) {
+    return res.status(500).json({
+      message: "Application failed to initialize — check server logs",
+    });
+  }
+  res.status(404).json({ message: "API endpoint not found" });
+});
 
 if (process.env.SENTRY_DSN) {
   app.use(Sentry.Handlers.errorHandler());

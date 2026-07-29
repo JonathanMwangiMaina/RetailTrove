@@ -1,8 +1,9 @@
 # ADR-002: Repository Pattern with IStorage Interface
 
-**Status:** ✅ Accepted  
+**Status:** ✅ Implemented  
 **Date:** 2026-04-23  
-**Author:** Jonathan Maina
+**Author:** Jonathan Maina  
+**Last Updated:** 2026-07-29 — Testing finalized with 59 vitest tests, CI pipeline active
 
 ## Context
 
