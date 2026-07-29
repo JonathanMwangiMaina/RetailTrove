@@ -453,12 +453,10 @@ When using `git commit -m "message"` inside `wsl -e bash -c` with single-quote w
 - `getOrdersByUserId(authUserId: string)` uses `eq` on the uuid column — pass `req.session.authUserId` not `req.session.userId`
 - `npm run db:push` unreachable from WSL (ETIMEDOUT on Supabase port 6543) — use Supabase SQL Editor instead
 ### Engineering Standards
-- **Never use stub objects or Proxy traps in catch blocks.** When a dependency fails to initialize (e.g., database pool), do NOT create a fake/stub/proxy replacement. Instead, use lazy initialization via getter functions (`getPool()`, `getDb()`). The getter throws at call time with the exact error — callers handle it naturally. This preserves the actual error message, stack trace, and type safety.
-- **Module-level throws that kill the module export are unacceptable.** Wrap throw-prone initialization in try/catch. On failure, log the error and let the app boot without the dependency. Callers check availability via `getXOrNull()` and degrade gracefully (health endpoint returns `degraded`).
-- **Prefer:**
-  - `export function getPool(): Pool { ... }` over `export const pool = ...`
-  - `export function getPoolOrNull(): Pool | null { try { return getPool(); } catch { return null; } }` for callers that can degrade
-  - Lazy initialization (first call creates, subsequent calls reuse) via `globalThis` cache for serverless warm starts
+- **Never use stub objects or Proxy traps in catch blocks.** When a dependency fails to initialize (e.g., database pool), do NOT create a fake/stub/proxy replacement. Preserve the actual error message, stack trace, and type safety.
+- **Prefer module-level throw + export const over lazy getters.** The v0.4.2 `server/db.ts` pattern is the last proven working one: module-level `throw` on missing env vars, then `export const pool`/`export const db` using `new Pool()`/`drizzle()`. This keeps the API surface simple and callers don't need `getPoolOrNull()` checks. Reverted to this in commit `ba17c29`.
+- **Inspect previous commits for last proven/working data patterns before introducing changes.** When debugging a regression, use `git log --oneline` to find the last commit where the feature worked, then `git show <commit>:<file>` to extract the working pattern. Apply that pattern to the current codebase rather than inventing new abstractions. Example: the persistent 500 was only resolved by reverting `server/db.ts` to v0.4.2 (commit `9f33edc`) — the lazy getter abstraction (v0.4.8) introduced a new failure mode.
+- **Ensure package versions match their API.** Before using any imported package API, verify the installed version's API surface with `node -e "const m = require('pkg'); console.log(Object.keys(m).filter(k => ...))"` or equivalent. Sentry v10 (version `10.68.0`) removed `Sentry.Handlers.requestHandler()` and `errorHandler()` — these were replaced by `Sentry.setupExpressErrorHandler(app)`. Using the old API caused the persistent 500 on every request. Always check the version in `node_modules/<pkg>/package.json` before writing import code.
 - `tsc --noEmit`: 0 errors
 - `eslint`: 0 errors, ~66 warnings (all `no-explicit-any` pre-existing)
 - `prettier --check`: All files formatted
