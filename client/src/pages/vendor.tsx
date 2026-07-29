@@ -215,6 +215,7 @@ export default function VendorPage() {
   const { formatPrice } = useCurrency();
 
   const [activeTab, setActiveTab] = useState("products");
+  const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [isEditProductOpen, setIsEditProductOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<VendorProduct | null>(null);
   const [newProduct, setNewProduct] = useState<ProductFormData>({ ...EMPTY_PRODUCT });
@@ -673,13 +674,13 @@ export default function VendorPage() {
               Editing resets status to pending — admin will review your changes.
             </DialogDescription>
           </DialogHeader>
-          {editingProduct && <ProductForm data={editingProduct} setData={setEditingProduct} />}
+          {editingProduct && <ProductForm data={editingProduct} setData={setEditingProduct as (v: ProductFormData) => void} />}
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditProductOpen(false)}>
               Cancel
             </Button>
             <Button
-              onClick={() => updateProductMutation.mutate(editingProduct)}
+              onClick={() => updateProductMutation.mutate(editingProduct!)}
               disabled={updateProductMutation.isPending}
             >
               {updateProductMutation.isPending ? (
@@ -767,7 +768,7 @@ export default function VendorPage() {
               Cancel
             </Button>
             <Button
-              onClick={() => updateFaqMutation.mutate(editingFaq)}
+              onClick={() => updateFaqMutation.mutate(editingFaq!)}
               disabled={updateFaqMutation.isPending}
             >
               {updateFaqMutation.isPending ? "Saving…" : "Save & Resubmit"}

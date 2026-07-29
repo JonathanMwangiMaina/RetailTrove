@@ -380,7 +380,7 @@ async function seed() {
       const newArrival = index < 5 || (index >= 8 && index < 18); // Indices 0..4 and 8..17 (15 items)
 
       return {
-        title: item.name,
+        name: item.name,
         description: item.description,
         price: item.price,
         imageUrl: item.imageUrl,

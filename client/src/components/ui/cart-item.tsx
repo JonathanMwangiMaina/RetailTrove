@@ -28,7 +28,7 @@ export function CartItem({ item, showControls = true }: CartItemProps) {
         <div>
           <div className="flex justify-between text-base font-medium text-primary-900">
             <h3>{product.name}</h3>
-            <p className="ml-4">{formatPrice(Number(product.price) * quantity)}</p>
+            <p className="ml-4">{formatPrice(Number(product.price) * (quantity ?? 1))}</p>
           </div>
           <p className="mt-1 text-sm text-gray-500">{product.category}</p>
         </div>
@@ -36,7 +36,7 @@ export function CartItem({ item, showControls = true }: CartItemProps) {
           <div className="flex-1 flex items-end justify-between text-sm">
             <div className="flex items-center space-x-3">
               <Button
-                onClick={() => updateQuantity(item.id, quantity - 1)}
+                onClick={() => updateQuantity(item.id, (quantity ?? 1) - 1)}
                 variant="outline"
                 size="icon"
                 className="h-8 w-8 rounded-full border border-gray-300 p-0"
@@ -44,9 +44,9 @@ export function CartItem({ item, showControls = true }: CartItemProps) {
                 <MinusIcon className="h-4 w-4" />
                 <span className="sr-only">Decrease quantity</span>
               </Button>
-              <span className="text-gray-500">{quantity}</span>
+              <span className="text-gray-500">{quantity ?? 1}</span>
               <Button
-                onClick={() => updateQuantity(item.id, quantity + 1)}
+                onClick={() => updateQuantity(item.id, (quantity ?? 1) + 1)}
                 variant="outline"
                 size="icon"
                 className="h-8 w-8 rounded-full border border-gray-300 p-0"

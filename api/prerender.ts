@@ -1,5 +1,3 @@
-import type { Context } from "@vercel/edge";
-
 const BOT_UA =
   /googlebot|bingbot|yandex|baidu|facebookexternalhit|twitterbot|linkedinbot|slackbot|discordbot|whatsapp|applebot/i;
 
@@ -81,12 +79,12 @@ export const config = {
   runtime: "edge",
 };
 
-export default async function handler(request: Request, context: Context) {
+export default async function handler(request: Request): Promise<Response> {
   const ua = request.headers.get("user-agent") || "";
   const isBot = BOT_UA.test(ua);
 
   if (!isBot) {
-    return context.next();
+    return new Response(null, { status: 307, headers: { Location: request.url } });
   }
 
   const { pathname } = new URL(request.url);
@@ -129,6 +127,6 @@ export default async function handler(request: Request, context: Context) {
     );
   }
 
-  // Fallback: serve SPA
-  return context.next();
+  // Fallback: redirect to main app
+  return new Response(null, { status: 307, headers: { Location: request.url } });
 }

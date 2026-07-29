@@ -3,10 +3,12 @@
     "client/src/**/*", 
     "shared/**/*", 
     "server/**/*",
-    "api/**/*"               // 👈 Added to cover Vercel serverless functions
+    "api/**/*",
+    "types/**/*"
   ],
   "exclude": ["node_modules", "build", "dist", "**/*.test.ts"],
   "compilerOptions": {
+    "ignoreDeprecations": "6.0",
     "incremental": true,
     "tsBuildInfoFile": "./node_modules/typescript/tsbuildinfo",
     "noEmit": true,

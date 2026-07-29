@@ -198,7 +198,7 @@ export default function Checkout() {
                         <FormItem>
                           <FormLabel>First name</FormLabel>
                           <FormControl>
-                            <Input {...field} className="mt-1" />
+                            <Input {...field} value={field.value ?? ""} className="mt-1" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -212,7 +212,7 @@ export default function Checkout() {
                         <FormItem>
                           <FormLabel>Last name</FormLabel>
                           <FormControl>
-                            <Input {...field} className="mt-1" />
+                            <Input {...field} value={field.value ?? ""} className="mt-1" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -260,7 +260,7 @@ export default function Checkout() {
                         <FormItem className="sm:col-span-2">
                           <FormLabel>Address</FormLabel>
                           <FormControl>
-                            <Input {...field} className="mt-1" />
+                            <Input {...field} value={field.value ?? ""} className="mt-1" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -288,7 +288,7 @@ export default function Checkout() {
                         <FormItem>
                           <FormLabel>City</FormLabel>
                           <FormControl>
-                            <Input {...field} className="mt-1" />
+                            <Input {...field} value={field.value ?? ""} className="mt-1" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -302,7 +302,7 @@ export default function Checkout() {
                         <FormItem>
                           <FormLabel>State / Province</FormLabel>
                           <FormControl>
-                            <Input {...field} className="mt-1" />
+                            <Input {...field} value={field.value ?? ""} className="mt-1" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -329,7 +329,7 @@ export default function Checkout() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Country</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                           <Select onValueChange={field.onChange} defaultValue={field.value ?? ""}>
                             <FormControl>
                               <SelectTrigger>
                                 <SelectValue placeholder="Select a country" />

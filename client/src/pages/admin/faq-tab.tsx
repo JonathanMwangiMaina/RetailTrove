@@ -286,7 +286,7 @@ export default function FaqTab({ allFaqs, getVendorName }: Props) {
               Cancel
             </Button>
             <Button
-              onClick={() => updateMutation.mutate(editing!)}
+              onClick={() => updateMutation.mutate(editing! as unknown as Record<string, unknown>)}
               disabled={updateMutation.isPending}
             >
               <Save className="h-4 w-4 mr-2" />

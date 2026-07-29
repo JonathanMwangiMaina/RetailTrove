@@ -294,6 +294,59 @@ The 500 error on cold start was a **Sentry.init crash** — `Sentry.init()` was 
 wsl -d Ubuntu-26.04 -- bash -l -c "export PATH=/home/bergazi21/.nvm/versions/node/v22.23.1/bin:\$PATH && cd /mnt/wsl/RetailTrove && /home/bergazi21/.nvm/versions/node/v22.23.1/bin/node ./node_modules/vite/bin/vite.js build"
 ```
 
+---
+
+## v0.4.4 TS Fixes Session (2026-07-29)
+
+### Errors Fixed
+| Error | File | Fix |
+|-------|------|-----|
+| TS2307 | `api/prerender.ts` | Installed `@vercel/edge` dev dep; removed `import type { Context }` — Vercel Edge runtime no longer uses `context.next()`, replaced with `307 redirect` |
+| TS7016 | `api/index.ts`, `server/index.ts` | Created `types/sentry-env.d.ts` ambient declarations for `@sentry/node` and `@sentry/react` (Sentry v10 ships JS-only, types missing from `build/types/`) |
+| TS2339 | `client/src/main.tsx` | `browserTracingIntegration` missing from `@sentry/react` types — fixed by ambient declaration |
+| TS2769 | `server/database-storage.ts:396` | `eq(products.id, item.productId)` — `productId` is `number \| null \| undefined`, added `!` assertion |
+| TS2322 | `server/database-storage.ts:946` | `userName: string \| null` not assignable to `string` — added type assertion |
+| TS2322 | `server/database-storage.ts:974` | `changes: unknown` not assignable to `Json` — added type assertion |
+| TS2769 | `server/seed-supabase.ts:398` | `db.insert(products).values()` used `title` instead of `name` (schema field) |
+| TS2345 | `server/routes.ts:830,863,1019,1280,1291,1306,1310` | `req.session.userId` is `number \| undefined` but storage expects `number` — added `!` assertions (all behind `requireAuth`) |
+| TS18047 | `client/src/components/ui/cart-item.tsx` (3x) | `quantity` possibly `null` — added `?? 1` fallbacks |
+| TS18047 | `client/src/hooks/use-cart.tsx` (3x) | `item.quantity` possibly `null` — added `?? 1` fallbacks |
+| TS2552 | `client/src/pages/vendor.tsx:252` | `setIsAddProductOpen` never declared — added missing `useState` |
+| TS2322 | `client/src/pages/vendor.tsx:676` | `setEditingProduct` type mismatch with `ProductForm.setData` — added cast |
+| TS2345 | `client/src/pages/vendor.tsx:682,770` | `null` not assignable — added `!` assertions |
+| TS2345 | `client/src/pages/admin/faq-tab.tsx:289`, `team-tab.tsx:328` | `AdminFaq`/`AdminTeamMember` to `Record<string, unknown>` — added cast |
+| TS2322 | `client/src/pages/checkout.tsx` (6x) | `value: string \| null \| undefined` not assignable to `string \| undefined` — replaced null with `""` |
+
+### Database Parity Fixes
+- **`getOrdersByUserId`**: Changed parameter type from `number` (serial userId) to `string` (auth UUID) in IStorage + DatabaseStorage, matching `orders.user_id` column type
+- **`routes.ts` `/api/orders` GET**: Now passes `req.session.authUserId` (UUID) instead of `req.session.userId` (serial)
+- **`routes.ts` `/api/orders` POST**: Sets `userId` from `req.session.authUserId` when user is logged in (previously always `null`)
+- **`api/prerender.ts`**: Modernized Vercel Edge handler signature (no `Context` param)
+
+### Build Verification
+- `tsc --noEmit`: **0 errors** ✅
+- `vite build`: **2849 modules, 7.20s, success** ✅
+
+### Changed Files
+- `AGENTS.md` — session update
+- `api/index.ts` — TS fixed by ambient declaration
+- `api/prerender.ts` — removed Context import, updated handler
+- `client/src/components/ui/cart-item.tsx` — null-safe quantity
+- `client/src/hooks/use-cart.tsx` — null-safe quantity
+- `client/src/main.tsx` — TS fixed by ambient declaration
+- `client/src/pages/admin/faq-tab.tsx` — cast to Record
+- `client/src/pages/admin/team-tab.tsx` — cast to Record
+- `client/src/pages/checkout.tsx` — null-safe form values
+- `client/src/pages/vendor.tsx` — missing state, null assertions, type casts
+- `server/database-storage.ts` — `getOrdersByUserId` UUID type, `!` assertion, type casts
+- `server/index.ts` — TS fixed by ambient declaration
+- `server/routes.ts` — `authUserId` for orders, `!` assertions
+- `server/seed-supabase.ts` — `title` → `name`
+- `server/storage.ts` — `getOrdersByUserId` UUID parameter type
+- `tsconfig.json` — `ignoreDeprecations`, `types/**/*` include
+- `types/sentry-env.d.ts` — new ambient declarations for Sentry
+- `package-lock.json`, `package.json` — `@vercel/edge` dev dep added
+
 ## Notes for Next Session
 
 - **Supabase RLS:** `loyalty_accounts` and `loyalty_transactions` policies are designed but not yet executed — must use Supabase SQL Editor

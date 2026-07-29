@@ -393,7 +393,7 @@ export class DatabaseStorage implements IStorage {
               stockQuantity: sql`GREATEST(${products.stockQuantity} - ${qty}, 0)`,
               inStock: sql`CASE WHEN ${products.stockQuantity} - ${qty} <= 0 THEN false ELSE ${products.inStock} END`,
             })
-            .where(eq(products.id, item.productId));
+            .where(eq(products.id, item.productId!));
         }
       }
 
@@ -444,11 +444,11 @@ export class DatabaseStorage implements IStorage {
     return order;
   }
 
-  async getOrdersByUserId(userId: number): Promise<Order[]> {
+  async getOrdersByUserId(authUserId: string): Promise<Order[]> {
     return await db
       .select()
       .from(orders)
-      .where(eq(orders.userId, String(userId)));
+      .where(eq(orders.userId, authUserId));
   }
 
   async updateOrderPayment(
@@ -943,7 +943,7 @@ export class DatabaseStorage implements IStorage {
       })
       .from(loyaltyAccounts)
       .innerJoin(users, eq(loyaltyAccounts.userId, users.id));
-    return rows;
+    return rows as (LoyaltyAccount & { userName: string; userEmail: string })[];
   }
 
   // ── Audit Log Operations ──────────────────────────────────────────────────
@@ -971,7 +971,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(auditLogs.createdAt)
       .limit(filters.limit ?? 50)
       .offset(filters.offset ?? 0);
-    return rows;
+    return rows as unknown as AuditLog[];
   }
 }
 

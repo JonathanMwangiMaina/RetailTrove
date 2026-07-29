@@ -33,11 +33,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   // Calculate derived values
   const subtotal = cart.reduce(
-    (total, item) => total + Number(item.product.price) * item.quantity,
+    (total, item) => total + Number(item.product.price) * (item.quantity ?? 1),
     0,
   );
 
-  const totalItems = cart.reduce((total, item) => total + item.quantity, 0);
+  const totalItems = cart.reduce((total, item) => total + (item.quantity ?? 1), 0);
 
   // Fetch cart on mount
   useEffect(() => {
@@ -77,7 +77,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
       if (existingItem) {
         // Update quantity if already in cart
-        await updateQuantity(existingItem.id, existingItem.quantity + quantity);
+        await updateQuantity(existingItem.id, (existingItem.quantity ?? 1) + quantity);
       } else {
         // Add new item
         const cartItem: InsertCartItem = {

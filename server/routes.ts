@@ -364,6 +364,11 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
       // Use the server-calculated total
       validatedOrder.total = expectedTotal.toFixed(2);
 
+      // Link order to Supabase auth user UUID if logged in
+      if (req.session?.authUserId) {
+        validatedOrder.userId = req.session.authUserId;
+      }
+
       const newOrder = await storage.createOrder(validatedOrder, validatedItems);
 
       logAudit(req, { action: "order_created", entityType: "order", entityId: newOrder.id });
@@ -384,7 +389,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
 
   router.get("/orders", requireAuth, async (req: Request, res: Response) => {
     try {
-      const orders = await storage.getOrdersByUserId(req.session.userId);
+      const orders = await storage.getOrdersByUserId(req.session.authUserId ?? "");
       res.json(orders);
     } catch (error) {
       console.error("Error fetching orders:", error);
@@ -822,7 +827,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     requireRole("vendor"),
     async (req: Request, res: Response) => {
       try {
-        const products = await storage.getVendorProducts(req.session.userId);
+        const products = await storage.getVendorProducts(req.session.userId!);
         res.json(products);
       } catch (error) {
         console.error("Error fetching vendor products:", error);
@@ -855,7 +860,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
 
   router.get("/faqs/mine", requireAuth, async (req: Request, res: Response) => {
     try {
-      const faqs = await storage.getVendorFaqs(req.session.userId);
+      const faqs = await storage.getVendorFaqs(req.session.userId!);
       res.json(faqs);
     } catch (error) {
       console.error("Error fetching vendor FAQs:", error);
@@ -1011,7 +1016,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
       if (!path) {
         return res.status(400).json({ message: "Path is required" });
       }
-      await storage.recordVisit(req.session.userId, path);
+      await storage.recordVisit(req.session.userId!, path);
       res.json({ message: "Visit recorded" });
     } catch (error) {
       console.error("Error recording visit:", error);
@@ -1272,7 +1277,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
 
   router.get("/loyalty/account", requireAuth, async (req: Request, res: Response) => {
     try {
-      const account = await storage.getLoyaltyAccount(req.session.userId);
+      const account = await storage.getLoyaltyAccount(req.session.userId!);
       res.json(account);
     } catch (error) {
       console.error("Error fetching loyalty account:", error);
@@ -1283,7 +1288,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
   router.get("/loyalty/transactions", requireAuth, async (req: Request, res: Response) => {
     try {
       const limit = parseInt(req.query.limit as string) || 20;
-      const transactions = await storage.getLoyaltyTransactions(req.session.userId, limit);
+      const transactions = await storage.getLoyaltyTransactions(req.session.userId!, limit);
       res.json(transactions);
     } catch (error) {
       console.error("Error fetching loyalty transactions:", error);
@@ -1298,11 +1303,11 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
         return res.status(400).json({ message: "Valid points amount is required" });
       }
       const transaction = await storage.redeemLoyaltyPoints(
-        req.session.userId,
+        req.session.userId!,
         points,
         description || "Points redeemed",
       );
-      const account = await storage.getLoyaltyAccount(req.session.userId);
+      const account = await storage.getLoyaltyAccount(req.session.userId!);
       res.json({ transaction, account });
     } catch (error: any) {
       if (error.message === "Insufficient loyalty points") {

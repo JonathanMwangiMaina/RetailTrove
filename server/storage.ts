@@ -92,7 +92,7 @@ export interface IStorage {
   getOrderById(id: number): Promise<Order | undefined>;
   getOrderByStripeSessionId(sessionId: string): Promise<Order | undefined>;
   getOrderByIdempotencyKey(key: string): Promise<Order | undefined>;
-  getOrdersByUserId(userId: number): Promise<Order[]>;
+  getOrdersByUserId(authUserId: string): Promise<Order[]>;
   decrementStock(productId: number, quantity: number): Promise<Product | undefined>;
   getLowStockProducts(threshold?: number): Promise<Product[]>;
 
