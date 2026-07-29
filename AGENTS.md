@@ -447,11 +447,18 @@ When using `git commit -m "message"` inside `wsl -e bash -c` with single-quote w
 - Sentry DSN is already in `.env` — works on Vercel once the `.env` file is included in the deployment
 
 ### Database
-- `server/db.ts` throws at module level if `DATABASE_URL` or `SUPABASE_CA_CERT` missing — this breaks the entire serverless function
+- `server/db.ts` uses lazy getter functions (`getPool()`, `getDb()`) — these throw at call time, not at module load. Callers use `getPoolOrNull()` to check availability without try/catch.
+- The `__db_unconfigured__` pattern was attempted and rejected. Do not reintroduce stubs or fallback objects.
 - `orders.userId` column is `uuid` (maps to Supabase auth UUID), not the serial `users.id`
 - `getOrdersByUserId(authUserId: string)` uses `eq` on the uuid column — pass `req.session.authUserId` not `req.session.userId`
 - `npm run db:push` unreachable from WSL (ETIMEDOUT on Supabase port 6543) — use Supabase SQL Editor instead
-### Code Quality
+### Engineering Standards
+- **Never use stub objects or Proxy traps in catch blocks.** When a dependency fails to initialize (e.g., database pool), do NOT create a fake/stub/proxy replacement. Instead, use lazy initialization via getter functions (`getPool()`, `getDb()`). The getter throws at call time with the exact error — callers handle it naturally. This preserves the actual error message, stack trace, and type safety.
+- **Module-level throws that kill the module export are unacceptable.** Wrap throw-prone initialization in try/catch. On failure, log the error and let the app boot without the dependency. Callers check availability via `getXOrNull()` and degrade gracefully (health endpoint returns `degraded`).
+- **Prefer:**
+  - `export function getPool(): Pool { ... }` over `export const pool = ...`
+  - `export function getPoolOrNull(): Pool | null { try { return getPool(); } catch { return null; } }` for callers that can degrade
+  - Lazy initialization (first call creates, subsequent calls reuse) via `globalThis` cache for serverless warm starts
 - `tsc --noEmit`: 0 errors
 - `eslint`: 0 errors, ~66 warnings (all `no-explicit-any` pre-existing)
 - `prettier --check`: All files formatted

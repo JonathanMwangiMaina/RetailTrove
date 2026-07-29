@@ -21,7 +21,6 @@ declare module "express-session" {
     userId: number;
     authUserId?: string;
     role: string;
-    name?: string;
   }
 }
 

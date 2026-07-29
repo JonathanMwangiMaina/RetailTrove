@@ -3,7 +3,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import helmet from "helmet";
 import crypto from "crypto";
-import { pool, isDbReady } from "../server/db.js";
+import { pool } from "../server/db.js";
 import { registerRoutes } from "../server/routes.js";
 import { setupAuth } from "../server/auth.js";
 import { storage } from "../server/storage.js";
@@ -184,16 +184,10 @@ app.use(globalLimiter);
 app.get("/api/csrf-token", handleCsrfToken);
 
 app.get("/api/health", async (_req: Request, res: Response) => {
-  let dbStatus: "connected" | "disconnected" | "unconfigured" = "disconnected";
-
-  if (!isDbReady()) {
-    dbStatus = "unconfigured";
-  } else {
-    dbStatus = await pool
-      .query("SELECT 1")
-      .then(() => "connected" as const)
-      .catch(() => "disconnected" as const);
-  }
+  const dbStatus = await pool
+    .query("SELECT 1")
+    .then(() => "connected" as const)
+    .catch(() => "disconnected" as const);
 
   const status = dbStatus === "connected" ? ("ok" as const) : ("degraded" as const);
 
@@ -209,7 +203,7 @@ app.get("/api/health", async (_req: Request, res: Response) => {
 
 let isInitialized = false;
 app.use(async (_req: Request, _res: Response, next: NextFunction) => {
-  if (!isInitialized && isDbReady()) {
+  if (!isInitialized) {
     try {
       await Promise.all([
         storage.ensureBanner(),
