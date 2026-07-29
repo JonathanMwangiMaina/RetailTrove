@@ -32,10 +32,6 @@ if (!SESSION_SECRET) {
 
 const isDev = process.env.NODE_ENV !== "production";
 
-if (process.env.SENTRY_DSN) {
-  app.use(Sentry.Handlers.requestHandler());
-}
-
 app.use(
   helmet({
     contentSecurityPolicy: isDev
@@ -247,9 +243,7 @@ app.use("/api/*", (_req: Request, res: Response) => {
   res.status(404).json({ message: "API endpoint not found" });
 });
 
-if (process.env.SENTRY_DSN) {
-  app.use(Sentry.Handlers.errorHandler());
-}
+Sentry.setupExpressErrorHandler(app);
 
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   const requestId = req.headers["x-request-id"] || "unknown";

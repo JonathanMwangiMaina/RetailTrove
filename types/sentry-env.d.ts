@@ -1,14 +1,11 @@
 declare module "@sentry/node" {
-  import { Handler as H } from "express";
+  import type { Express } from "express";
   export function init(options: {
     dsn?: string;
     environment?: string;
     tracesSampleRate?: number;
   }): void;
-  export const Handlers: {
-    requestHandler(): H;
-    errorHandler(): H;
-  };
+  export function setupExpressErrorHandler(app: Express): void;
 }
 
 declare module "@sentry/react" {
