@@ -8,6 +8,7 @@ import {
   insertCartItemSchema,
 } from "../shared/schema.js";
 import { requireAuth, requireRole } from "./auth.js";
+import crypto from "crypto";
 import { z } from "zod";
 import { writeLimiter } from "./middleware/rate-limiter.js";
 import { logAudit } from "./middleware/audit.js";
@@ -420,6 +421,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
       await storage.updateOrderPayment(order.id, {
         paymentProvider: "lemonsqueezy",
         stripeSessionId: result.url, // store checkout URL as reference
+        idempotencyKey: `lemonsqueezy-${order.id}-${crypto.randomUUID()}`,
       });
 
       logAudit(req, {
@@ -467,6 +469,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
         paymentProvider: "mpesa",
         stripeSessionId: result.CheckoutRequestID,
         stripePaymentIntentId: result.MerchantRequestID,
+        idempotencyKey: `mpesa-${order.id}-${crypto.randomUUID()}`,
       });
 
       logAudit(req, {

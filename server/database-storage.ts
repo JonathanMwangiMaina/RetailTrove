@@ -368,8 +368,9 @@ export class DatabaseStorage implements IStorage {
           paymentProvider: order.paymentProvider ?? null,
           stripeSessionId: order.stripeSessionId ?? null,
           stripePaymentIntentId: order.stripePaymentIntentId ?? null,
-          mpesaReceiptNumber: order.mpesaReceiptNumber ?? null,
-        })
+           mpesaReceiptNumber: order.mpesaReceiptNumber ?? null,
+           idempotencyKey: order.idempotencyKey ?? null,
+         })
         .returning();
 
       if (items.length > 0) {
@@ -438,6 +439,11 @@ export class DatabaseStorage implements IStorage {
     return order;
   }
 
+  async getOrderByIdempotencyKey(key: string): Promise<Order | undefined> {
+    const [order] = await db.select().from(orders).where(eq(orders.idempotencyKey, key));
+    return order;
+  }
+
   async getOrdersByUserId(userId: number): Promise<Order[]> {
     return await db
       .select()
@@ -453,6 +459,7 @@ export class DatabaseStorage implements IStorage {
       stripeSessionId?: string;
       stripePaymentIntentId?: string;
       mpesaReceiptNumber?: string;
+      idempotencyKey?: string;
     },
   ): Promise<Order | undefined> {
     const updates: Record<string, any> = {};
@@ -462,6 +469,7 @@ export class DatabaseStorage implements IStorage {
     if (data.stripePaymentIntentId !== undefined)
       updates.stripePaymentIntentId = data.stripePaymentIntentId;
     if (data.mpesaReceiptNumber !== undefined) updates.mpesaReceiptNumber = data.mpesaReceiptNumber;
+    if (data.idempotencyKey !== undefined) updates.idempotencyKey = data.idempotencyKey;
 
     if (Object.keys(updates).length === 0) return this.getOrderById(id);
 

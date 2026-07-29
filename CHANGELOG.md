@@ -7,7 +7,54 @@ This project does not currently use semantic versioning — entries are dated.
 
 ---
 
-## [Unreleased]
+## [0.4.2] — 2026-07-29
+
+### Added
+
+#### CI/CD Pipeline (P0 — Critical)
+- **`.github/workflows/ci.yml`** with 4 jobs: lint (ESLint + Prettier), typecheck (tsc --noEmit), build (vite build, depends on lint + typecheck), deploy (Vercel production via `amondnet/vercel-action@v25`, main branch only, depends on build)
+- `.nvmrc` (Node 22) for version pinning in CI
+- **Setup required:** Add `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` secrets in GitHub repo Settings → Secrets → Actions
+
+#### Health Check Endpoint (P1 — High)
+- `GET /api/health` in both `server/index.ts` (dev) and `api/index.ts` (serverless)
+- Returns: `{ status, timestamp, uptime, database: "connected"|"disconnected", environment, version }`
+- Probes DB connectivity with `SELECT 1` — reports `ok` when connected, `degraded` when unreachable
+
+#### Sentry Error Monitoring (P1 — High)
+- `@sentry/node` + `@sentry/react` + `@sentry/vite-plugin` packages installed
+- Backend (`server/index.ts`, `api/index.ts`): `Sentry.init()` with `requestHandler` + `errorHandler` middleware
+- Frontend (`client/src/main.tsx`): `Sentry.init()` with `browserTracingIntegration()`
+- `.env.example` updated with `SENTRY_DSN` + `VITE_SENTRY_DSN` entries
+- **Setup required:** Create Sentry project, add DSN to `.env`
+
+#### Idempotency Keys on Payments (P2 — Medium)
+- `idempotencyKey` column added to `orders` schema in `shared/schema.ts`
+- `getOrderByIdempotencyKey()` added to `IStorage` and `DatabaseStorage`
+- `updateOrderPayment()` extended to accept `idempotencyKey`
+- Idempotency key generated as `{provider}-{orderId}-{uuid}` in `routes.ts` on payment initiation (M-Pesa and Lemon Squeezy)
+- M-Pesa callback: skips processing if `paymentStatus !== "pending"` (prevents duplicate charge)
+- Lemon Squeezy webhook: same idempotency check before marking paid/refunded
+- Migration SQL at `migrations/add-idempotency-key.sql` — run in Supabase SQL Editor
+
+#### Integration Tests (P0 — Critical)
+- **24 new tests** across 4 files using Vitest + supertest with mocked storage:
+  - `server/__tests__/mpesa-callback.test.ts` (6 tests): successful payment, failure, malformed body, missing order, receipt extraction, idempotency
+  - `server/__tests__/lemonsqueezy-webhook.test.ts` (4 tests): order_created, order_refunded, missing order, idempotency
+  - `server/__tests__/orders.test.ts` (7 tests): valid order creation, total mismatch, missing product, invalid email, stock decrement atomicity ×2 (prevents overselling and negative stock)
+  - `server/__tests__/cart.test.ts` (7 tests): PUT/DELETE own cart item, reject another user's item, 404, invalid quantity
+- All 59 tests pass (24 new + 35 existing from v0.4.0)
+- `supertest` and its types added as devDependencies
+
+### Changed
+- AGENTS.md: fixed duplicate "CI/CD Pipeline" header (renamed to "Health Check Endpoint"), added notes for next session (Sentry DSN, CI/CD secrets, idempotency migration)
+- README.md test section: updated from 35 to 59 tests, added 4 test files
+- README.md version footer: updated to v0.4.2
+- README.md Phase 4 checklist: marked Sentry as done, added CI/CD + health check + integration tests + idempotency entries
+
+### Fixed
+- `server/index.ts`: added `getOrderByIdempotencyKey` import (was missing, causing runtime error on M-Pesa callback)
+- AGENTS.md: environment note "Tests cannot run locally" corrected — `npm i` from WSL installs Linux native rolldown bindings; all 59 tests pass in WSL
 
 ---
 
@@ -472,7 +519,8 @@ This project does not currently use semantic versioning — entries are dated.
 
 ---
 
-[Unreleased]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/JonathanMwangiMaina/RetailTrove/compare/v0.3.1...v0.3.2

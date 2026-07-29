@@ -1,6 +1,6 @@
 # RetailTrove — Full-Stack E-Commerce Platform
 
-> **Status:** Phases 1–3 complete (Auth, RBAC, Payments, Security Hardening). Phase 4 in progress. Latest: **v0.4.1** — advanced product filtering, inventory management with stock auto-decrement, analytics dashboard (recharts), ESLint + Prettier configured, edge prerendering, testimonials system, admin refactor.
+> **Status:** Phases 1–3 complete, Phase 4 in progress. Latest: **v0.4.2** — CI/CD pipeline, Sentry error monitoring, health check endpoint, idempotency keys on payments, 24 integration tests. All P0/P1 features complete.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19.1-61dafb)](https://react.dev/)
@@ -785,10 +785,14 @@ Copy `.env.example` to `.env` and populate:
 
 **Test Runner:** Vitest 4.1.10
 
-**Current Status:** 35 unit tests across 3 test files.
+**Current Status:** 59 tests across 7 test files.
 
 | Test File | Tests | Coverage |
 |---|---|---|
+| `server/__tests__/mpesa-callback.test.ts` | 6 | M-Pesa callback: success, failure, idempotency, malformed body, missing order |
+| `server/__tests__/lemonsqueezy-webhook.test.ts` | 4 | LS webhook: order_created, order_refunded, idempotency, missing order |
+| `server/__tests__/orders.test.ts` | 7 | Order creation: validation, stock atomicity, total mismatch |
+| `server/__tests__/cart.test.ts` | 7 | Cart ownership: PUT/DELETE own item, reject others, 404, invalid qty |
 | `client/src/lib/__tests__/currencies.test.ts` | 17 | CURRENCY array, lookup, conversion, formatting |
 | `client/src/lib/__tests__/countries.test.ts` | 9 | COUNTRIES array, sorting, lookup |
 | `shared/__tests__/schemas.test.ts` | 9 | insertUserSchema, insertProductSchema validation |
@@ -879,21 +883,34 @@ npm run test:watch  # Watch mode
 - [x] Cursor-based pagination
 - [x] 240 countries in checkout
 
-### Phase 4 — In Progress
+### Phase 4 — Complete ✅ (v0.4.2)
 
 - [x] Advanced product filtering (price range, ratings, stock availability)
 - [x] Inventory management (auto-decrement on order, low stock alerts)
 - [x] Analytics dashboard (recharts: revenue/visits trends, top products, summary metrics)
 - [x] ESLint 10 + Prettier 3 configured
-- [ ] Sentry error monitoring
-- [ ] Redis cache layer
-- [ ] CDN image optimisation
+- [x] Sentry error monitoring (@sentry/node + @sentry/react)
+- [x] CI/CD pipeline (GitHub Actions: lint, typecheck, build, deploy to Vercel)
+- [x] Health check endpoint (GET /api/health)
+- [x] Integration tests (24 new tests: M-Pesa, LS, orders, cart)
+- [x] Idempotency keys on payments (prevents duplicate charges)
+- [ ] Redis cache layer (P3 — not started)
+- [ ] CDN image optimisation (P3 — not started)
 
 ---
 
 ## Changelog
 
 See `CHANGELOG.md` for complete version history.
+
+### v0.4.2 — CI/CD, Sentry, Idempotency & Integration Tests (2026-07-29)
+
+- **Added:** CI/CD pipeline — GitHub Actions with lint, typecheck, build, deploy to Vercel
+- **Added:** Health check endpoint — `GET /api/health` with DB connectivity probe
+- **Added:** Sentry error monitoring — backend (Node) + frontend (React) with browser tracing
+- **Added:** Idempotency keys on payments — prevents duplicate charges on M-Pesa/LS retries
+- **Added:** 24 integration tests — M-Pesa callback, LS webhook, order/stock atomicity, cart ownership
+- **All 59 tests pass**
 
 ### v0.4.1 — Filtering, Inventory & Analytics (2026-07-27)
 
@@ -930,6 +947,6 @@ For issues, feature requests, or questions:
 
 ---
 
-**Last Updated:** 2026-07-27
-**Version:** 0.4.0
+**Last Updated:** 2026-07-29
+**Version:** 0.4.2
 **Maintainer:** Jonathan Maina

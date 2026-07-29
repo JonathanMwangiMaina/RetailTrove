@@ -10,9 +10,9 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 - **Platform:** Windows (PowerShell) + WSL Ubuntu 26.04
 - **Node.js:** `/home/bergazi21/.nvm/versions/node/v22.23.1/bin/node` (via nvm in WSL)
 - **Windows tsc:** `& "C:\Program Files\nodejs\node.exe" ".\node_modules\typescript\bin\tsc" --noEmit`
-- **Tests:** Cannot run locally — rolldown native binding mismatch (`@rolldown/binding-win32-x64-msvc`)
+- **Tests:** ✅ Fixed — `npm i` from WSL installs Linux native bindings; all 59 tests pass in WSL
 - **DB push:** `npm run db:push` unreachable from WSL (ETIMEDOUT on Supabase port 6543) — must use Supabase SQL Editor
-- **ESLint 10 (flat config) + Prettier 3:** 0 errors, 49 warnings (all `no-explicit-any`)
+- **ESLint 10 (flat config) + Prettier 3:** 0 errors, 65 warnings (all `no-explicit-any`, 16 in test files)
 - **Git remote:** SSH (`git@github.com:JonathanMwangiMaina/RetailTrove.git`)
 - **Git config:** `user.name = 'Jonathan Maina'`, `user.email = '104943475+JonathanMwangiMaina@users.noreply.github.com'`
 - **SSH key:** `~/.ssh/id_ed25519`; use `GIT_SSH_COMMAND='ssh -o BatchMode=yes'` for push
@@ -31,13 +31,13 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 
 | # | Feature | Priority | Est. Time | Notes |
 |---|---------|----------|-----------|-------|
-| 1 | **CI/CD pipeline** | **P0 — Critical** | 2-3 hours | Highest ROI for A-tier. Currently C/35 DevOps. GitHub Actions: lint + typecheck on PR, preview deploys on push to main, production deploy on merge. Blocks confidence in all other changes. |
-| 2 | **Integration tests** (payment + order flows) | **P0 — Critical** | 4-6 hours | Currently D+/22 Testing. Payment callback verification, stock decrement atomicity, cart ownership checks — these are the highest-risk paths. Vitest + supertest against local Express. |
-| 3 | **Sentry error monitoring** | **P1 — High** | 15-30 min | Zero observability today. `@sentry/node` + `@sentry/vite-plugin`. Captures all unhandled errors in production. Quickest win for production safety. |
-| 4 | **Health check endpoint** | **P1 — High** | 15 min | Vercel/serverless needs a `/api/health` that returns DB connectivity + uptime. Enables uptime monitoring (UptimeRobot, Betterstack). |
+| 1 | **CI/CD pipeline** | **P0 — Critical** | 2-3 hours | ✅ Done. `.github/workflows/ci.yml` — lint + typecheck on PR, build + production deploy on push to main. |
+| 2 | **Integration tests** (payment + order flows) | **P0 — Critical** | 4-6 hours | ✅ Done. 24 new tests across 4 files: M-Pesa callback, LS webhook, order creation, stock atomicity, cart ownership. 59 total tests pass. |
+| 3 | **Sentry error monitoring** | **P1 — High** | 15-30 min | ✅ Done. `@sentry/node` + `@sentry/react` wired in server, serverless, and client. Needs DSN from Sentry project to activate. |
+| 4 | **Health check endpoint** | **P1 — High** | 15 min | ✅ Done. `GET /api/health` in both dev and serverless. Returns status, uptime, DB connectivity. |
 | 5 | **Email notifications** (shipping, marketing) | **P1 — High** | 3-4 hours | Brevo/Nodemailer already wired (`server/email.ts`). Need: order confirmation emails, shipping status updates, marketing unsubscribe. Missing emails = poor post-purchase experience. |
 | 6 | **Wishlists / favorites** | **P2 — Medium** | 3-4 hours | Placeholder button exists on product page (does nothing). Needs: `wishlists` table, API CRUD, heart toggle UI, wishlist page. Increases retention + repeat visits. |
-| 7 | **Idempotency keys on payments** | **P2 — Medium** | 2-3 hours | M-Pesa callbacks can retry — without idempotency, duplicate orders/charges are possible. Add idempotency_key column to orders, check before creating. Critical for payment safety. |
+| 7 | **Idempotency keys on payments** | **P2 — Medium** | 2-3 hours | ✅ Done. `idempotency_key` column on orders, status check in M-Pesa callback + LS webhook, key generated on payment initiation. Run `migrations/add-idempotency-key.sql` in Supabase to apply. |
 | 8 | **Product variants** (size, color) | **P3 — Nice-to-have** | 8-12 hours | Schema rework: `product_variants` table, cart/order item changes, UI selectors. Significant scope. Only worth it if inventory actually has variants. |
 | 9 | **Redis cache layer** | **P3 — Nice-to-have** | 3-4 hours | Cache product listings, site settings, featured products. Reduces Supabase load. Adds infra complexity (Upstash Redis free tier). Beneficial but not blocking. |
 | 10 | **CDN image optimisation** | **P3 — Nice-to-have** | 1-2 hours | Cloudinary or imgproxy for responsive sizing + WebP. Images are currently raw Unsplash URLs. Nice-to-have for performance score. |
@@ -50,13 +50,18 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 
 ---
 
-## Recommended Tomorrow Order
+## Tomorrow's Session — P2/P3 Scope of Work
 
-1. **Sentry** (15 min) — immediate observability
-2. **Health check** (15 min) — immediate uptime visibility
-3. **CI/CD pipeline** (2-3 hours) — foundation for all future deploys
-4. **Idempotency keys** (2-3 hours) — payment safety
-5. **Integration tests** (4-6 hours) — payment + order flow coverage
+### Recommended Order
+
+| # | Feature | Priority | Est. Time | Notes |
+|---|---------|----------|-----------|-------|
+| 1 | **Email notifications** | **P1 — High** | 3-4 hours | Order confirmation on payment callback, shipping status updates. Brevo/Nodemailer already wired. Highest remaining user-facing gap. |
+| 2 | **Wishlists / favorites** | **P2 — Medium** | 3-4 hours | `wishlists` table, API CRUD (POST/GET/DELETE), heart toggle on product page + wishlist page. Increases retention. |
+| 3 | **Supabase RLS policies** | **P2 — Medium** | 30 min | Execute designed RLS for `loyalty_accounts`, `loyalty_transactions`, `team_members`. Execute via Supabase SQL Editor. |
+| 4 | **Redis cache layer** | **P3 — Nice-to-have** | 3-4 hours | Upstash Redis for product listings, site settings, featured products. Reduces Supabase load. |
+| 5 | **CDN image optimisation** | **P3 — Nice-to-have** | 1-2 hours | Cloudinary/imgproxy for responsive WebP images. Currently raw Unsplash URLs. |
+| 6 | **Product variants** | **P3 — Nice-to-have** | 8-12 hours | Schema rework: product_variants table, cart/order item changes, UI selectors. Only if inventory has variants. |
 
 ---
 
@@ -95,6 +100,49 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 - Added performance indexes migration (24 indexes)
 - ESLint 10 + Prettier 3 configured (0 errors)
 - CHANGELOG.md and README.md fully updated
+
+### CI/CD Pipeline
+- Created `.github/workflows/ci.yml` with 4 jobs:
+  - **lint** — ESLint + Prettier check
+  - **typecheck** — `tsc --noEmit`
+  - **build** — `vite build` (depends on lint + typecheck)
+  - **deploy** — Vercel production deploy (main branch only, depends on build)
+- Uses `amondnet/vercel-action@v25` with `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` secrets
+- Runs on push/PR to `main`
+- Added `.nvmrc` (Node 22) for version pinning
+- **Setup required:** Add 3 secrets in GitHub repo Settings → Secrets → Actions
+
+### Integration Tests
+- **24 new tests** across 4 files covering payment + order + cart flows
+- `server/__tests__/mpesa-callback.test.ts` (6 tests) — M-Pesa callback: successful payment, failure, malformed body, missing order, receipt extraction, **idempotency** (skips duplicate)
+- `server/__tests__/lemonsqueezy-webhook.test.ts` (4 tests) — LS webhook: order_created, order_refunded, missing order, **idempotency**
+- `server/__tests__/orders.test.ts` (7 tests) — Order creation: valid data, total mismatch, missing product, invalid email, **stock decrement atomicity**, **no negative stock**
+- `server/__tests__/cart.test.ts` (7 tests) — Cart ownership: PUT/DELETE own item, **reject another user's item**, 404, invalid quantity
+- All 59 tests pass (3 existing + 24 new + 9 + 17 + 6)
+- Uses **Vitest + supertest** with mocked storage layer (no real DB needed)
+
+### Idempotency Keys on Payments
+- Added `idempotencyKey` column to `orders` table schema
+- Added `getOrderByIdempotencyKey()` to IStorage interface + DatabaseStorage implementation
+- Extended `updateOrderPayment()` to accept `idempotencyKey`
+- M-Pesa callback: skips processing if `paymentStatus !== "pending"` (prevents duplicate charge on retry)
+- Lemon Squeezy webhook: same idempotency check before marking paid/refunded
+- Idempotency key generated as `{provider}-{orderId}-{uuid}` during payment initiation in `routes.ts`
+- Migration script: `migrations/add-idempotency-key.sql` — run in Supabase SQL Editor
+
+### Health Check Endpoint
+- Added `GET /api/health` to both `server/index.ts` and `api/index.ts`
+- Returns: `{ status, timestamp, uptime, database, environment, version }`
+- Probes DB connectivity with `SELECT 1` — reports `connected` or `disconnected`
+- Reports `ok` when DB is connected, `degraded` when DB is unreachable
+
+### Sentry Error Monitoring
+- Added `@sentry/node` + `@sentry/react` + `@sentry/vite-plugin` packages
+- `server/index.ts` — Sentry.init() with requestHandler + errorHandler middleware
+- `api/index.ts` — Same Sentry setup (serverless entry)
+- `client/src/main.tsx` — Sentry.init() with `browserTracingIntegration()`
+- `.env.example` — Added `SENTRY_DSN` + `VITE_SENTRY_DSN`
+- **Setup required:** Create a Sentry project and add the DSN to `.env` to activate
 
 ### RLS Policies
 - Designed for `loyalty_accounts`, `loyalty_transactions` (not yet executed — Supabase SQL Editor)
@@ -215,5 +263,8 @@ create table public.audit_logs (
 - **Supabase RLS:** `loyalty_accounts` and `loyalty_transactions` policies are designed but not yet executed — must use Supabase SQL Editor
 - **`team_members` RLS:** Policies written, ready to execute
 - **SEO optimization:** Listed as `[ ]` in README but already implemented — remove duplicate line
-- **Tests:** Cannot run locally (rolldown binding mismatch) — use CI/CD pipeline (P0) or run in WSL with correct node
+- **Tests:** ✅ Fixed — `npm i` from WSL installs Linux native bindings; all 59 tests pass in WSL
 - **`tsc` check works** from Windows PowerShell with the node.exe path above
+- **Idempotency migration** (`migrations/add-idempotency-key.sql`) must be run via Supabase SQL Editor (confirmed applied by user)
+- **Sentry DSN** needs to be obtained from Sentry project and added to `.env` (`SENTRY_DSN` + `VITE_SENTRY_DSN`)
+- **CI/CD secrets** need to be added in GitHub repo: `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`

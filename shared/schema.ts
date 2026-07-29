@@ -91,6 +91,7 @@ export const orders = pgTable("orders", {
   stripeSessionId: text("stripe_session_id"), // Lemon Squeezy checkout ID / M-Pesa CheckoutRequestID
   stripePaymentIntentId: text("stripe_payment_intent_id"), // Lemon Squeezy order ID / M-Pesa MerchantRequestID
   mpesaReceiptNumber: text("mpesa_receipt_number"), // M-Pesa receipt (e.g. "QHJ7A1BCDE")
+  idempotencyKey: text("idempotency_key"), // Unique per payment attempt — prevents duplicate callback processing
 });
 
 /**

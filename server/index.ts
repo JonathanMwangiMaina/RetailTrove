@@ -11,6 +11,14 @@ import { globalLimiter } from "./middleware/rate-limiter.js";
 import { sanitizeInput } from "./middleware/sanitize.js";
 import { handleCsrfToken, csrfSynchronisedProtection } from "./middleware/csrf.js";
 import { verifyLemonSqueezyWebhook } from "./payment-service.js";
+import * as Sentry from "@sentry/node";
+
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  environment: process.env.NODE_ENV ?? "development",
+  tracesSampleRate: process.env.NODE_ENV === "production" ? 0.2 : 0,
+  integrations: [Sentry.consoleIntegration()],
+});
 
 const app = express();
 
@@ -22,6 +30,8 @@ if (!SESSION_SECRET) {
 }
 
 const isDev = process.env.NODE_ENV !== "production";
+
+app.use(Sentry.Handlers.requestHandler());
 
 app.use(
   helmet({
@@ -63,16 +73,19 @@ app.post(
       const payload = JSON.parse(rawBody.toString());
       const orderId = Number(payload?.meta?.custom_data?.order_id);
 
-      if (eventName === "order_created") {
-        if (orderId) {
+      if (orderId) {
+        const existingOrder = await storage.getOrderById(orderId);
+        if (existingOrder && existingOrder.paymentStatus !== "pending") {
+          console.log(
+            `[Lemon Squeezy] Order #${orderId} already ${existingOrder.paymentStatus} — skipping`,
+          );
+        } else if (eventName === "order_created") {
           await storage.updateOrderPayment(orderId, {
             paymentStatus: "paid",
             stripePaymentIntentId: String(payload.data.id ?? ""),
           });
           console.log(`[Lemon Squeezy] Order #${orderId} marked as paid`);
-        }
-      } else if (eventName === "order_refunded") {
-        if (orderId) {
+        } else if (eventName === "order_refunded") {
           await storage.updateOrderPayment(orderId, { paymentStatus: "refunded" });
           console.log(`[Lemon Squeezy] Order #${orderId} refunded`);
         }
@@ -109,6 +122,11 @@ app.post("/api/mpesa/callback", express.json(), async (req: Request, res: Respon
 
     if (!order) {
       console.warn(`[M-Pesa] No order found for CheckoutRequestID: ${CheckoutRequestID}`);
+      return;
+    }
+
+    if (order.paymentStatus !== "pending") {
+      console.log(`[M-Pesa] Order #${order.id} already ${order.paymentStatus} — skipping duplicate`);
       return;
     }
 
@@ -169,6 +187,24 @@ app.use(globalLimiter);
 
 app.get("/api/csrf-token", handleCsrfToken);
 
+app.get("/api/health", async (_req: Request, res: Response) => {
+  const dbStatus = await pool
+    .query("SELECT 1")
+    .then(() => "connected" as const)
+    .catch(() => "disconnected" as const);
+
+  const status = dbStatus === "connected" ? ("ok" as const) : ("degraded" as const);
+
+  res.json({
+    status,
+    timestamp: new Date().toISOString(),
+    uptime: Math.floor(process.uptime()),
+    database: dbStatus,
+    environment: process.env.NODE_ENV ?? "development",
+    version: "0.4.1",
+  });
+});
+
 let isBootstrapped = false;
 app.use(async (_req: Request, _res: Response, next: NextFunction) => {
   if (!isBootstrapped) {
@@ -188,6 +224,8 @@ app.use(async (_req: Request, _res: Response, next: NextFunction) => {
 
 setupAuth(app);
 await registerRoutes(app, csrfSynchronisedProtection);
+
+app.use(Sentry.Handlers.errorHandler());
 
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   const requestId = req.headers["x-request-id"] || "unknown";
