@@ -41,7 +41,8 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
   router.get("/products", async (req: Request, res: Response) => {
     try {
       const cursor = req.query.cursor ? parseInt(req.query.cursor as string, 10) : undefined;
-      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+      const pageSize = limit ?? 20;
       const category = req.query.category as string | undefined;
       const q = req.query.q as string | undefined;
       const minPrice = req.query.minPrice ? parseFloat(req.query.minPrice as string) : undefined;
@@ -50,33 +51,17 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
       const inStock =
         req.query.inStock === "true" ? true : req.query.inStock === "false" ? false : undefined;
 
-      const hasFilters = !!(
-        cursor ||
-        limit ||
-        category ||
-        q ||
-        minPrice !== undefined ||
-        maxPrice !== undefined ||
-        minRating !== undefined ||
-        inStock !== undefined
-      );
-
-      if (hasFilters) {
-        const result = await storage.getProductsPaginated({
-          cursor,
-          limit,
-          category,
-          q,
-          minPrice,
-          maxPrice,
-          minRating,
-          inStock,
-        });
-        res.json(result);
-      } else {
-        const products = await storage.getAllProducts();
-        res.json({ data: products, nextCursor: null });
-      }
+      const result = await storage.getProductsPaginated({
+        cursor,
+        limit: pageSize,
+        category,
+        q,
+        minPrice,
+        maxPrice,
+        minRating,
+        inStock,
+      });
+      res.json(result);
     } catch (error) {
       console.error("Error fetching all products:", error);
       res.json({ data: [], nextCursor: null });
@@ -321,6 +306,20 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
 
   del("/cart/clear/:cartId", writeLimiter, async (req: Request, res: Response) => {
     try {
+      const cartItems = await storage.getCart(req.params.cartId);
+      if (Array.isArray(cartItems)) {
+        for (const item of cartItems) {
+          if (
+            req.session?.userId &&
+            item.userId &&
+            String(item.userId) !== String(req.session.userId)
+          ) {
+            return res
+              .status(403)
+              .json({ message: "You do not have permission to clear this cart" });
+          }
+        }
+      }
       await storage.clearCart(req.params.cartId);
       res.json({ message: "Cart cleared" });
     } catch (error) {
@@ -370,6 +369,10 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
       }
 
       const newOrder = await storage.createOrder(validatedOrder, validatedItems);
+
+      for (const item of validatedItems) {
+        await storage.decrementStock(item.productId, item.quantity ?? 1);
+      }
 
       logAudit(req, { action: "order_created", entityType: "order", entityId: newOrder.id });
 

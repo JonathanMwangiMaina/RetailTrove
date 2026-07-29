@@ -209,9 +209,10 @@ export function setupAuth(app: Express) {
       await storage.createResetToken(user.id, token, expiresAt);
 
       const baseUrl =
-        process.env.APP_URL || process.env.VERCEL_URL
+        process.env.APP_URL ||
+        (process.env.VERCEL_URL
           ? `https://${process.env.VERCEL_URL}`
-          : "http://localhost:5000";
+          : "http://localhost:5000");
       const resetUrl = `${baseUrl}/reset-password?token=${token}`;
 
       await sendPasswordResetEmail(email, resetUrl);
