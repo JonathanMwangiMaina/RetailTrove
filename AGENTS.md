@@ -347,6 +347,31 @@ wsl -d Ubuntu-26.04 -- bash -l -c "export PATH=/home/bergazi21/.nvm/versions/nod
 - `types/sentry-env.d.ts` — new ambient declarations for Sentry
 - `package-lock.json`, `package.json` — `@vercel/edge` dev dep added
 
+---
+
+## v0.4.5 Sentry Cold Start Fix (2026-07-29)
+
+### Root Cause — Vercel 500 on Every Request (Not Just Cold Start)
+The previous "cold start fix" only guarded `Sentry.init()` but left `Sentry.Handlers.requestHandler()` and `Sentry.Handlers.errorHandler()` **unconditionally invoked**. When `SENTRY_DSN` was not set on Vercel:
+- `Sentry.init()` was correctly skipped (no crash)
+- But `Sentry.Handlers.requestHandler()` at `api/index.ts:127` still ran — `Sentry.Handlers` is `undefined` because `init()` was never called
+- `Cannot read properties of undefined (reading 'requestHandler')` — app crashes on **every** request, not just cold start
+
+### All Fixes Applied
+
+| # | File | Line(s) | Fix |
+|---|------|---------|-----|
+| 1 | `api/index.ts` | 127-129 | Guarded `requestHandler()` with `if (process.env.SENTRY_DSN)` |
+| 2 | `api/index.ts` | 228-230 | Guarded `errorHandler()` with `if (process.env.SENTRY_DSN)` |
+| 3 | `server/index.ts` | 35-37 | Guarded `requestHandler()` with `if (process.env.SENTRY_DSN)` |
+| 4 | `server/index.ts` | 231-233 | Guarded `errorHandler()` with `if (process.env.SENTRY_DSN)` |
+
+### Lesson
+**Every** Sentry API call must be guarded, not just `Sentry.init()`. The `Sentry` module object stays mostly `undefined` until `init()` is called — accessing `.Handlers`, `.requestHandler()`, `.errorHandler()`, `.captureException()`, etc. will all throw if `init()` was never called.
+
+### Verification
+- `tsc --noEmit`: 0 errors ✅
+
 ## Notes for Next Session
 
 - **Supabase RLS:** `loyalty_accounts` and `loyalty_transactions` policies are designed but not yet executed — must use Supabase SQL Editor

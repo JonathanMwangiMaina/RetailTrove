@@ -32,7 +32,9 @@ if (!SESSION_SECRET) {
 
 const isDev = process.env.NODE_ENV !== "production";
 
-app.use(Sentry.Handlers.requestHandler());
+if (process.env.SENTRY_DSN) {
+  app.use(Sentry.Handlers.requestHandler());
+}
 
 app.use(
   helmet({
@@ -226,7 +228,9 @@ app.use(async (_req: Request, _res: Response, next: NextFunction) => {
 setupAuth(app);
 await registerRoutes(app, csrfSynchronisedProtection);
 
-app.use(Sentry.Handlers.errorHandler());
+if (process.env.SENTRY_DSN) {
+  app.use(Sentry.Handlers.errorHandler());
+}
 
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   const requestId = req.headers["x-request-id"] || "unknown";

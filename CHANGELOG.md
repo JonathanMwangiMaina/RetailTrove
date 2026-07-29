@@ -7,6 +7,43 @@ This project does not currently use semantic versioning — entries are dated.
 
 ---
 
+## [Unreleased] — v0.4.4
+
+### Added
+
+#### Architecture Decision Records (Documentation)
+- Created `docs/adr/` directory with 8 ADRs covering key architectural decisions: monorepo structure, repository pattern, dual-mode deployment, PostgreSQL-backed sessions, Drizzle ORM, payment idempotency, Sentry guard pattern, and server-side total verification.
+
+### Changed
+
+#### TypeScript Type Safety (v0.4.4)
+- **59 TypeScript errors resolved** across 15 files:
+  - `api/prerender.ts`: removed stale `Context` import for Vercel Edge runtime; replaced with 307 redirect
+  - `types/sentry-env.d.ts`: ambient declarations for `@sentry/node` and `@sentry/react` (Sentry v10 ships JS-only, types missing from `build/types/`)
+  - `client/src/main.tsx`: `browserTracingIntegration` missing from `@sentry/react` types — fixed by ambient declaration
+  - `server/database-storage.ts`: `getOrdersByUserId` parameter changed from `number` (serial userId) to `string` (auth UUID); `!` assertions for `productId` null checks; type casts for `userName` and `changes` fields
+  - `server/routes.ts`: `!` assertions on `req.session.userId` (7 occurrences, all behind `requireAuth`); orders route now uses `req.session.authUserId` (UUID)
+  - `server/storage.ts`: `getOrdersByUserId` signature updated to accept `string`
+  - `server/seed-supabase.ts`: `title` → `name` field name fix in product seeder
+  - `client/src/pages/vendor.tsx`: added missing `setIsAddProductOpen` state; type casts for `ProductForm`
+  - `client/src/pages/checkout.tsx`: null-safe form values (6 occurrences)
+  - `client/src/pages/admin/faq-tab.tsx`, `team-tab.tsx`: cast to `Record<string, unknown>`
+  - `client/src/components/ui/cart-item.tsx`, `client/src/hooks/use-cart.tsx`: null-safe `quantity` with `?? 1` fallbacks (6 occurrences)
+
+#### Sentry Middleware Guard Fix (v0.4.4)
+- **Root cause:** `Sentry.Handlers.requestHandler()` and `Sentry.Handlers.errorHandler()` were invoked unconditionally in both `api/index.ts` and `server/index.ts`. When `SENTRY_DSN` was unset, `Sentry.init()` was skipped but `Sentry.Handlers` remained `undefined`, causing `TypeError: Cannot read properties of undefined (reading 'requestHandler')` on every request — not just cold start.
+- **Fix:** All 4 Sentry middleware calls guarded with `if (process.env.SENTRY_DSN)`:
+  - `api/index.ts`: `requestHandler()` (line 127), `errorHandler()` (line 226)
+  - `server/index.ts`: `requestHandler()` (line 35), `errorHandler()` (line 229)
+
+### Fixed
+
+- `getOrdersByUserId` UUID/int type mismatch: `orders.userId` is `uuid` column but was being compared to serial `number` — never matched, causing `GET /api/orders` to return empty for logged-in users
+- `orders` POST route: `userId` now set from `req.session.authUserId` (UUID) when user is logged in (previously always `null`)
+- `api/prerender.ts`: modernized Vercel Edge handler to match current runtime API (no `Context` parameter)
+
+---
+
 ## [0.4.2] — 2026-07-29
 
 ### Added

@@ -1,6 +1,6 @@
 # RetailTrove — Full-Stack E-Commerce Platform
 
-> **Status:** Phases 1–3 complete, Phase 4 in progress. Latest: **v0.4.2** — CI/CD pipeline, Sentry error monitoring, health check endpoint, idempotency keys on payments, 24 integration tests. All P0/P1 features complete.
+> **Status:** Phases 1–4 complete. Latest: **v0.4.4-dev** — TypeScript type safety sweep (59 errors fixed), Sentry middleware guard fix (prevents crash when DSN unset), getOrdersByUserId UUID parity, ADR documentation. All P0/P1/P2 features complete.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19.1-61dafb)](https://react.dev/)
@@ -19,6 +19,7 @@
 - 🗄️ [Database Architecture](#database-architecture)
 - 🔌 [API Reference](#rest-api-endpoints)
 - 🛠️ [Deployment](#build-dev--deployment)
+- 🏛️ [Architecture Decisions](#architecture-decisions)
 - 📝 [Changelog](#changelog)
 
 ---
@@ -300,7 +301,7 @@ export const db = drizzle(pool, { schema });
 | inStock | boolean | Availability flag |
 | stockQuantity | integer | Inventory units |
 | rating | numeric(3,2) | Average rating (0.00–5.00) |
-| vendorId | text | FK → users.id |
+| vendorId | integer | FK → users.id (serial) |
 | approvalStatus | text | "approved" \| "pending" \| "rejected" |
 | createdAt | timestamp | Creation timestamp |
 
@@ -869,7 +870,7 @@ npm run test:watch  # Watch mode
 - [x] M-Pesa STK Push (Safaricom Daraja API)
 - [x] Payment webhook handlers (HMAC-SHA256 verification)
 - [x] Server-side order total verification
-- [x] Multi-currency system (155 currencies)
+- [x] Multi-currency system (170 currencies)
 - [x] Loyalty points system
 - [x] Password reset flow
 
@@ -883,7 +884,7 @@ npm run test:watch  # Watch mode
 - [x] Cursor-based pagination
 - [x] 240 countries in checkout
 
-### Phase 4 — Complete ✅ (v0.4.2)
+### Phase 4 — Complete ✅ (v0.4.4-dev)
 
 - [x] Advanced product filtering (price range, ratings, stock availability)
 - [x] Inventory management (auto-decrement on order, low stock alerts)
@@ -894,14 +895,42 @@ npm run test:watch  # Watch mode
 - [x] Health check endpoint (GET /api/health)
 - [x] Integration tests (24 new tests: M-Pesa, LS, orders, cart)
 - [x] Idempotency keys on payments (prevents duplicate charges)
+- [x] TypeScript type safety sweep (59 errors across 15 files)
+- [x] Sentry middleware guard (prevents crash when SENTRY_DSN unset)
+- [x] Architecture Decision Records (8 ADRs in docs/adr/)
 - [ ] Redis cache layer (P3 — not started)
 - [ ] CDN image optimisation (P3 — not started)
 
 ---
 
+## Architecture Decisions
+
+Key architectural decisions are documented as ADRs (Architecture Decision Records) in `docs/adr/`:
+
+| ADR | Title | Status |
+|-----|-------|--------|
+| 001 | [Monorepo with Shared Schema](docs/adr/ADR-001-monorepo-with-shared-schema.md) | ✅ Accepted |
+| 002 | [Repository Pattern with IStorage](docs/adr/ADR-002-repository-pattern.md) | ✅ Accepted |
+| 003 | [Dual-Mode Deployment (Dev + Serverless)](docs/adr/ADR-003-dual-mode-deployment.md) | ✅ Accepted |
+| 004 | [PostgreSQL-Backed Sessions](docs/adr/ADR-004-postgres-backed-sessions.md) | ✅ Accepted |
+| 005 | [Drizzle ORM as Data Layer](docs/adr/ADR-005-drizzle-orm.md) | ✅ Accepted |
+| 006 | [Payment Idempotency Strategy](docs/adr/ADR-006-payment-idempotency.md) | ✅ Accepted |
+| 007 | [Sentry Guard Pattern](docs/adr/ADR-007-sentry-guard-pattern.md) | ✅ Accepted |
+| 008 | [Server-Side Order Total Verification](docs/adr/ADR-008-server-side-total-verification.md) | ✅ Accepted |
+
+Each ADR follows the [MADR](https://adr.github.io/madr/) template: Context → Decision → Consequences.
+
 ## Changelog
 
 See `CHANGELOG.md` for complete version history.
+
+### v0.4.4-dev — TypeScript Safety & ADRs (2026-07-29)
+
+- **Fixed:** 59 TypeScript errors across 15 files (ambient declarations, type assertions, null safety)
+- **Fixed:** Sentry middleware guard — all 4 `Sentry.Handlers.*()` calls now guarded behind `if (process.env.SENTRY_DSN)` to prevent crash when DSN is unset
+- **Fixed:** `getOrdersByUserId` UUID/int type mismatch — orders now correctly returned for logged-in users
+- **Fixed:** `/api/orders` POST now sets `userId` from auth UUID (was always `null`)
+- **Added:** 8 Architecture Decision Records in `docs/adr/` documenting key architectural choices
 
 ### v0.4.2 — CI/CD, Sentry, Idempotency & Integration Tests (2026-07-29)
 
@@ -948,5 +977,5 @@ For issues, feature requests, or questions:
 ---
 
 **Last Updated:** 2026-07-29
-**Version:** 0.4.2
+**Version:** 0.4.4-dev
 **Maintainer:** Jonathan Maina

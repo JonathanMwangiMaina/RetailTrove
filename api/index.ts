@@ -124,7 +124,9 @@ app.use(express.urlencoded({ extended: false }));
 
 const isDev = process.env.NODE_ENV !== "production";
 
-app.use(Sentry.Handlers.requestHandler());
+if (process.env.SENTRY_DSN) {
+  app.use(Sentry.Handlers.requestHandler());
+}
 
 app.use(
   helmet({
@@ -223,7 +225,9 @@ app.use("/api/*", (_req: Request, res: Response) => {
   res.status(404).json({ message: "API endpoint not found" });
 });
 
-app.use(Sentry.Handlers.errorHandler());
+if (process.env.SENTRY_DSN) {
+  app.use(Sentry.Handlers.errorHandler());
+}
 
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   const requestId = req.headers["x-request-id"] || "unknown";
