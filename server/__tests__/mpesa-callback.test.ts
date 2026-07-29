@@ -118,7 +118,9 @@ function buildCallbackApp() {
       }
 
       if (order.paymentStatus !== "pending") {
-        console.log(`[M-Pesa] Order #${order.id} already ${order.paymentStatus} — skipping duplicate`);
+        console.log(
+          `[M-Pesa] Order #${order.id} already ${order.paymentStatus} — skipping duplicate`,
+        );
         return;
       }
 
@@ -253,10 +255,7 @@ describe("M-Pesa Callback", () => {
   it("returns 200 when request body is malformed", async () => {
     const app = buildCallbackApp();
 
-    await request(app)
-      .post("/api/mpesa/callback")
-      .send({ Body: {} })
-      .expect(200);
+    await request(app).post("/api/mpesa/callback").send({ Body: {} }).expect(200);
   });
 
   it("extracts MpesaReceiptNumber from callback metadata", async () => {

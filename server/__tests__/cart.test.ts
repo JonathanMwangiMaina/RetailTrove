@@ -131,7 +131,9 @@ function buildCartApp() {
         cartItem.userId &&
         String(cartItem.userId) !== String(req.session.userId)
       ) {
-        return res.status(403).json({ message: "You do not have permission to modify this cart item" });
+        return res
+          .status(403)
+          .json({ message: "You do not have permission to modify this cart item" });
       }
       const { quantity } = req.body;
       if (typeof quantity !== "number" || quantity < 1) {
@@ -163,7 +165,9 @@ function buildCartApp() {
         cartItem.userId &&
         String(cartItem.userId) !== String(req.session.userId)
       ) {
-        return res.status(403).json({ message: "You do not have permission to modify this cart item" });
+        return res
+          .status(403)
+          .json({ message: "You do not have permission to modify this cart item" });
       }
       const deleted = await mockStorage.deleteCartItem(id);
       if (!deleted) {
@@ -244,27 +248,18 @@ describe("Cart Ownership — DELETE /api/cart/:id", () => {
   it("allows user to delete their own cart item", async () => {
     const app = buildCartApp();
 
-    await request(app)
-      .delete("/api/cart/1")
-      .set("x-session-user-id", "42")
-      .expect(200);
+    await request(app).delete("/api/cart/1").set("x-session-user-id", "42").expect(200);
   });
 
   it("rejects deletion of another user's cart item", async () => {
     const app = buildCartApp();
 
-    await request(app)
-      .delete("/api/cart/2")
-      .set("x-session-user-id", "42")
-      .expect(403);
+    await request(app).delete("/api/cart/2").set("x-session-user-id", "42").expect(403);
   });
 
   it("returns 404 for nonexistent cart item", async () => {
     const app = buildCartApp();
 
-    await request(app)
-      .delete("/api/cart/999")
-      .set("x-session-user-id", "42")
-      .expect(404);
+    await request(app).delete("/api/cart/999").set("x-session-user-id", "42").expect(404);
   });
 });

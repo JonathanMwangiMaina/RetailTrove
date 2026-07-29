@@ -674,7 +674,12 @@ export default function VendorPage() {
               Editing resets status to pending — admin will review your changes.
             </DialogDescription>
           </DialogHeader>
-          {editingProduct && <ProductForm data={editingProduct} setData={setEditingProduct as (v: ProductFormData) => void} />}
+          {editingProduct && (
+            <ProductForm
+              data={editingProduct}
+              setData={setEditingProduct as (v: ProductFormData) => void}
+            />
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditProductOpen(false)}>
               Cancel

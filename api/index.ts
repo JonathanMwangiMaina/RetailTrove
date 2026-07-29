@@ -95,7 +95,9 @@ app.post("/api/mpesa/callback", express.json(), async (req: Request, res: Respon
     }
 
     if (order.paymentStatus !== "pending") {
-      console.log(`[M-Pesa] Order #${order.id} already ${order.paymentStatus} — skipping duplicate`);
+      console.log(
+        `[M-Pesa] Order #${order.id} already ${order.paymentStatus} — skipping duplicate`,
+      );
       return;
     }
 

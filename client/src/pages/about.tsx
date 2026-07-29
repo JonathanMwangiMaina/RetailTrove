@@ -219,9 +219,7 @@ export default function About() {
                 <div className="mt-4">
                   <h3 className="text-lg font-medium text-primary-900">{member.name}</h3>
                   <p className="text-sm text-gray-500">{member.title}</p>
-                  <p className="mt-2 text-base text-gray-500 max-w-xs mx-auto">
-                    {member.bio}
-                  </p>
+                  <p className="mt-2 text-base text-gray-500 max-w-xs mx-auto">{member.bio}</p>
                 </div>
               </div>
             ))}

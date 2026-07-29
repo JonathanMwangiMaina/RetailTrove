@@ -329,7 +329,7 @@ export default function Checkout() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Country</FormLabel>
-                           <Select onValueChange={field.onChange} defaultValue={field.value ?? ""}>
+                          <Select onValueChange={field.onChange} defaultValue={field.value ?? ""}>
                             <FormControl>
                               <SelectTrigger>
                                 <SelectValue placeholder="Select a country" />

@@ -16,7 +16,7 @@ declare module "@sentry/react" {
     dsn?: string;
     environment?: string;
     tracesSampleRate?: number;
-    integrations?: any[];
+    integrations?: unknown[];
   }): void;
-  export function browserTracingIntegration(): any;
+  export function browserTracingIntegration(): unknown;
 }
