@@ -258,6 +258,42 @@ create table public.audit_logs (
 
 ---
 
+---
+
+## Cold Start Debug Session (2026-07-29)
+
+### Root Cause Analysis — Vercel 500 on Cold Start
+The 500 error on cold start was a **Sentry.init crash** — `Sentry.init()` was called unconditionally at module level in `api/index.ts` (the Vercel serverless entry point) without checking if `SENTRY_DSN` env var was set. Since no DSN was configured on Vercel, the init call threw, crashing the serverless function before the Express app could start.
+
+### All Fixes Applied
+
+| # | File | Fix | Impact |
+|---|------|-----|--------|
+| 1 | `api/index.ts:16-21` | Wrapped `Sentry.init()` in `if (process.env.SENTRY_DSN)` guard | **Cold start 500 fix** — serverless now boots without Sentry DSN |
+| 2 | `server/index.ts:16-21` | Same Sentry guard applied to dev server | Prevents identical crash in local dev when DSN is unset |
+| 3 | `client/src/main.tsx:10-17` | Same guard using `import.meta.env.VITE_SENTRY_DSN` | Client-side Sentry init doesn't throw when DSN is unset |
+| 4 | `api/index.ts:203-209` | `Promise.allSettled` → `Promise.all` in init middleware | `allSettled` was silently swallowing seed failures, leaving DB unseeded on cold start |
+| 5 | `api/index.ts:196` | `"0.4.1"` → `"0.4.2"` version string | Health endpoint now reports correct version |
+| 6 | `server/index.ts:205` | `"0.4.1"` → `"0.4.2"` version string | Same |
+| 7 | `server/email.ts:3-17` | Lazy `getTransporter()` + env var aliases (`SMTP_USER`/`SMTP_PASS` primary, `SMTP_LOGIN`/`SMTP_KEY` fallback) | Prevents crash when email not configured; aligns with `.env.example` |
+
+### Build Verification
+- `vite build` succeeds: **2849 modules transformed**, built in **10.38s**
+- `tsc --noEmit` passes (only `baseUrl` deprecation warning for TS 7.0)
+- The `npm run build` script does **not exist** in `package.json`; use `npm run build:client` instead
+- `npm install` from WSL required for Linux native bindings (`@rolldown/binding-linux-x64-gnu`)
+
+### Remaining Minor Issues (non-blocking)
+1. **`getOrdersByUserId` UUID/int type mismatch** (`server/database-storage.ts:447-451`) — `orders.userId` is `uuid` column but `req.session.userId` is `serial int`; comparison `eq(orders.userId, String(userId))` never matches. Orders are created without `userId` in practice, so this doesn't crash but never returns logged-in user's orders.
+2. **No `build` npm script** — `package.json` has `build:client` and `vercel-build` instead. The user's instruction to run `npm run build` won't work; use `npm run build:client`.
+3. **`admin/users/vendors` endpoint not in backend** — the README lists `GET /api/admin/users/vendors` but it doesn't exist in `routes.ts`. The frontend derives vendors client-side via `allUsers.filter(u => u.role === 'vendor')` from `GET /api/admin/users`, so this is a doc-only gap.
+4. **UNC path limitation** — PowerShell cannot run `tsc`/`npm run check` when CWD is `\\wsl.localhost\...` because CMD.exe rejects UNC paths. Use WSL (`wsl -d Ubuntu-26.04`) for all builds.
+
+### WSL Build Command (for next session)
+```bash
+wsl -d Ubuntu-26.04 -- bash -l -c "export PATH=/home/bergazi21/.nvm/versions/node/v22.23.1/bin:\$PATH && cd /mnt/wsl/RetailTrove && /home/bergazi21/.nvm/versions/node/v22.23.1/bin/node ./node_modules/vite/bin/vite.js build"
+```
+
 ## Notes for Next Session
 
 - **Supabase RLS:** `loyalty_accounts` and `loyalty_transactions` policies are designed but not yet executed — must use Supabase SQL Editor

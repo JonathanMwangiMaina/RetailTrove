@@ -13,12 +13,13 @@ import { handleCsrfToken, csrfSynchronisedProtection } from "../server/middlewar
 import { verifyLemonSqueezyWebhook } from "../server/payment-service.js";
 import * as Sentry from "@sentry/node";
 
-Sentry.init({
-  dsn: process.env.SENTRY_DSN,
-  environment: process.env.NODE_ENV ?? "development",
-  tracesSampleRate: process.env.NODE_ENV === "production" ? 0.2 : 0,
-  integrations: [Sentry.consoleIntegration()],
-});
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV ?? "development",
+    tracesSampleRate: process.env.NODE_ENV === "production" ? 0.2 : 0,
+  });
+}
 
 const app = express();
 
@@ -192,7 +193,7 @@ app.get("/api/health", async (_req: Request, res: Response) => {
     uptime: Math.floor(process.uptime()),
     database: dbStatus,
     environment: process.env.NODE_ENV ?? "development",
-    version: "0.4.1",
+    version: "0.4.2",
   });
 });
 
@@ -200,7 +201,7 @@ let isInitialized = false;
 app.use(async (_req: Request, _res: Response, next: NextFunction) => {
   if (!isInitialized) {
     try {
-      await Promise.allSettled([
+      await Promise.all([
         storage.ensureBanner(),
         storage.ensureDefaultAdmin(),
         storage.ensureSiteContent(),

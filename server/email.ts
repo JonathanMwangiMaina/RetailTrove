@@ -1,20 +1,26 @@
 import nodemailer from "nodemailer";
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtp-relay.brevo.com",
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_LOGIN,
-    pass: process.env.SMTP_KEY,
-  },
-});
+let transporter: nodemailer.Transporter | null = null;
+
+function getTransporter(): nodemailer.Transporter {
+  if (!transporter) {
+    const smtpUser = process.env.SMTP_USER || process.env.SMTP_LOGIN;
+    const smtpPass = process.env.SMTP_PASS || process.env.SMTP_KEY;
+    transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || "smtp-relay.brevo.com",
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: false,
+      auth: smtpUser ? { user: smtpUser, pass: smtpPass || "" } : undefined,
+    });
+  }
+  return transporter;
+}
 
 const FROM_ADDRESS = process.env.SMTP_FROM || "RetailTrove <noreply@retailtrove.com>";
 
 export async function sendWelcomeEmail(email: string): Promise<void> {
   try {
-    await transporter.sendMail({
+    await getTransporter().sendMail({
       from: FROM_ADDRESS,
       to: email,
       subject: "Welcome to RetailTrove Newsletter!",
@@ -107,7 +113,7 @@ export async function sendNewsletterEmail(
       const batch = subscribers.slice(i, i + batchSize);
       await Promise.all(
         batch.map((email) =>
-          transporter.sendMail({
+          getTransporter().sendMail({
             from: FROM_ADDRESS,
             to: email,
             subject,
@@ -125,7 +131,7 @@ export async function sendNewsletterEmail(
 
 export async function sendPasswordResetEmail(email: string, resetUrl: string): Promise<void> {
   try {
-    await transporter.sendMail({
+    await getTransporter().sendMail({
       from: FROM_ADDRESS,
       to: email,
       subject: "Reset Your Password — RetailTrove",
