@@ -7,6 +7,7 @@ import Header from "@/components/layout/header";
 import Footer from "@/components/layout/footer";
 import { CartProvider } from "@/hooks/use-cart";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
+import { WishlistProvider } from "@/hooks/use-wishlist";
 import { apiRequest } from "@/lib/queryClient";
 import { ErrorBoundary } from "@/components/error-boundary";
 
@@ -27,6 +28,7 @@ const ResetPasswordPage = lazy(() => import("@/pages/reset-password"));
 const AdminPage = lazy(() => import("@/pages/admin"));
 const VendorPage = lazy(() => import("@/pages/vendor"));
 const AccountPage = lazy(() => import("@/pages/account"));
+const WishlistPage = lazy(() => import("@/pages/wishlist"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 
 // ── Fallback Loading Component ──────────────────────────────────────────────
@@ -81,6 +83,7 @@ function Router() {
             <Route path="/admin" component={AdminPage} />
             <Route path="/vendor" component={VendorPage} />
             <Route path="/account" component={AccountPage} />
+            <Route path="/wishlist" component={WishlistPage} />
             <Route component={NotFound} />
           </Switch>
         </Suspense>
@@ -93,16 +96,18 @@ function App() {
   return (
     <AuthProvider>
       <CartProvider>
-        <TooltipProvider>
-          <Toaster />
-          <div className="flex flex-col min-h-screen">
-            <Header />
-            <main id="main-content" className="flex-grow">
-              <Router />
-            </main>
-            <Footer />
-          </div>
-        </TooltipProvider>
+        <WishlistProvider>
+          <TooltipProvider>
+            <Toaster />
+            <div className="flex flex-col min-h-screen">
+              <Header />
+              <main id="main-content" className="flex-grow">
+                <Router />
+              </main>
+              <Footer />
+            </div>
+          </TooltipProvider>
+        </WishlistProvider>
       </CartProvider>
     </AuthProvider>
   );

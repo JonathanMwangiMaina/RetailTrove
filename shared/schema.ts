@@ -17,6 +17,7 @@ import {
   uuid,
   varchar,
   jsonb,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { relations } from "drizzle-orm";
@@ -92,6 +93,8 @@ export const orders = pgTable("orders", {
   stripePaymentIntentId: text("stripe_payment_intent_id"), // Lemon Squeezy order ID / M-Pesa MerchantRequestID
   mpesaReceiptNumber: text("mpesa_receipt_number"), // M-Pesa receipt (e.g. "QHJ7A1BCDE")
   idempotencyKey: text("idempotency_key"), // Unique per payment attempt — prevents duplicate callback processing
+  shippingStatus: text("shipping_status").default("pending"), // "pending" | "processing" | "shipped" | "delivered" | "cancelled"
+  shippedAt: timestamp("shipped_at"),
 });
 
 /**
@@ -118,6 +121,24 @@ export const cartItems = pgTable("cart_items", {
   cartId: text("cart_id"),
   userId: uuid("user_id"),
 });
+
+/**
+ * Wishlist Items Table (`wishlist_items`)
+ * Tracks products a user has saved to their favorites list.
+ * Each (user, product) pair is unique — toggling adds or removes.
+ */
+export const wishlistItems = pgTable(
+  "wishlist_items",
+  {
+    id: serial("id").primaryKey(),
+    userId: uuid("user_id").notNull(),
+    productId: integer("product_id")
+      .references(() => products.id)
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => [uniqueIndex("wishlist_items_user_product_idx").on(t.userId, t.productId)],
+);
 
 /**
  * Announcement Banner Configuration (`banner_settings`)
@@ -316,6 +337,10 @@ export const cartItemsRelations = relations(cartItems, ({ one }) => ({
   product: one(products, { fields: [cartItems.productId], references: [products.id] }),
 }));
 
+export const wishlistItemsRelations = relations(wishlistItems, ({ one }) => ({
+  product: one(products, { fields: [wishlistItems.productId], references: [products.id] }),
+}));
+
 export const faqsRelations = relations(faqs, ({ one }) => ({
   submitter: one(users, { fields: [faqs.submittedBy], references: [users.id] }),
 }));
@@ -401,6 +426,14 @@ export const insertCartItemSchema = createInsertSchema(cartItems, {
 });
 
 export const selectCartItemSchema = createSelectSchema(cartItems);
+
+// ── Wishlist Schemas ─────────────────────────────────────────────────────────
+
+export const insertWishlistItemSchema = createInsertSchema(wishlistItems).omit({
+  id: true,
+  createdAt: true,
+});
+export const selectWishlistItemSchema = createSelectSchema(wishlistItems);
 
 // ── Site & CMS Settings Schemas ──────────────────────────────────────────────
 
@@ -529,6 +562,10 @@ export type InsertOrderItem = z.infer<typeof insertOrderItemSchema>;
 /** Shopping cart domain entity types */
 export type CartItem = z.infer<typeof selectCartItemSchema>;
 export type InsertCartItem = z.infer<typeof insertCartItemSchema>;
+
+/** Wishlist domain entity types */
+export type WishlistItem = z.infer<typeof selectWishlistItemSchema>;
+export type InsertWishlistItem = z.infer<typeof insertWishlistItemSchema>;
 
 /** Site banner settings entity types */
 export type BannerSettings = z.infer<typeof selectBannerSettingsSchema>;

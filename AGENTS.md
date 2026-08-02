@@ -10,7 +10,7 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 - **Platform:** Windows (PowerShell) + WSL Ubuntu 26.04
 - **Node.js:** `/home/bergazi21/.nvm/versions/node/v22.23.1/bin/node` (via nvm in WSL)
 - **Windows tsc:** `& "C:\Program Files\nodejs\node.exe" ".\node_modules\typescript\bin\tsc" --noEmit`
-- **Tests:** ✅ Fixed — `npm i` from WSL installs Linux native bindings; all 59 tests pass in WSL
+- **Tests:** ✅ Fixed — `npm i` from WSL installs Linux native bindings; all 67 tests pass in WSL
 - **DB push:** `npm run db:push` unreachable from WSL (ETIMEDOUT on Supabase port 6543) — must use Supabase SQL Editor
 - **ESLint 10 (flat config) + Prettier 3:** 0 errors, 65 warnings (all `no-explicit-any`, 16 in test files)
 - **Git remote:** SSH (`git@github.com:JonathanMwangiMaina/RetailTrove.git`)
@@ -35,8 +35,8 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 | 2 | **Integration tests** (payment + order flows) | **P0 — Critical** | 4-6 hours | ✅ Done. 24 new tests across 4 files: M-Pesa callback, LS webhook, order creation, stock atomicity, cart ownership. 59 total tests pass. |
 | 3 | **Sentry error monitoring** | **P1 — High** | 15-30 min | ✅ Done. `@sentry/node` + `@sentry/react` wired in server, serverless, and client. Needs DSN from Sentry project to activate. |
 | 4 | **Health check endpoint** | **P1 — High** | 15 min | ✅ Done. `GET /api/health` in both dev and serverless. Returns status, uptime, DB connectivity. |
-| 5 | **Email notifications** (shipping, marketing) | **P1 — High** | 3-4 hours | Brevo/Nodemailer already wired (`server/email.ts`). Need: order confirmation emails, shipping status updates, marketing unsubscribe. Missing emails = poor post-purchase experience. |
-| 6 | **Wishlists / favorites** | **P2 — Medium** | 3-4 hours | Placeholder button exists on product page (does nothing). Needs: `wishlists` table, API CRUD, heart toggle UI, wishlist page. Increases retention + repeat visits. |
+| 5 | **Email notifications** (shipping, marketing) | **P1 — High** | 3-4 hours | ✅ Done. Order confirmation on LS/M-Pesa payment callbacks + shipping status emails on admin update. `sendOrderConfirmationEmail()` + `sendShippingStatusEmail()` in `server/email.ts`. Needs SMTP creds in `.env` (Brevo) to activate. |
+| 6 | **Wishlists / favorites** | **P2 — Medium** | 3-4 hours | ✅ Done. `wishlist_items` table, API CRUD (GET/POST/DELETE `/api/wishlist`), heart toggle on product page + header count + `/wishlist` page. Run `migrations/0003_add_wishlist_items.sql` in Supabase. |
 | 7 | **Idempotency keys on payments** | **P2 — Medium** | 2-3 hours | ✅ Done. `idempotency_key` column on orders, status check in M-Pesa callback + LS webhook, key generated on payment initiation. Run `migrations/add-idempotency-key.sql` in Supabase to apply. |
 | 8 | **Product variants** (size, color) | **P3 — Nice-to-have** | 8-12 hours | Schema rework: `product_variants` table, cart/order item changes, UI selectors. Significant scope. Only worth it if inventory actually has variants. |
 | 9 | **Redis cache layer** | **P3 — Nice-to-have** | 3-4 hours | Cache product listings, site settings, featured products. Reduces Supabase load. Adds infra complexity (Upstash Redis free tier). Beneficial but not blocking. |
@@ -56,9 +56,9 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 
 | # | Feature | Priority | Est. Time | Notes |
 |---|---------|----------|-----------|-------|
-| 1 | **Email notifications** | **P1 — High** | 3-4 hours | Order confirmation on payment callback, shipping status updates. Brevo/Nodemailer already wired. Highest remaining user-facing gap. |
-| 2 | **Wishlists / favorites** | **P2 — Medium** | 3-4 hours | `wishlists` table, API CRUD (POST/GET/DELETE), heart toggle on product page + wishlist page. Increases retention. |
-| 3 | **Supabase RLS policies** | **P2 — Medium** | 30 min | Execute designed RLS for `loyalty_accounts`, `loyalty_transactions`, `team_members`. Execute via Supabase SQL Editor. |
+| 1 | **Email notifications** | **P1 — High** | 3-4 hours | ✅ Done (v0.5.0). Order confirmation + shipping status emails wired. Needs SMTP creds to activate. |
+| 2 | **Wishlists / favorites** | **P2 — Medium** | 3-4 hours | ✅ Done (v0.5.0). Table + API + UI shipped. Run `migrations/0003_add_wishlist_items.sql`. |
+| 3 | **Supabase RLS policies** | **P2 — Medium** | 30 min | ✅ Done. `migrations/rls-policies.sql` ready — execute in Supabase SQL Editor. |
 | 4 | **Redis cache layer** | **P3 — Nice-to-have** | 3-4 hours | Upstash Redis for product listings, site settings, featured products. Reduces Supabase load. |
 | 5 | **CDN image optimisation** | **P3 — Nice-to-have** | 1-2 hours | Cloudinary/imgproxy for responsive WebP images. Currently raw Unsplash URLs. |
 | 6 | **Product variants** | **P3 — Nice-to-have** | 8-12 hours | Schema rework: product_variants table, cart/order item changes, UI selectors. Only if inventory has variants. |
@@ -118,8 +118,42 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 - `server/__tests__/lemonsqueezy-webhook.test.ts` (4 tests) — LS webhook: order_created, order_refunded, missing order, **idempotency**
 - `server/__tests__/orders.test.ts` (7 tests) — Order creation: valid data, total mismatch, missing product, invalid email, **stock decrement atomicity**, **no negative stock**
 - `server/__tests__/cart.test.ts` (7 tests) — Cart ownership: PUT/DELETE own item, **reject another user's item**, 404, invalid quantity
-- All 59 tests pass (3 existing + 24 new + 9 + 17 + 6)
+- All 67 tests pass (59 previous + 8 new wishlist tests)
 - Uses **Vitest + supertest** with mocked storage layer (no real DB needed)
+
+---
+
+## v0.5.0 Email Notifications + Wishlists + RLS (2026-08-02)
+
+### Email Notifications (P1)
+- Added `sendOrderConfirmationEmail(order, items)` + `sendShippingStatusEmail(order, items, status)` to `server/email.ts` (shared `emailShell()` layout + `orderItemsTable()` + `shippingAddressHtml()` helpers)
+- Order confirmation sent in both `server/index.ts` and `api/index.ts` on Lemon Squeezy `order_created` + M-Pesa `ResultCode === 0`
+- Added `getOrderItems(orderId)` to IStorage + DatabaseStorage
+- Added `shippingStatus` (default `"pending"`) + `shippedAt` columns to `orders` schema; migration `migrations/0004_add_shipping_status.sql`
+- New admin endpoints: `GET /api/admin/orders` (all orders), `GET /api/admin/orders/:id/items`, `PUT /api/admin/orders/:id/shipping` (sends shipping email when paid + status ≠ pending)
+- Admin Orders tab now shows payment + shipping badges with an inline shipping-status `Select` (admin.tsx now fetches `/api/admin/orders`)
+
+### Wishlists / Favorites (P2)
+- `wishlistItems` table (uuid `user_id` + product FK, composite unique index) in `shared/schema.ts`; migration `migrations/0003_add_wishlist_items.sql`
+- Storage: `getWishlistProducts`, `isInWishlist`, `addToWishlist` (onConflictDoNothing), `removeFromWishlist`
+- API: `GET /api/wishlist`, `POST /api/wishlist/:productId`, `DELETE /api/wishlist/:productId` (all `requireAuth`; POST validates product exists)
+- Client: `use-wishlist` context (react-query backed, optimistic toggles), heart toggle on product page (filled when saved), header heart icon + count, "My Wishlist" in account dropdown + mobile menu, new `/wishlist` page
+
+### RLS Policies (P2)
+- `migrations/rls-policies.sql` — defense-in-depth RLS: `team_members` (public reads published), `loyalty_accounts`/`loyalty_transactions` (authenticated reads own via `users.auth_user_id` join), `wishlist_items` (authenticated CRUD own), `password_reset_tokens` (deny all client), `audit_logs` (deny authenticated reads). Writes via `service_role`. Run in Supabase SQL Editor.
+
+### Verification
+- `tsc --noEmit`: 0 errors ✅
+- `vitest run`: 67/67 passing (8 new wishlist tests) ✅
+- `eslint`: 0 errors (warnings are pre-existing `no-explicit-any` patterns) ✅
+- `vite build`: success ✅
+
+### Setup required (Supabase SQL Editor)
+1. `migrations/0003_add_wishlist_items.sql` — wishlist table
+2. `migrations/0004_add_shipping_status.sql` — shipping status columns
+3. `migrations/rls-policies.sql` — RLS policies
+4. SMTP creds (`SMTP_USER`/`SMTP_PASS`) in `.env` to activate transactional emails
+
 
 ### Idempotency Keys on Payments
 - Added `idempotencyKey` column to `orders` table schema
@@ -460,7 +494,7 @@ When using `git commit -m "message"` inside `wsl -e bash -c` with single-quote w
 - `tsc --noEmit`: 0 errors
 - `eslint`: 0 errors, ~66 warnings (all `no-explicit-any` pre-existing)
 - `prettier --check`: All files formatted
-- All 59 vitest tests pass (mocked storage, no real DB needed)
+- All 67 vitest tests pass (mocked storage, no real DB needed)
 - UNC path limitation: PowerShell cannot run `tsc` when CWD is `\\wsl.localhost\...` — use WSL instead
 
 ### Commands (WSL)

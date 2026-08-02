@@ -14,6 +14,7 @@ import type {
   Order,
   InsertOrder,
   InsertOrderItem,
+  OrderItem,
   CartItem,
   InsertCartItem,
   CartItemWithProduct,
@@ -85,6 +86,13 @@ export interface IStorage {
   deleteCartItem(id: number): Promise<boolean>;
   clearCart(cartId: string): Promise<void>;
 
+  // ── Wishlist Operations ────────────────────────────────────────────────────
+
+  getWishlistProducts(authUserId: string): Promise<Product[]>;
+  isInWishlist(authUserId: string, productId: number): Promise<boolean>;
+  addToWishlist(authUserId: string, productId: number): Promise<void>;
+  removeFromWishlist(authUserId: string, productId: number): Promise<void>;
+
   // ── Order Operations ───────────────────────────────────────────────────────
 
   createOrder(order: InsertOrder, items: InsertOrderItem[]): Promise<Order>;
@@ -93,6 +101,7 @@ export interface IStorage {
   getOrderByStripeSessionId(sessionId: string): Promise<Order | undefined>;
   getOrderByIdempotencyKey(key: string): Promise<Order | undefined>;
   getOrdersByUserId(authUserId: string): Promise<Order[]>;
+  getOrderItems(orderId: number): Promise<OrderItem[]>;
   decrementStock(productId: number, quantity: number): Promise<Product | undefined>;
   getLowStockProducts(threshold?: number): Promise<Product[]>;
 
@@ -107,6 +116,8 @@ export interface IStorage {
       idempotencyKey?: string;
     },
   ): Promise<Order | undefined>;
+
+  updateOrderShippingStatus(id: number, status: string): Promise<Order | undefined>;
 
   // ── CMS & Settings Operations ──────────────────────────────────────────────
 

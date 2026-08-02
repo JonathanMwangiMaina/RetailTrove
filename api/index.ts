@@ -11,6 +11,7 @@ import { globalLimiter } from "../server/middleware/rate-limiter.js";
 import { sanitizeInput } from "../server/middleware/sanitize.js";
 import { handleCsrfToken, csrfSynchronisedProtection } from "../server/middleware/csrf.js";
 import { verifyLemonSqueezyWebhook } from "../server/payment-service.js";
+import { sendOrderConfirmationEmail } from "../server/email.js";
 import * as Sentry from "@sentry/node";
 
 if (process.env.SENTRY_DSN) {
@@ -60,6 +61,11 @@ app.post(
             stripePaymentIntentId: String(payload.data.id ?? ""),
           });
           console.log(`[Lemon Squeezy] Order #${orderId} marked as paid`);
+          const paidOrder = await storage.getOrderById(orderId);
+          if (paidOrder) {
+            const items = await storage.getOrderItems(orderId);
+            await sendOrderConfirmationEmail(paidOrder, items);
+          }
         } else if (eventName === "order_refunded") {
           await storage.updateOrderPayment(orderId, { paymentStatus: "refunded" });
           console.log(`[Lemon Squeezy] Order #${orderId} refunded`);
@@ -112,6 +118,8 @@ app.post("/api/mpesa/callback", express.json(), async (req: Request, res: Respon
         mpesaReceiptNumber: metadata.MpesaReceiptNumber ?? null,
       });
       console.log(`[M-Pesa] Order #${order.id} paid — receipt: ${metadata.MpesaReceiptNumber}`);
+      const items = await storage.getOrderItems(order.id);
+      await sendOrderConfirmationEmail(order, items);
     } else {
       await storage.updateOrderPayment(order.id, { paymentStatus: "failed" });
       console.warn(`[M-Pesa] Order #${order.id} failed: ${ResultDesc} (code: ${ResultCode})`);

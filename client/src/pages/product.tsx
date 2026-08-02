@@ -4,6 +4,7 @@ import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCart } from "@/hooks/use-cart";
+import { useWishlist } from "@/hooks/use-wishlist";
 import { useCurrency } from "@/hooks/use-currency";
 import { Product as ProductType } from "@shared/schema";
 import { StarIcon, CheckIcon, GlobeIcon, HeartIcon } from "lucide-react";
@@ -11,6 +12,7 @@ import { StarIcon, CheckIcon, GlobeIcon, HeartIcon } from "lucide-react";
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
   const { addToCart } = useCart();
+  const { isWishlisted, toggle } = useWishlist();
   const { formatPrice } = useCurrency();
   const [selectedImage, setSelectedImage] = useState(0);
 
@@ -210,10 +212,23 @@ export default function ProductPage() {
               </Button>
               <Button
                 variant="outline"
-                className="flex items-center justify-center text-secondary-600 hover:text-secondary-500"
+                onClick={() => toggle(product)}
+                aria-pressed={isWishlisted(product.id)}
+                aria-label={
+                  isWishlisted(product.id)
+                    ? `Remove ${product.name} from wishlist`
+                    : `Add ${product.name} to wishlist`
+                }
+                className={`flex items-center justify-center ${
+                  isWishlisted(product.id)
+                    ? "text-rose-600 hover:text-rose-700 border-rose-200 bg-rose-50"
+                    : "text-secondary-600 hover:text-secondary-500"
+                }`}
               >
-                <HeartIcon className="h-5 w-5 mr-2" />
-                Add to wishlist
+                <HeartIcon
+                  className={`h-5 w-5 mr-2 ${isWishlisted(product.id) ? "fill-current" : ""}`}
+                />
+                {isWishlisted(product.id) ? "Remove from wishlist" : "Add to wishlist"}
               </Button>
             </div>
 

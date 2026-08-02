@@ -786,7 +786,7 @@ Copy `.env.example` to `.env` and populate:
 
 **Test Runner:** Vitest 4.1.10
 
-**Current Status:** 59 tests across 7 test files.
+**Current Status:** 67 tests across 8 test files.
 
 | Test File | Tests | Coverage |
 |---|---|---|
@@ -794,6 +794,7 @@ Copy `.env.example` to `.env` and populate:
 | `server/__tests__/lemonsqueezy-webhook.test.ts` | 4 | LS webhook: order_created, order_refunded, idempotency, missing order |
 | `server/__tests__/orders.test.ts` | 7 | Order creation: validation, stock atomicity, total mismatch |
 | `server/__tests__/cart.test.ts` | 7 | Cart ownership: PUT/DELETE own item, reject others, 404, invalid qty |
+| `server/__tests__/wishlist.test.ts` | 8 | Wishlist: auth required, add/remove, idempotent add, 404, invalid id |
 | `client/src/lib/__tests__/currencies.test.ts` | 17 | CURRENCY array, lookup, conversion, formatting |
 | `client/src/lib/__tests__/countries.test.ts` | 9 | COUNTRIES array, sorting, lookup |
 | `shared/__tests__/schemas.test.ts` | 9 | insertUserSchema, insertProductSchema validation |
@@ -923,6 +924,16 @@ Each ADR follows the [MADR](https://adr.github.io/madr/) template: Context → D
 ## Changelog
 
 See `CHANGELOG.md` for complete version history.
+
+### v0.5.0 — Email Notifications, Wishlists & RLS (2026-08-02)
+
+- **Added:** Order confirmation emails on payment callbacks (Lemon Squeezy `order_created` + M-Pesa success) — `sendOrderConfirmationEmail()` in `server/email.ts`
+- **Added:** Shipping status emails on admin update — `sendShippingStatusEmail()` + new `shippingStatus`/`shippedAt` columns
+- **Added:** Admin endpoints `GET /api/admin/orders`, `GET /api/admin/orders/:id/items`, `PUT /api/admin/orders/:id/shipping`; admin Orders tab now has payment + shipping badges and an inline shipping-status select
+- **Added:** Wishlists — `wishlist_items` table, `GET/POST/DELETE /api/wishlist`, heart toggle on product page, header count, `/wishlist` page
+- **Added:** RLS policies migration (`migrations/rls-policies.sql`) for team_members, loyalty tables, wishlist_items, password_reset_tokens, audit_logs
+- **Added:** 8 wishlist integration tests (`server/__tests__/wishlist.test.ts`)
+- **All 67 tests pass**
 
 ### v0.4.4-dev — TypeScript Safety & ADRs (2026-07-29)
 

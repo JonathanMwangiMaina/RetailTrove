@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useCart } from "@/hooks/use-cart";
 import { useAuth } from "@/hooks/use-auth";
+import { useWishlist } from "@/hooks/use-wishlist";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import CartDrawer from "@/components/cart/cart-drawer";
@@ -28,6 +29,7 @@ import {
   CheckIcon,
   XCircleIcon,
   Star,
+  HeartIcon,
 } from "lucide-react";
 
 interface BannerData {
@@ -62,6 +64,7 @@ export default function Header() {
   const [location, navigate] = useLocation();
   const { totalItems } = useCart();
   const { user, logout } = useAuth();
+  const { wishlist } = useWishlist();
   const { toast } = useToast();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -304,6 +307,19 @@ export default function Header() {
                         </span>
                       </Link>
                     </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/wishlist">
+                        <span className="flex items-center gap-2 cursor-pointer">
+                          <HeartIcon className="h-4 w-4 text-slate-500" />
+                          My Wishlist
+                          {wishlist.length > 0 && (
+                            <span className="ml-auto text-xs font-semibold text-rose-600">
+                              {wishlist.length}
+                            </span>
+                          )}
+                        </span>
+                      </Link>
+                    </DropdownMenuItem>
                     {(user.role === "admin" || user.role === "vendor") && (
                       <DropdownMenuItem asChild>
                         <Link href={dashboardHref(user.role)}>
@@ -333,6 +349,26 @@ export default function Header() {
                   >
                     <UserIcon className="h-4 w-4" />
                     Sign In
+                  </Button>
+                </Link>
+              )}
+
+              {/* Wishlist Link (auth only) */}
+              {user && (
+                <Link href="/wishlist">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-full relative"
+                    aria-label="Wishlist"
+                    title="My Wishlist"
+                  >
+                    <HeartIcon className="h-5 w-5" />
+                    {wishlist.length > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[10px] font-bold rounded-full h-5 min-w-[20px] px-1 flex items-center justify-center border-2 border-white">
+                        {wishlist.length}
+                      </span>
+                    )}
                   </Button>
                 </Link>
               )}
@@ -415,6 +451,18 @@ export default function Header() {
                     className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-md cursor-pointer"
                   >
                     My Account
+                  </span>
+                </Link>
+
+                <Link href="/wishlist">
+                  <span
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center justify-between px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-md cursor-pointer"
+                  >
+                    My Wishlist
+                    {wishlist.length > 0 && (
+                      <span className="text-xs font-semibold text-rose-600">{wishlist.length}</span>
+                    )}
                   </span>
                 </Link>
 

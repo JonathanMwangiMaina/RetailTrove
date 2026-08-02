@@ -7,6 +7,44 @@ This project does not currently use semantic versioning — entries are dated.
 
 ---
 
+## [v0.5.0] — Email Notifications, Wishlists & RLS (2026-08-02)
+
+### Added
+
+#### Email Notifications (P1)
+- `sendOrderConfirmationEmail(order, items)` + `sendShippingStatusEmail(order, items, status)` in `server/email.ts` with shared `emailShell()` layout + `orderItemsTable()` + `shippingAddressHtml()` helpers
+- Order confirmation emails sent on Lemon Squeezy `order_created` + M-Pesa `ResultCode === 0` callbacks in both `server/index.ts` and `api/index.ts`
+- `shippingStatus` (default `"pending"`) + `shippedAt` columns on `orders`; migration `migrations/0004_add_shipping_status.sql`
+- New admin endpoints: `GET /api/admin/orders`, `GET /api/admin/orders/:id/items`, `PUT /api/admin/orders/:id/shipping` (emails shipping status when order is paid and status changed from `pending`)
+- Admin Orders tab redesigned with payment + shipping badges and inline shipping-status `Select` (now fetches `/api/admin/orders`)
+
+#### Wishlists / Favorites (P2)
+- `wishlist_items` table (uuid `user_id` + product FK, composite unique index) in `shared/schema.ts`; migration `migrations/0003_add_wishlist_items.sql`
+- Storage methods: `getWishlistProducts`, `isInWishlist`, `addToWishlist` (onConflictDoNothing), `removeFromWishlist`
+- API: `GET /api/wishlist`, `POST /api/wishlist/:productId`, `DELETE /api/wishlist/:productId` (all `requireAuth`; POST validates product exists)
+- Client: `use-wishlist` React Query context with optimistic toggles, functional heart on product page, header heart icon + count badge, "My Wishlist" in account dropdown + mobile menu, new `/wishlist` page
+
+#### RLS Policies (P2)
+- `migrations/rls-policies.sql` — `team_members` public read published; `loyalty_accounts`/`loyalty_transactions` authenticated read-own via `users.auth_user_id` join; `wishlist_items` authenticated CRUD own; `password_reset_tokens` + `audit_logs` deny client access; writes via `service_role`
+
+#### Tests
+- `server/__tests__/wishlist.test.ts` — 8 integration tests (mock storage + supertest): auth required, empty list, list, add, 404 on missing product, invalid id, remove, idempotent add
+- All 67 tests pass (59 previous + 8 new)
+
+### Changed
+- `server/storage.ts` / `server/database-storage.ts`: added `getOrderItems`, `updateOrderShippingStatus`, and 4 wishlist methods to `IStorage` + implementations
+- `shared/schema.ts`: `wishlistItems` table, orders `shippingStatus`/`shippedAt`, wishlist relations + zod schemas + types
+- `client/src/App.tsx`: `WishlistProvider` + `/wishlist` route
+- `client/src/components/layout/header.tsx`: heart icon + wishlist count, dropdown + mobile menu entries
+
+### Setup required (Supabase SQL Editor)
+1. `migrations/0003_add_wishlist_items.sql` — wishlist table
+2. `migrations/0004_add_shipping_status.sql` — shipping status columns
+3. `migrations/rls-policies.sql` — RLS policies
+4. SMTP creds (`SMTP_USER`/`SMTP_PASS`) in `.env` to activate transactional emails
+
+---
+
 ## [Unreleased] — v0.4.4
 
 ### Added

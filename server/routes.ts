@@ -13,6 +13,7 @@ import { z } from "zod";
 import { writeLimiter } from "./middleware/rate-limiter.js";
 import { logAudit } from "./middleware/audit.js";
 import { createLemonSqueezyCheckout, initiateMpesaStkPush } from "./payment-service.js";
+import { sendShippingStatusEmail } from "./email.js";
 
 type CsrfMiddleware = (req: Request, res: Response, next: NextFunction) => void;
 
@@ -328,6 +329,55 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     }
   });
 
+  // ── Wishlist Routes ─────────────────────────────────────────────────────────
+
+  router.get("/wishlist", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const products = await storage.getWishlistProducts(req.session.authUserId ?? "");
+      res.json(products);
+    } catch (error) {
+      console.error("Error fetching wishlist:", error);
+      res.json([]);
+    }
+  });
+
+  post("/wishlist/:productId", writeLimiter, requireAuth, async (req: Request, res: Response) => {
+    try {
+      const productId = parseInt(req.params.productId, 10);
+      if (isNaN(productId)) {
+        return res.status(400).json({ message: "Invalid product ID" });
+      }
+      const product = await storage.getProductById(productId);
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+      await storage.addToWishlist(req.session.authUserId ?? "", productId);
+      res.status(201).json({ productId, inWishlist: true });
+    } catch (error) {
+      console.error(`Error adding product ${req.params.productId} to wishlist:`, error);
+      res.status(500).json({ message: "Failed to add item to wishlist" });
+    }
+  });
+
+  del(
+    "/wishlist/:productId",
+    writeLimiter,
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const productId = parseInt(req.params.productId, 10);
+        if (isNaN(productId)) {
+          return res.status(400).json({ message: "Invalid product ID" });
+        }
+        await storage.removeFromWishlist(req.session.authUserId ?? "", productId);
+        res.json({ productId, inWishlist: false });
+      } catch (error) {
+        console.error(`Error removing product ${req.params.productId} from wishlist:`, error);
+        res.status(500).json({ message: "Failed to remove item from wishlist" });
+      }
+    },
+  );
+
   // ── Order Routes ────────────────────────────────────────────────────────────
 
   post("/orders", writeLimiter, async (req: Request, res: Response) => {
@@ -399,6 +449,81 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
       res.json([]);
     }
   });
+
+  // ── Admin Order Routes ──────────────────────────────────────────────────────
+
+  router.get(
+    "/admin/orders",
+    requireAuth,
+    requireRole("admin"),
+    async (_req: Request, res: Response) => {
+      try {
+        const orders = await storage.getAllOrders();
+        res.json(orders);
+      } catch (error) {
+        console.error("Error fetching all orders:", error);
+        res.json([]);
+      }
+    },
+  );
+
+  router.get(
+    "/admin/orders/:id/items",
+    requireAuth,
+    requireRole("admin"),
+    async (req: Request, res: Response) => {
+      try {
+        const orderId = parseInt(req.params.id, 10);
+        if (isNaN(orderId)) return res.status(400).json({ message: "Invalid order ID" });
+        const items = await storage.getOrderItems(orderId);
+        res.json(items);
+      } catch (error) {
+        console.error("Error fetching order items:", error);
+        res.json([]);
+      }
+    },
+  );
+
+  put(
+    "/admin/orders/:id/shipping",
+    writeLimiter,
+    requireAuth,
+    requireRole("admin"),
+    async (req: Request, res: Response) => {
+      try {
+        const orderId = parseInt(req.params.id, 10);
+        if (isNaN(orderId)) return res.status(400).json({ message: "Invalid order ID" });
+
+        const { status } = req.body;
+        const allowed = ["pending", "processing", "shipped", "delivered", "cancelled"];
+        if (typeof status !== "string" || !allowed.includes(status)) {
+          return res.status(400).json({ message: "Invalid shipping status" });
+        }
+
+        const order = await storage.getOrderById(orderId);
+        if (!order) return res.status(404).json({ message: "Order not found" });
+
+        const updated = await storage.updateOrderShippingStatus(orderId, status);
+
+        if (order.paymentStatus === "paid" && status !== "pending") {
+          const items = await storage.getOrderItems(orderId);
+          await sendShippingStatusEmail(order, items, status);
+        }
+
+        logAudit(req, {
+          action: "order_shipping_updated",
+          entityType: "order",
+          entityId: orderId,
+          changes: { shippingStatus: status },
+        });
+
+        res.json(updated);
+      } catch (error) {
+        console.error(`Error updating shipping status for order ${req.params.id}:`, error);
+        res.status(500).json({ message: "Failed to update shipping status" });
+      }
+    },
+  );
 
   // ── Payment Routes ─────────────────────────────────────────────────────────
 

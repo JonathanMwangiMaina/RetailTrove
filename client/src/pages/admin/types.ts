@@ -33,6 +33,10 @@ export interface AdminOrder {
   email: string;
   total: string;
   createdAt: string;
+  paymentStatus: string;
+  shippingStatus: string;
+  paymentProvider?: string | null;
+  phone?: string | null;
 }
 
 export interface AdminFaq {

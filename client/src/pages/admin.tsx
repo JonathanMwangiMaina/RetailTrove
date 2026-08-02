@@ -66,7 +66,7 @@ export default function AdminPage() {
   const { data: pendingProducts = [] } = useQuery<AdminProduct[]>({
     queryKey: ["/api/admin/products/pending"],
   });
-  const { data: orders = [] } = useQuery<AdminOrder[]>({ queryKey: ["/api/orders"] });
+  const { data: orders = [] } = useQuery<AdminOrder[]>({ queryKey: ["/api/admin/orders"] });
   const { data: allUsers = [] } = useQuery<AdminUser[]>({ queryKey: ["/api/admin/users"] });
   const { data: visits = [] } = useQuery<{ data: AdminVisit[] }>({
     queryKey: ["/api/admin/visits"],

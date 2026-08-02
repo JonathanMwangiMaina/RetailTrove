@@ -5,6 +5,7 @@ import {
   orders,
   orderItems,
   cartItems,
+  wishlistItems,
   bannerSettings,
   siteContent,
   siteSettings,
@@ -24,6 +25,7 @@ import {
   type Order,
   type InsertOrder,
   type InsertOrderItem,
+  type OrderItem,
   type CartItem,
   type InsertCartItem,
   type CartItemWithProduct,
@@ -45,7 +47,7 @@ import {
   type TeamMember,
   type InsertTeamMember,
 } from "../shared/schema.js";
-import { eq, and, or, sql, gt, gte, lte, ilike } from "drizzle-orm";
+import { eq, and, or, sql, gt, gte, lte, ilike, desc } from "drizzle-orm";
 import { IStorage } from "./storage.js";
 
 export class DatabaseStorage implements IStorage {
@@ -345,6 +347,40 @@ export class DatabaseStorage implements IStorage {
     await db.delete(cartItems).where(eq(cartItems.cartId, cartId));
   }
 
+  // ── Wishlist Operations ────────────────────────────────────────────────────
+
+  async getWishlistProducts(authUserId: string): Promise<Product[]> {
+    const rows = await db
+      .select({ product: products })
+      .from(wishlistItems)
+      .innerJoin(products, eq(wishlistItems.productId, products.id))
+      .where(eq(wishlistItems.userId, authUserId))
+      .orderBy(desc(wishlistItems.createdAt));
+    return rows.map((r) => r.product);
+  }
+
+  async isInWishlist(authUserId: string, productId: number): Promise<boolean> {
+    const [row] = await db
+      .select({ id: wishlistItems.id })
+      .from(wishlistItems)
+      .where(and(eq(wishlistItems.userId, authUserId), eq(wishlistItems.productId, productId)))
+      .limit(1);
+    return Boolean(row);
+  }
+
+  async addToWishlist(authUserId: string, productId: number): Promise<void> {
+    await db
+      .insert(wishlistItems)
+      .values({ userId: authUserId, productId })
+      .onConflictDoNothing();
+  }
+
+  async removeFromWishlist(authUserId: string, productId: number): Promise<void> {
+    await db
+      .delete(wishlistItems)
+      .where(and(eq(wishlistItems.userId, authUserId), eq(wishlistItems.productId, productId)));
+  }
+
   // ── Order Operations ───────────────────────────────────────────────────────
 
   async createOrder(order: InsertOrder, items: InsertOrderItem[]): Promise<Order> {
@@ -473,6 +509,17 @@ export class DatabaseStorage implements IStorage {
 
     if (Object.keys(updates).length === 0) return this.getOrderById(id);
 
+    await db.update(orders).set(updates).where(eq(orders.id, id));
+    return this.getOrderById(id);
+  }
+
+  async getOrderItems(orderId: number): Promise<OrderItem[]> {
+    return await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
+  }
+
+  async updateOrderShippingStatus(id: number, status: string): Promise<Order | undefined> {
+    const updates: Record<string, unknown> = { shippingStatus: status };
+    if (status === "shipped") updates.shippedAt = new Date();
     await db.update(orders).set(updates).where(eq(orders.id, id));
     return this.getOrderById(id);
   }
