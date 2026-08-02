@@ -12,6 +12,7 @@ import { sanitizeInput } from "../server/middleware/sanitize.js";
 import { handleCsrfToken, csrfSynchronisedProtection } from "../server/middleware/csrf.js";
 import { verifyLemonSqueezyWebhook } from "../server/payment-service.js";
 import { sendOrderConfirmationEmail } from "../server/email.js";
+import { awardLoyaltyPointsForOrder } from "../server/loyalty-service.js";
 import * as Sentry from "@sentry/node";
 
 if (process.env.SENTRY_DSN) {
@@ -65,6 +66,7 @@ app.post(
           if (paidOrder) {
             const items = await storage.getOrderItems(orderId);
             await sendOrderConfirmationEmail(paidOrder, items);
+            await awardLoyaltyPointsForOrder(paidOrder);
           }
         } else if (eventName === "order_refunded") {
           await storage.updateOrderPayment(orderId, { paymentStatus: "refunded" });
@@ -120,6 +122,7 @@ app.post("/api/mpesa/callback", express.json(), async (req: Request, res: Respon
       console.log(`[M-Pesa] Order #${order.id} paid — receipt: ${metadata.MpesaReceiptNumber}`);
       const items = await storage.getOrderItems(order.id);
       await sendOrderConfirmationEmail(order, items);
+      await awardLoyaltyPointsForOrder(order);
     } else {
       await storage.updateOrderPayment(order.id, { paymentStatus: "failed" });
       console.warn(`[M-Pesa] Order #${order.id} failed: ${ResultDesc} (code: ${ResultCode})`);

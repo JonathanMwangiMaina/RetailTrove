@@ -7,3 +7,6 @@ vite.config.ts.*
 *.tar.gz
 *.swp
 commit_msg.txt
+test-results
+playwright-report
+e2e/results

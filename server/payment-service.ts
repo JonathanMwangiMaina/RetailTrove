@@ -185,6 +185,8 @@ export async function initiateMpesaStkPush(params: {
   const password = Buffer.from(`${MPESA_SHORTCODE}${MPESA_PASSKEY}${timestamp}`).toString("base64");
   const amount = Math.round(params.amount); // whole KES only
   const accountRef = params.accountRef.slice(0, 12);
+  // TransactionDesc is capped at 13 characters by Daraja — longer strings get rejected.
+  const transactionDesc = `RT ${params.orderId}`.slice(0, 13);
 
   try {
     const token = await getMpesaAccessToken();
@@ -206,7 +208,7 @@ export async function initiateMpesaStkPush(params: {
         PhoneNumber: phone,
         CallBackURL: MPESA_CALLBACK_URL,
         AccountReference: accountRef,
-        TransactionDesc: `RetailTrove Order #${params.orderId}`,
+        TransactionDesc: transactionDesc,
       }),
     });
 

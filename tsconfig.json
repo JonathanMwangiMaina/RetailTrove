@@ -4,7 +4,9 @@
     "shared/**/*", 
     "server/**/*",
     "api/**/*",
-    "types/**/*"
+    "types/**/*",
+    "e2e/**/*",
+    "playwright.config.ts"
   ],
   "exclude": ["node_modules", "build", "dist", "**/*.test.ts"],
   "compilerOptions": {

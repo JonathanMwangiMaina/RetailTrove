@@ -5,12 +5,18 @@ vi.mock("../db.js", () => ({
   db: {},
 }));
 
+vi.mock("../email.js", () => ({
+  sendOrderConfirmationEmail: vi.fn().mockResolvedValue(undefined),
+}));
+
 const orders = new Map<number, any>();
+const orderItems = new Map<number, any[]>();
 
 const mockStorage = {
   getOrderById: vi.fn((id: number) => orders.get(id)),
   getOrderByStripeSessionId: vi.fn(),
   getOrderByIdempotencyKey: vi.fn(),
+  getOrderItems: vi.fn(async (id: number) => orderItems.get(id) ?? []),
   updateOrderPayment: vi.fn(async (id: number, data: any) => {
     const order = orders.get(id);
     if (!order) return undefined;
@@ -96,6 +102,7 @@ vi.mock("../storage.js", () => ({ storage: mockStorage }));
 
 import express, { type Request, type Response } from "express";
 import request from "supertest";
+import { sendOrderConfirmationEmail } from "../email.js";
 
 function buildWebhookApp() {
   const app = express();
@@ -117,6 +124,11 @@ function buildWebhookApp() {
             paymentStatus: "paid",
             stripePaymentIntentId: String(payload.data.id ?? ""),
           });
+          const paidOrder = await mockStorage.getOrderById(orderId);
+          if (paidOrder) {
+            const items = await mockStorage.getOrderItems(orderId);
+            await sendOrderConfirmationEmail(paidOrder, items);
+          }
         } else if (req.headers["x-event-name"] === "order_refunded") {
           await mockStorage.updateOrderPayment(orderId, { paymentStatus: "refunded" });
         }
@@ -140,7 +152,9 @@ const mockOrder = {
 
 beforeEach(() => {
   orders.clear();
+  orderItems.clear();
   orders.set(1, { ...mockOrder });
+  orderItems.set(1, [{ id: 1, orderId: 1, productId: 3, quantity: 1, price: "100" }]);
   vi.clearAllMocks();
 });
 
@@ -161,9 +175,13 @@ describe("Lemon Squeezy Webhook", () => {
       paymentStatus: "paid",
       stripePaymentIntentId: "ls-order-123",
     });
+    expect(sendOrderConfirmationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 1, paymentStatus: "paid" }),
+      expect.arrayContaining([expect.objectContaining({ productId: 3 })]),
+    );
   });
 
-  it("marks order as refunded on order_refunded event", async () => {
+  it("does not send a confirmation email on refund", async () => {
     const app = buildWebhookApp();
 
     await request(app)
@@ -178,6 +196,7 @@ describe("Lemon Squeezy Webhook", () => {
     expect(mockStorage.updateOrderPayment).toHaveBeenCalledWith(1, {
       paymentStatus: "refunded",
     });
+    expect(sendOrderConfirmationEmail).not.toHaveBeenCalled();
   });
 
   it("skips processing when order already paid (idempotency)", async () => {
@@ -194,6 +213,7 @@ describe("Lemon Squeezy Webhook", () => {
       .expect(200);
 
     expect(mockStorage.updateOrderPayment).not.toHaveBeenCalled();
+    expect(sendOrderConfirmationEmail).not.toHaveBeenCalled();
   });
 
   it("returns 200 even when order not found", async () => {
@@ -210,5 +230,6 @@ describe("Lemon Squeezy Webhook", () => {
       .expect(200);
 
     expect(mockStorage.updateOrderPayment).not.toHaveBeenCalled();
+    expect(sendOrderConfirmationEmail).not.toHaveBeenCalled();
   });
 });

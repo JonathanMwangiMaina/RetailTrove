@@ -5,13 +5,19 @@ vi.mock("../db.js", () => ({
   db: {},
 }));
 
+vi.mock("../email.js", () => ({
+  sendOrderConfirmationEmail: vi.fn().mockResolvedValue(undefined),
+}));
+
 const orders = new Map<number, any>();
+const orderItems = new Map<number, any[]>();
 const mockStorage = {
   getOrderByStripeSessionId: vi.fn((sessionId: string) =>
     Array.from(orders.values()).find((o) => o.stripeSessionId === sessionId),
   ),
   getOrderById: vi.fn((id: number) => orders.get(id)),
   getOrderByIdempotencyKey: vi.fn(() => undefined),
+  getOrderItems: vi.fn(async (id: number) => orderItems.get(id) ?? []),
   updateOrderPayment: vi.fn(async (id: number, data: any) => {
     const order = orders.get(id);
     if (!order) return undefined;
@@ -97,6 +103,7 @@ vi.mock("../storage.js", () => ({ storage: mockStorage }));
 
 import express, { type Request, type Response } from "express";
 import request from "supertest";
+import { sendOrderConfirmationEmail } from "../email.js";
 
 function buildCallbackApp() {
   const app = express();
@@ -133,6 +140,8 @@ function buildCallbackApp() {
           paymentStatus: "paid",
           mpesaReceiptNumber: metadata.MpesaReceiptNumber ?? null,
         });
+        const items = await mockStorage.getOrderItems(order.id);
+        await sendOrderConfirmationEmail(order, items);
       } else {
         await mockStorage.updateOrderPayment(order.id, { paymentStatus: "failed" });
       }
@@ -153,7 +162,9 @@ const mockOrder = {
 
 beforeEach(() => {
   orders.clear();
+  orderItems.clear();
   orders.set(1, { ...mockOrder });
+  orderItems.set(1, [{ id: 1, orderId: 1, productId: 7, quantity: 2, price: "500" }]);
   vi.clearAllMocks();
 });
 
@@ -185,9 +196,13 @@ describe("M-Pesa Callback", () => {
       paymentStatus: "paid",
       mpesaReceiptNumber: "QHJ7A1BCDE",
     });
+    expect(sendOrderConfirmationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 1, paymentStatus: "paid" }),
+      expect.arrayContaining([expect.objectContaining({ productId: 7, quantity: 2 })]),
+    );
   });
 
-  it("marks order as failed on payment failure (ResultCode ≠ 0)", async () => {
+  it("does not send a confirmation email when payment fails", async () => {
     const app = buildCallbackApp();
 
     await request(app)
@@ -208,6 +223,7 @@ describe("M-Pesa Callback", () => {
     expect(mockStorage.updateOrderPayment).toHaveBeenCalledWith(1, {
       paymentStatus: "failed",
     });
+    expect(sendOrderConfirmationEmail).not.toHaveBeenCalled();
   });
 
   it("skips processing when order already paid (idempotency)", async () => {
@@ -230,6 +246,7 @@ describe("M-Pesa Callback", () => {
       .expect(200);
 
     expect(mockStorage.updateOrderPayment).not.toHaveBeenCalled();
+    expect(sendOrderConfirmationEmail).not.toHaveBeenCalled();
   });
 
   it("returns 200 even when order not found (no crash)", async () => {

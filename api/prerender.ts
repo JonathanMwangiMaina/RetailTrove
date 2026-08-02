@@ -83,8 +83,20 @@ export default async function handler(request: Request): Promise<Response> {
   const ua = request.headers.get("user-agent") || "";
   const isBot = BOT_UA.test(ua);
 
+  // Non-bots get the real SPA shell. The built index.html is served as a static
+  // file (Vercel resolves the filesystem before rewrites), so fetching it here
+  // cannot recurse into this edge function. A 307 to request.url would loop.
   if (!isBot) {
-    return new Response(null, { status: 307, headers: { Location: request.url } });
+    const res = await fetch(`${SITE_URL}/index.html`);
+    if (res.ok) {
+      return new Response(await res.text(), {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
+    }
+    // Last-resort fallback — at least provide the document shell.
+    return new Response(renderHTML("/", ROUTE_META["/"]), {
+      headers: { "content-type": "text/html; charset=utf-8" },
+    });
   }
 
   const { pathname } = new URL(request.url);
@@ -127,6 +139,8 @@ export default async function handler(request: Request): Promise<Response> {
     );
   }
 
-  // Fallback: redirect to main app
-  return new Response(null, { status: 307, headers: { Location: request.url } });
+  // Fallback: serve the base app shell for unknown routes (never self-redirect).
+  return new Response(renderHTML(pathname, ROUTE_META["/"]), {
+    headers: { "content-type": "text/html; charset=utf-8" },
+  });
 }

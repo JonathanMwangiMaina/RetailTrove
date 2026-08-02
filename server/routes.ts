@@ -359,28 +359,23 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     }
   });
 
-  del(
-    "/wishlist/:productId",
-    writeLimiter,
-    requireAuth,
-    async (req: Request, res: Response) => {
-      try {
-        const productId = parseInt(req.params.productId, 10);
-        if (isNaN(productId)) {
-          return res.status(400).json({ message: "Invalid product ID" });
-        }
-        await storage.removeFromWishlist(req.session.authUserId ?? "", productId);
-        res.json({ productId, inWishlist: false });
-      } catch (error) {
-        console.error(`Error removing product ${req.params.productId} from wishlist:`, error);
-        res.status(500).json({ message: "Failed to remove item from wishlist" });
+  del("/wishlist/:productId", writeLimiter, requireAuth, async (req: Request, res: Response) => {
+    try {
+      const productId = parseInt(req.params.productId, 10);
+      if (isNaN(productId)) {
+        return res.status(400).json({ message: "Invalid product ID" });
       }
-    },
-  );
+      await storage.removeFromWishlist(req.session.authUserId ?? "", productId);
+      res.json({ productId, inWishlist: false });
+    } catch (error) {
+      console.error(`Error removing product ${req.params.productId} from wishlist:`, error);
+      res.status(500).json({ message: "Failed to remove item from wishlist" });
+    }
+  });
 
   // ── Order Routes ────────────────────────────────────────────────────────────
 
-  post("/orders", writeLimiter, async (req: Request, res: Response) => {
+  post("/orders", writeLimiter, requireAuth, async (req: Request, res: Response) => {
     try {
       const { order: orderData, items: rawItems } = req.body;
 
@@ -532,7 +527,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
    * Creates a Lemon Squeezy hosted-checkout session for an existing order.
    * Returns { url } — the client redirects the user there.
    */
-  post("/checkout/lemonsqueezy", writeLimiter, async (req: Request, res: Response) => {
+  post("/checkout/lemonsqueezy", writeLimiter, requireAuth, async (req: Request, res: Response) => {
     try {
       const { orderId } = req.body;
       if (!orderId) return res.status(400).json({ message: "orderId is required" });
@@ -576,7 +571,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
    * Initiates an M-Pesa STK Push for an existing order.
    * Returns { MerchantRequestID, CheckoutRequestID }.
    */
-  post("/checkout/mpesa", writeLimiter, async (req: Request, res: Response) => {
+  post("/checkout/mpesa", writeLimiter, requireAuth, async (req: Request, res: Response) => {
     try {
       const { orderId, phone } = req.body;
       if (!orderId || !phone) {
