@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { createInterface } from "node:readline";
 import { fetchOrderFromSupabase, fetchPurchaseFindings } from "./helpers/db";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "https://retailtrove.vercel.app";
@@ -51,6 +52,43 @@ const state = {
   todayPaidOrders: 0,
   todayPaidRevenue: 0,
 };
+
+/**
+ * Admin credentials for the analytics check are never stored in the repo.
+ * They come from E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD when set, otherwise the
+ * script prompts on stdin and waits for the user to type them at the terminal
+ * (used for the run only). If neither is available the check is skipped.
+ */
+async function resolveAdminCredentials(): Promise<{
+  email: string;
+  password: string;
+} | null> {
+  const envEmail = process.env.E2E_ADMIN_EMAIL;
+  const envPassword = process.env.E2E_ADMIN_PASSWORD;
+  if (envEmail && envPassword) return { email: envEmail, password: envPassword };
+
+  if (!process.stdin.isTTY) {
+    console.warn(
+      "[Admin] E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD not set and stdin is not interactive — skipping admin analytics check",
+    );
+    return null;
+  }
+
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const ask = (question: string) =>
+    new Promise<string>((resolve) => rl.question(question, resolve));
+  try {
+    console.log(
+      "\n[Admin] Enter the admin credentials for the analytics check (used for this run only):",
+    );
+    const email = (await ask("[Admin] Email: ")).trim();
+    const password = await ask("[Admin] Password: ");
+    if (!email || !password) return null;
+    return { email, password };
+  } finally {
+    rl.close();
+  }
+}
 
 test.afterAll(() => {
   const resultsDir = resolve(process.cwd(), "e2e", "results");
@@ -298,18 +336,17 @@ test("Full purchase simulation → wishlist → cart ×6 → M-Pesa sandbox → 
   mark("findings_verify");
 });
 
-test("Admin dashboard analytics reflect the purchase (requires E2E_ADMIN_EMAIL/PASSWORD)", async ({
+test("Admin dashboard analytics reflect the purchase (interactive login)", async ({
   page,
   context,
 }) => {
-  const adminEmail = process.env.E2E_ADMIN_EMAIL;
-  const adminPassword = process.env.E2E_ADMIN_PASSWORD;
-  test.skip(!adminEmail || !adminPassword, "E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD not set");
+  const admin = await resolveAdminCredentials();
+  test.skip(!admin, "Admin credentials unavailable (no E2E_ADMIN_* env and no interactive prompt)");
 
   await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
   await page.getByRole("link", { name: "Sign In" }).first().click();
-  await page.locator("#login-email").fill(adminEmail!);
-  await page.locator("#login-password").fill(adminPassword!);
+  await page.locator("#login-email").fill(admin!.email);
+  await page.locator("#login-password").fill(admin!.password);
   await page.locator("form").getByRole("button", { name: "Sign In" }).click();
   await expect(page.getByRole("button", { name: /Admin/i })).toBeVisible({ timeout: 30_000 });
 
