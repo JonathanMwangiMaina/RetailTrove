@@ -45,6 +45,50 @@ This project does not currently use semantic versioning — entries are dated.
 
 ---
 
+## [v0.5.5] — Double Stock Decrement Fix (2026-08-03)
+
+### Fixed
+- `POST /api/orders` (`server/routes.ts`) no longer loops `storage.decrementStock` per line item — `createOrder` already decrements stock atomically inside its DB transaction. Stock now drops **exactly once** per order. Prod E2E proof: two 6-qty orders previously took product 28 from 50 → 26 (expected 38); with the fix a single 6-qty order takes 50 → 44.
+- `eslint.config.mjs`: `playwright-report/`, `test-results/`, `e2e/results/` added to ignores (were already gitignored but were being linted, producing 4000+ errors from generated JS).
+
+---
+
+## [v0.5.4] — Auth Linkage & Reliable M-Pesa Callback (2026-08-03)
+
+### Fixed
+- **`auth_user_id` never set** — every user-creation path now assigns `crypto.randomUUID()`: `auth.ts` register, `database-storage.ts` `ensureDefaultAdmin`, `routes.ts` POST `/api/admin/users`. Previously all rows had `auth_user_id = NULL`, so `orders.userId` was always null and loyalty points, "my orders", and wishlists silently no-opped. Existing prod users backfilled with `gen_random_uuid()`.
+- **M-Pesa callback reliability** — Vercel serverless functions can be frozen immediately after `res.send`, so post-ack DB work was unreliable and orders stayed `pending` for minutes. Both `server/index.ts` and `api/index.ts` now process the ResultCode-0 payment update **before** the 200 ack; email + loyalty side-effects are wrapped in try/catch; every path still acks 200. Verified live: order flips `paid` synchronously on the first poll.
+
+---
+
+## [v0.5.3] — Version Bump (2026-08-03)
+
+- Health endpoint + package version bumped to 0.5.3 (`server/index.ts`, `api/index.ts`) to signal a fresh deploy for the production M-Pesa E2E benchmark.
+
+---
+
+## [v0.5.2] — M-Pesa Passkey & E2E Admin Login (2026-08-03)
+
+### Changed
+- E2E harness supports interactive admin login — credentials supplied at runtime, never committed.
+
+### Fixed
+- M-Pesa sandbox passkey correction — live STK push now returns 200 + `CheckoutRequestID` instead of Daraja "wrong credentials".
+
+---
+
+## [v0.5.1] — Production M-Pesa Fixes & E2E Benchmark (2026-08-03)
+
+### Fixed
+- `/api/checkout/mpesa` correctly initiates STK Push against the live production environment.
+- `api/prerender.ts` no longer causes a redirect loop for bot prerendering.
+- Loyalty points are now correctly awarded when orders carry a user id.
+
+### Added
+- Production E2E benchmark (Playwright spec + helper scripts) exercising the full pipeline — checkout → M-Pesa STK push → callback → paid → loyalty → stock decrement — against the live Vercel deployment.
+
+---
+
 ## [Unreleased] — v0.4.4
 
 ### Added

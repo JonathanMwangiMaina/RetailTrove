@@ -1,6 +1,6 @@
 # RetailTrove — Full-Stack E-Commerce Platform
 
-> **Status:** Phases 1–4 complete. Latest: **v0.4.4-dev** — TypeScript type safety sweep (59 errors fixed), Sentry middleware guard fix (prevents crash when DSN unset), getOrdersByUserId UUID parity, ADR documentation. All P0/P1/P2 features complete.
+> **Status:** Phases 1–4 complete. Latest: **v0.5.5** — production M-Pesa pipeline verified end-to-end live on https://retailtrove.vercel.app (sandbox STK push → paid order → loyalty points → single stock decrement), plus email notifications, wishlists, RLS policies, payment idempotency, health checks, Sentry, CI/CD, and 74 passing tests.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19.1-61dafb)](https://react.dev/)
@@ -771,7 +771,7 @@ Copy `.env.example` to `.env` and populate:
 - ✅ Input sanitisation via recursive xss() on req.body/query/params
 - ✅ Structured JSON error handler with request IDs
 - ✅ Audit logging (auditLogs table, logAudit() helper, admin Audit Logs tab)
-- ✅ Vitest unit tests (35 tests: currencies, countries, schemas)
+- ✅ Vitest tests (74 tests: unit + payment/order/cart/wishlist integration)
 - ✅ Cursor-based pagination on GET /api/products
 
 ### Phase 4 (Performance & Scale) — Planned
@@ -786,7 +786,7 @@ Copy `.env.example` to `.env` and populate:
 
 **Test Runner:** Vitest 4.1.10
 
-**Current Status:** 67 tests across 8 test files.
+**Current Status:** 74 tests across 9 test files.
 
 | Test File | Tests | Coverage |
 |---|---|---|
@@ -794,6 +794,7 @@ Copy `.env.example` to `.env` and populate:
 | `server/__tests__/lemonsqueezy-webhook.test.ts` | 4 | LS webhook: order_created, order_refunded, idempotency, missing order |
 | `server/__tests__/orders.test.ts` | 7 | Order creation: validation, stock atomicity, total mismatch |
 | `server/__tests__/cart.test.ts` | 7 | Cart ownership: PUT/DELETE own item, reject others, 404, invalid qty |
+| `server/__tests__/checkout-auth.test.ts` | 7 | Checkout/auth: 401 on anonymous orders/checkouts, stock untouched, authenticated flows |
 | `server/__tests__/wishlist.test.ts` | 8 | Wishlist: auth required, add/remove, idempotent add, 404, invalid id |
 | `client/src/lib/__tests__/currencies.test.ts` | 17 | CURRENCY array, lookup, conversion, formatting |
 | `client/src/lib/__tests__/countries.test.ts` | 9 | COUNTRIES array, sorting, lookup |
@@ -839,14 +840,15 @@ npm run test:watch  # Watch mode
 
 ### Features Not Yet Implemented
 
-- [x] Payment processing (Lemon Squeezy + M-Pesa)
+- [x] Payment processing (Lemon Squeezy + M-Pesa) — verified end-to-end in production (v0.5.5)
 - [x] SEO optimization (meta tags, structured data) (JSON-LD, robots.txt, sitemap.xml, dynamic titles)
 - [x] Product reviews & ratings (testimonials system with approval workflow)
 - [x] Advanced filtering (price range, ratings, availability) — server-side filtering on shop page
 - [x] Inventory management (stock alerts, low stock) — auto-decrement on order, admin low-stock alerts
 - [x] Analytics dashboard — revenue/visits charts, top products, summary metrics in admin
-- [ ] Email notifications (shipping updates, marketing)
-- [ ] Wishlists / favorites
+- [x] Email notifications (order confirmation + shipping status via Brevo/Nodemailer)
+- [x] Wishlists / favorites (table + API + product page heart + header count + `/wishlist` page)
+- [x] Payment idempotency keys (prevents duplicate charges on callback retries)
 - [ ] Product variants (size, color, etc.)
 
 
@@ -925,6 +927,29 @@ Each ADR follows the [MADR](https://adr.github.io/madr/) template: Context → D
 
 See `CHANGELOG.md` for complete version history.
 
+### v0.5.5 — Double Stock Decrement Fix (2026-08-03)
+
+- **Fixed:** `POST /api/orders` no longer decrements stock per item — `createOrder` already does so inside its DB transaction. Stock now drops exactly once per order (prod E2E: 50 → 44 for a 6-qty order).
+
+### v0.5.4 — Auth Linkage & Reliable M-Pesa Callback (2026-08-03)
+
+- **Fixed:** Every user now gets `auth_user_id` (`crypto.randomUUID()`) at creation — previously null, which silently broke loyalty points, "my orders", and wishlists (`orders.userId` was always null). Prod users backfilled.
+- **Fixed:** M-Pesa callback now processes the payment update **before** the 200 ack. Serverless functions can freeze right after `res.send`, leaving orders stuck `pending`. Verified live: order flips `paid` on the first poll.
+
+### v0.5.3 — Version Bump (2026-08-03)
+
+- Health endpoint + package version bumped to 0.5.3 to trigger a fresh deploy for the production benchmark.
+
+### v0.5.2 — M-Pesa Passkey & E2E Admin Login (2026-08-03)
+
+- **Fixed:** M-Pesa sandbox passkey correction — live STK push returns 200 + `CheckoutRequestID` (was Daraja "wrong credentials").
+- **Changed:** E2E harness supports interactive admin login (credentials never committed).
+
+### v0.5.1 — Production M-Pesa Fixes & E2E Benchmark (2026-08-03)
+
+- **Fixed:** `/api/checkout/mpesa` STK Push works against the live environment; `api/prerender.ts` redirect loop removed; loyalty points correctly awarded when orders carry a user id.
+- **Added:** Production E2E benchmark (Playwright + helper scripts) exercising checkout → M-Pesa → callback → paid → loyalty → stock against the live Vercel deployment.
+
 ### v0.5.0 — Email Notifications, Wishlists & RLS (2026-08-02)
 
 - **Added:** Order confirmation emails on payment callbacks (Lemon Squeezy `order_created` + M-Pesa success) — `sendOrderConfirmationEmail()` in `server/email.ts`
@@ -987,6 +1012,6 @@ For issues, feature requests, or questions:
 
 ---
 
-**Last Updated:** 2026-07-29
-**Version:** 0.4.4-dev
+**Last Updated:** 2026-08-03
+**Version:** 0.5.5
 **Maintainer:** Jonathan Maina

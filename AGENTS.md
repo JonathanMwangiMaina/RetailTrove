@@ -10,7 +10,7 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 - **Platform:** Windows (PowerShell) + WSL Ubuntu 26.04
 - **Node.js:** `/home/bergazi21/.nvm/versions/node/v22.23.1/bin/node` (via nvm in WSL)
 - **Windows tsc:** `& "C:\Program Files\nodejs\node.exe" ".\node_modules\typescript\bin\tsc" --noEmit`
-- **Tests:** ✅ Fixed — `npm i` from WSL installs Linux native bindings; all 67 tests pass in WSL
+- **Tests:** ✅ Fixed — `npm i` from WSL installs Linux native bindings; all 74 tests pass in WSL
 - **DB push:** `npm run db:push` unreachable from WSL (ETIMEDOUT on Supabase port 6543) — must use Supabase SQL Editor
 - **ESLint 10 (flat config) + Prettier 3:** 0 errors, 65 warnings (all `no-explicit-any`, 16 in test files)
 - **Git remote:** SSH (`git@github.com:JonathanMwangiMaina/RetailTrove.git`)
