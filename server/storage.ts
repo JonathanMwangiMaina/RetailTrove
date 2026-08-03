@@ -11,6 +11,10 @@ import type {
   InsertUser,
   Product,
   InsertProduct,
+  ProductVariant,
+  InsertProductVariant,
+  ProductImage,
+  InsertProductImage,
   Order,
   InsertOrder,
   InsertOrderItem,
@@ -76,6 +80,25 @@ export interface IStorage {
   getPendingProducts(): Promise<Product[]>;
   approveProduct(id: number, status: string): Promise<Product | undefined>;
   getVendorProducts(vendorId: number): Promise<Product[]>;
+
+  // ── Product Variant Operations ─────────────────────────────────────────────
+
+  getProductVariants(productId: number): Promise<ProductVariant[]>;
+  getProductVariantById(id: number): Promise<ProductVariant | undefined>;
+  createProductVariant(variant: InsertProductVariant): Promise<ProductVariant>;
+  updateProductVariant(
+    id: number,
+    data: Partial<InsertProductVariant>,
+  ): Promise<ProductVariant | undefined>;
+  deleteProductVariant(id: number): Promise<boolean>;
+  decrementVariantStock(variantId: number, quantity: number): Promise<ProductVariant | undefined>;
+
+  // ── Product Gallery Image Operations ───────────────────────────────────────
+
+  getProductImages(productId: number): Promise<ProductImage[]>;
+  createProductImage(image: InsertProductImage): Promise<ProductImage>;
+  deleteProductImage(id: number): Promise<boolean>;
+  setPrimaryProductImage(productId: number, imageId: number): Promise<void>;
 
   // ── Cart Operations ────────────────────────────────────────────────────────
 

@@ -1,6 +1,6 @@
 # RetailTrove — Full-Stack E-Commerce Platform
 
-> **Status:** Phases 1–4 complete. Latest: **v0.5.5** — production M-Pesa pipeline verified end-to-end live on https://retailtrove.vercel.app (sandbox STK push → paid order → loyalty points → single stock decrement), plus email notifications, wishlists, RLS policies, payment idempotency, health checks, Sentry, CI/CD, and 74 passing tests.
+> **Status:** Phases 1–4 complete. Latest: **v0.6.0** — Upstash Redis cache layer, product variants (size/color with variant-level pricing, stock and images), real DB-driven product galleries (hardcoded mock images removed), automatic comma formatting for thousand+ prices, CI test job, plus the full v0.5.x line: production M-Pesa pipeline verified end-to-end live on https://retailtrove.vercel.app, email notifications, wishlists, RLS policies, payment idempotency, health checks, Sentry, CI/CD, and **101 passing tests**.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19.1-61dafb)](https://react.dev/)
@@ -771,14 +771,16 @@ Copy `.env.example` to `.env` and populate:
 - ✅ Input sanitisation via recursive xss() on req.body/query/params
 - ✅ Structured JSON error handler with request IDs
 - ✅ Audit logging (auditLogs table, logAudit() helper, admin Audit Logs tab)
-- ✅ Vitest tests (74 tests: unit + payment/order/cart/wishlist integration)
+- ✅ Vitest tests (101 tests: unit + payment/order/cart/wishlist/variant/cache integration)
 - ✅ Cursor-based pagination on GET /api/products
 
-### Phase 4 (Performance & Scale) — Planned
+### Phase 4 (Performance & Scale) — Complete ✅ (v0.6.0)
 
-- Sentry error monitoring
-- Redis cache layer
-- CDN image optimisation
+- ✅ Sentry error monitoring (DSN-guarded init, no crash when unset)
+- ✅ Redis cache layer (Upstash: product listings, featured, new arrivals, site settings)
+- ✅ Product variants (size/color, variant pricing + stock + images)
+- ✅ DB-driven product gallery images (mock Unsplash stubs removed)
+- - CDN image optimisation (P3 — not started)
 
 ---
 
@@ -786,7 +788,7 @@ Copy `.env.example` to `.env` and populate:
 
 **Test Runner:** Vitest 4.1.10
 
-**Current Status:** 74 tests across 9 test files.
+**Current Status:** 101 tests across 11 test files.
 
 | Test File | Tests | Coverage |
 |---|---|---|
@@ -796,6 +798,8 @@ Copy `.env.example` to `.env` and populate:
 | `server/__tests__/cart.test.ts` | 7 | Cart ownership: PUT/DELETE own item, reject others, 404, invalid qty |
 | `server/__tests__/checkout-auth.test.ts` | 7 | Checkout/auth: 401 on anonymous orders/checkouts, stock untouched, authenticated flows |
 | `server/__tests__/wishlist.test.ts` | 8 | Wishlist: auth required, add/remove, idempotent add, 404, invalid id |
+| `server/__tests__/cache.test.ts` | 11 | Cache: keys, hit/miss, exact/prefix delete, disabled no-ops, error swallowing |
+| `server/__tests__/variants.test.ts` | 16 | Variants: product-detail response, cart validation, order variant pricing, zod schemas |
 | `client/src/lib/__tests__/currencies.test.ts` | 17 | CURRENCY array, lookup, conversion, formatting |
 | `client/src/lib/__tests__/countries.test.ts` | 9 | COUNTRIES array, sorting, lookup |
 | `shared/__tests__/schemas.test.ts` | 9 | insertUserSchema, insertProductSchema validation |
@@ -849,7 +853,7 @@ npm run test:watch  # Watch mode
 - [x] Email notifications (order confirmation + shipping status via Brevo/Nodemailer)
 - [x] Wishlists / favorites (table + API + product page heart + header count + `/wishlist` page)
 - [x] Payment idempotency keys (prevents duplicate charges on callback retries)
-- [ ] Product variants (size, color, etc.)
+- [x] Product variants (size, color, etc. — variant-level pricing, stock, images)
 
 
 ---
@@ -901,7 +905,7 @@ npm run test:watch  # Watch mode
 - [x] TypeScript type safety sweep (59 errors across 15 files)
 - [x] Sentry middleware guard (prevents crash when SENTRY_DSN unset)
 - [x] Architecture Decision Records (8 ADRs in docs/adr/)
-- [ ] Redis cache layer (P3 — not started)
+- [x] Redis cache layer (Upstash read-through for products/site settings, v0.6.0)
 - [ ] CDN image optimisation (P3 — not started)
 
 ---
@@ -926,6 +930,15 @@ Each ADR follows the [MADR](https://adr.github.io/madr/) template: Context → D
 ## Changelog
 
 See `CHANGELOG.md` for complete version history.
+
+### v0.6.0 — Redis Cache, Product Variants & Real Gallery Images (2026-08-03)
+
+- **Added:** Upstash Redis cache layer — read-through caching for product listings, featured products, new arrivals, and site settings (`server/cache.ts`); invalidates on product/stock/settings writes; opt-in via `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN`
+- **Added:** Product variants — `product_variants` table, variant CRUD API, variant selector on product page, variant pricing/stock in cart + orders, variant image hero swap
+- **Added:** Product gallery images — new `product_images` table + API; product page gallery now renders real DB images (hardcoded mock gallery removed)
+- **Added:** `formatPrice` now groups thousands with commas (`$1,299.00` not `$1299.00`)
+- **Added:** CI `test` job (vitest) gates `build`
+- **Added:** 16 variant tests + 11 cache tests — **all 101 tests pass**
 
 ### v0.5.5 — Double Stock Decrement Fix (2026-08-03)
 

@@ -173,10 +173,21 @@ export function getCurrency(code: string): Currency | undefined {
 
 export function formatPrice(amountUsd: number, currencyCode: string): string {
   const currency = getCurrency(currencyCode);
-  if (!currency) return `$${amountUsd.toFixed(2)}`;
+  const fractionDigits = currency?.decimalPlaces ?? 2;
+  if (!currency) {
+    return `$${amountUsd.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  }
 
   const converted = convertCurrency(amountUsd, currencyCode);
-  const formatted = converted.toFixed(currency.decimalPlaces);
+  // toLocaleString inserts comma thousands separators automatically, so prices
+  // in the thousands and above stay legible (e.g. $1,299.00, KSh 12,500).
+  const formatted = converted.toLocaleString("en-US", {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  });
   const needsSpace = /^[$€£¥₹₽₩₳₴₸₮₼₲฿]/.test(currency.symbol);
   return needsSpace ? `${currency.symbol} ${formatted}` : `${currency.symbol}${formatted}`;
 }

@@ -10,9 +10,10 @@ interface CartItemProps {
 }
 
 export function CartItem({ item, showControls = true }: CartItemProps) {
-  const { product, quantity } = item;
+  const { product, quantity, variant } = item;
   const { updateQuantity, removeFromCart } = useCart();
   const { formatPrice } = useCurrency();
+  const unitPrice = Number(variant?.price ?? product.price);
 
   return (
     <li className="py-6 flex">
@@ -28,9 +29,10 @@ export function CartItem({ item, showControls = true }: CartItemProps) {
         <div>
           <div className="flex justify-between text-base font-medium text-primary-900">
             <h3>{product.name}</h3>
-            <p className="ml-4">{formatPrice(Number(product.price) * (quantity ?? 1))}</p>
+            <p className="ml-4">{formatPrice(unitPrice * (quantity ?? 1))}</p>
           </div>
           <p className="mt-1 text-sm text-gray-500">{product.category}</p>
+          {variant && <p className="mt-1 text-sm text-secondary-600">{variant.name}</p>}
         </div>
         {showControls ? (
           <div className="flex-1 flex items-end justify-between text-sm">

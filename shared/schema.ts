@@ -69,6 +69,45 @@ export const products = pgTable("products", {
 });
 
 /**
+ * Product Variants Table (`product_variants`)
+ * Flattened option rows for a product (e.g. one row per size/color combo).
+ * `price` overrides the product price when set; `is_default` marks the
+ * pre-selected option. `stock_quantity` is the variant-level inventory.
+ */
+export const productVariants = pgTable("product_variants", {
+  id: serial("id").primaryKey(),
+  productId: integer("product_id")
+    .references(() => products.id, { onDelete: "cascade" })
+    .notNull(),
+  name: text("name").notNull(),
+  sku: text("sku"),
+  price: numeric("price"),
+  stockQuantity: integer("stock_quantity").notNull().default(0),
+  isDefault: boolean("is_default").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
+  imageUrl: text("image_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+/**
+ * Product Gallery Images Table (`product_images`)
+ * Real, per-product gallery photos. The hero is `products.image_url` (or the
+ * primary gallery image); the rest are the product page thumbnails. Replaces
+ * the previously hardcoded mock gallery. Cascade-deleted with the product.
+ */
+export const productImages = pgTable("product_images", {
+  id: serial("id").primaryKey(),
+  productId: integer("product_id")
+    .references(() => products.id, { onDelete: "cascade" })
+    .notNull(),
+  url: text("url").notNull(),
+  altText: text("alt_text"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isPrimary: boolean("is_primary").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+/**
  * Customer Orders Table (`orders`)
  * Contains checkout details, customer contact info, shipping addresses, and Lemon Squeezy payment metadata.
  */
@@ -108,6 +147,8 @@ export const orderItems = pgTable("order_items", {
   productName: text("product_name"),
   price: numeric("price"),
   quantity: integer("quantity").default(1),
+  variantId: integer("variant_id").references(() => productVariants.id),
+  variantName: text("variant_name"),
 });
 
 /**
@@ -120,6 +161,7 @@ export const cartItems = pgTable("cart_items", {
   quantity: integer("quantity").default(1),
   cartId: text("cart_id"),
   userId: uuid("user_id"),
+  variantId: integer("variant_id").references(() => productVariants.id),
 });
 
 /**
@@ -396,6 +438,36 @@ export const insertProductSchema = createInsertSchema(products, {
 
 export const selectProductSchema = createSelectSchema(products);
 
+// ── Product Variants Schemas ────────────────────────────────────────────────
+
+export const insertProductVariantSchema = createInsertSchema(productVariants, {
+  name: z.string().min(1).max(100),
+  sku: z.string().max(100).optional(),
+  price: z.string().or(z.number()).optional(),
+  stockQuantity: z.number().int().nonnegative().optional(),
+  isDefault: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+}).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const selectProductVariantSchema = createSelectSchema(productVariants);
+
+// ── Product Gallery Image Schemas ────────────────────────────────────────────
+
+export const insertProductImageSchema = createInsertSchema(productImages, {
+  url: z.string().url().min(1),
+  altText: z.string().max(300).optional(),
+  sortOrder: z.number().int().nonnegative().optional(),
+  isPrimary: z.boolean().optional(),
+}).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const selectProductImageSchema = createSelectSchema(productImages);
+
 // ── Orders & Order Items Schemas ─────────────────────────────────────────────
 
 export const insertOrderSchema = createInsertSchema(orders, {
@@ -411,6 +483,8 @@ export const selectOrderSchema = createSelectSchema(orders);
 export const insertOrderItemSchema = createInsertSchema(orderItems, {
   price: z.string().or(z.number()).optional(),
   quantity: z.number().int().positive().optional(),
+  variantId: z.number().int().optional(),
+  variantName: z.string().max(200).optional(),
 }).omit({
   id: true,
 });
@@ -421,6 +495,7 @@ export const selectOrderItemSchema = createSelectSchema(orderItems);
 
 export const insertCartItemSchema = createInsertSchema(cartItems, {
   quantity: z.number().int().positive().optional(),
+  variantId: z.number().int().optional(),
 }).omit({
   id: true,
 });
@@ -551,6 +626,14 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type Product = z.infer<typeof selectProductSchema>;
 export type InsertProduct = z.infer<typeof insertProductSchema>;
 
+/** Product variant domain entity types */
+export type ProductVariant = z.infer<typeof selectProductVariantSchema>;
+export type InsertProductVariant = z.infer<typeof insertProductVariantSchema>;
+
+/** Product gallery image domain entity types */
+export type ProductImage = z.infer<typeof selectProductImageSchema>;
+export type InsertProductImage = z.infer<typeof insertProductImageSchema>;
+
 /** Order domain entity types */
 export type Order = z.infer<typeof selectOrderSchema>;
 export type InsertOrder = z.infer<typeof insertOrderSchema>;
@@ -600,7 +683,7 @@ export type TeamMember = z.infer<typeof selectTeamMemberSchema>;
 export type InsertTeamMember = z.infer<typeof insertTeamMemberSchema>;
 
 /** Composite cart item with joined product data */
-export type CartItemWithProduct = CartItem & { product: Product };
+export type CartItemWithProduct = CartItem & { product: Product; variant?: ProductVariant | null };
 
 /** Password reset token entity types */
 export type PasswordResetToken = z.infer<typeof selectPasswordResetTokenSchema>;

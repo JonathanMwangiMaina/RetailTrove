@@ -10,7 +10,7 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 - **Platform:** Windows (PowerShell) + WSL Ubuntu 26.04
 - **Node.js:** `/home/bergazi21/.nvm/versions/node/v22.23.1/bin/node` (via nvm in WSL)
 - **Windows tsc:** `& "C:\Program Files\nodejs\node.exe" ".\node_modules\typescript\bin\tsc" --noEmit`
-- **Tests:** ✅ Fixed — `npm i` from WSL installs Linux native bindings; all 74 tests pass in WSL
+- **Tests:** ✅ Fixed — `npm i` from WSL installs Linux native bindings; all 101 tests pass in WSL
 - **DB push:** `npm run db:push` unreachable from WSL (ETIMEDOUT on Supabase port 6543) — must use Supabase SQL Editor
 - **ESLint 10 (flat config) + Prettier 3:** 0 errors, 65 warnings (all `no-explicit-any`, 16 in test files)
 - **Git remote:** SSH (`git@github.com:JonathanMwangiMaina/RetailTrove.git`)
@@ -38,8 +38,8 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 | 5 | **Email notifications** (shipping, marketing) | **P1 — High** | 3-4 hours | ✅ Done. Order confirmation on LS/M-Pesa payment callbacks + shipping status emails on admin update. `sendOrderConfirmationEmail()` + `sendShippingStatusEmail()` in `server/email.ts`. Needs SMTP creds in `.env` (Brevo) to activate. |
 | 6 | **Wishlists / favorites** | **P2 — Medium** | 3-4 hours | ✅ Done. `wishlist_items` table, API CRUD (GET/POST/DELETE `/api/wishlist`), heart toggle on product page + header count + `/wishlist` page. Run `migrations/0003_add_wishlist_items.sql` in Supabase. |
 | 7 | **Idempotency keys on payments** | **P2 — Medium** | 2-3 hours | ✅ Done. `idempotency_key` column on orders, status check in M-Pesa callback + LS webhook, key generated on payment initiation. Run `migrations/add-idempotency-key.sql` in Supabase to apply. |
-| 8 | **Product variants** (size, color) | **P3 — Nice-to-have** | 8-12 hours | Schema rework: `product_variants` table, cart/order item changes, UI selectors. Significant scope. Only worth it if inventory actually has variants. |
-| 9 | **Redis cache layer** | **P3 — Nice-to-have** | 3-4 hours | Cache product listings, site settings, featured products. Reduces Supabase load. Adds infra complexity (Upstash Redis free tier). Beneficial but not blocking. |
+| 8 | **Product variants** (size, color) | **P3 — Nice-to-have** | 8-12 hours | ✅ Done (v0.6.0). `product_variants` table, variant CRUD API, product-page selector, variant pricing/stock in cart + orders, variant image hero. Run `migrations/0005_add_product_variants.sql`. |
+| 9 | **Redis cache layer** | **P3 — Nice-to-have** | 3-4 hours | ✅ Done (v0.6.0). `server/cache.ts` + `@upstash/redis`, read-through for product listings/featured/new arrivals/site settings, invalidates on writes. Opt-in via `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN`. |
 | 10 | **CDN image optimisation** | **P3 — Nice-to-have** | 1-2 hours | Cloudinary or imgproxy for responsive sizing + WebP. Images are currently raw Unsplash URLs. Nice-to-have for performance score. |
 
 ### Priority Rationale
@@ -59,9 +59,9 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 | 1 | **Email notifications** | **P1 — High** | 3-4 hours | ✅ Done (v0.5.0). Order confirmation + shipping status emails wired. Needs SMTP creds to activate. |
 | 2 | **Wishlists / favorites** | **P2 — Medium** | 3-4 hours | ✅ Done (v0.5.0). Table + API + UI shipped. Run `migrations/0003_add_wishlist_items.sql`. |
 | 3 | **Supabase RLS policies** | **P2 — Medium** | 30 min | ✅ Done. `migrations/rls-policies.sql` ready — execute in Supabase SQL Editor. |
-| 4 | **Redis cache layer** | **P3 — Nice-to-have** | 3-4 hours | Upstash Redis for product listings, site settings, featured products. Reduces Supabase load. |
+| 4 | **Redis cache layer** | **P3 — Nice-to-have** | 3-4 hours | ✅ Done (v0.6.0). Upstash read-through for products/site settings. Opt-in via `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN`. |
 | 5 | **CDN image optimisation** | **P3 — Nice-to-have** | 1-2 hours | Cloudinary/imgproxy for responsive WebP images. Currently raw Unsplash URLs. |
-| 6 | **Product variants** | **P3 — Nice-to-have** | 8-12 hours | Schema rework: product_variants table, cart/order item changes, UI selectors. Only if inventory has variants. |
+| 6 | **Product variants** | **P3 — Nice-to-have** | 8-12 hours | ✅ Done (v0.6.0). `product_variants` table + cart/order changes + UI selectors + gallery images. Run `migrations/0005_add_product_variants.sql` + `migrations/0006_add_product_images.sql`. |
 
 ---
 
@@ -270,6 +270,7 @@ create table public.audit_logs (
 - `server/storage.ts` — IStorage interface (all method signatures)
 - `server/database-storage.ts` — All DB implementations
 - `server/email.ts` — Brevo/Nodemailer integration
+- `server/cache.ts` — Upstash Redis cache (opt-in, best-effort helpers)
 - `server/middleware/rate-limiter.ts` — Global/auth/write rate limiters
 - `server/middleware/audit.ts` — Audit log helper
 - `shared/schema.ts` — All Drizzle ORM tables, Zod schemas, TypeScript types
@@ -280,9 +281,10 @@ create table public.audit_logs (
 - `client/src/pages/admin/inventory-tab.tsx` — Inventory management
 - `client/src/pages/about.tsx` — Dynamic team members from API
 - `client/src/pages/shop.tsx` — Advanced filtering (FilterSidebar)
-- `client/src/pages/product.tsx` — JSON-LD, placeholder wishlist button
+- `client/src/pages/product.tsx` — Variant selector + DB-driven gallery, JSON-LD
 - `client/src/pages/login.tsx` — zxcvbn strength meter
 - `client/src/components/layout/header.tsx` — Radix DropdownMenu
+- `server/__tests__/variants.test.ts` + `server/__tests__/cache.test.ts` — v0.6.0 variant/cache tests
 - `eslint.config.mjs` — ESLint 10 flat config
 - `.prettierrc` + `.prettierignore` — Prettier config
 - `.gitignore` — Excludes `.env`, `*.swp`, `node_modules`
@@ -497,6 +499,46 @@ Removed `.env` line from `.gitignore` (`.gitignore:3`). The file is already forc
 
 ---
 
+## v0.6.0 Redis Cache + Product Variants + Gallery Images (2026-08-03)
+
+### Redis Cache Layer (P3)
+- `server/cache.ts` — optional Upstash client: lazy `getCache()` returns `null` when `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` unset (never throws, no stubs); `CACHE_TTLS`; deterministic `cacheKeys.productsList(filters)`; best-effort `get`/`set`/`del`/`delPrefix` that swallow errors (DB is source of truth)
+- Read-through in `database-storage.ts`: `getProductsPaginated`, `getFeaturedProducts`, `getNewArrivals`, `getProductById`, `getSiteSettings`
+- Invalidation on writes: `cache.delPrefix("products:")` in product/stock/order writes; `cache.del(siteSettings)` on settings update
+- 11 tests in `server/__tests__/cache.test.ts` (fake client)
+
+### Product Variants (P3) — migrations 0005 + 0006
+- `product_variants` table (`name`, `sku`, `price` override, `stock_quantity`, `is_default`, `is_active`, `image_url`) + `cart_items.variant_id` + `order_items.variant_id/variant_name`
+- Storage: `getProductVariants`, `getProductVariantById`, `createProductVariant`, `updateProductVariant`, `deleteProductVariant`, `decrementVariantStock`; `getCart` left-joins variant; `addToCart` merges duplicate product+variant rows; `createOrder` persists `variantName` and decrements **variant** stock (single decrement preserved)
+- API: `GET /api/products/:id` returns `{...product, variants, images}`; variant CRUD `POST/PUT/DELETE /api/products/:id/variants[/:variantId]`; cart POST validates variant; orders POST prices by variant
+- Client: product page variant chips (disabled when out of stock, aria-pressed), cart lines show variant name + price, checkout sends `variantId`/`variantName`
+- `migrations/0005_add_product_variants.sql` is **idempotent** (ALTERs backfill `is_active` + `image_url` on the existing prod table) — safe to re-run
+
+### Product Gallery Images
+- `product_images` table (`url`, `alt_text`, `sort_order`, `is_primary`); `POST/DELETE /api/products/:id/images`, `PUT .../images/:imageId/primary`
+- Product page gallery derives hero from DB images + variant `imageUrl` — the old hardcoded 3-image mock (`product.tsx` `additionalImages`) is **removed**
+- 16 tests in `server/__tests__/variants.test.ts`
+
+### Price Formatting
+- `formatPrice` in `client/src/lib/currencies.ts` now uses `toLocaleString("en-US")` → commas for 1,000+ (`$1,299.00`, `KSh 12,500`); sub-thousand unchanged
+
+### CI
+- `.github/workflows/ci.yml` gained a `test` job (vitest) gating `build`
+
+### Verification (v0.6.0)
+- `tsc --noEmit`: 0 errors ✅
+- `vitest run`: 101/101 passing ✅
+- `eslint`: 0 errors ✅
+- `prettier --check`: clean ✅
+- `vite build`: clean ✅
+
+### Setup required (Supabase SQL Editor)
+1. `migrations/0005_add_product_variants.sql`
+2. `migrations/0006_add_product_images.sql`
+3. Optional: `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` in Vercel dashboard to activate cache
+
+---
+
 ## Git Environment Quirks
 
 ### Push requires plain `git push` (NOT `GIT_SSH_COMMAND`)
@@ -534,7 +576,7 @@ When using `git commit -m "message"` inside `wsl -e bash -c` with single-quote w
 - `tsc --noEmit`: 0 errors
 - `eslint`: 0 errors, ~66 warnings (all `no-explicit-any` pre-existing)
 - `prettier --check`: All files formatted
-- All 67 vitest tests pass (mocked storage, no real DB needed)
+- All 101 vitest tests pass (mocked storage, no real DB needed)
 - UNC path limitation: PowerShell cannot run `tsc` when CWD is `\\wsl.localhost\...` — use WSL instead
 
 ### Commands (WSL)
@@ -559,8 +601,8 @@ wsl -d Ubuntu-26.04 -e bash -c 'cd /mnt/wsl/RetailTrove && git push origin main'
 ```
 
 ### Pending Features
-- **Email notifications** (P1 — Brevo/Nodemailer already wired, need order confirmation + shipping updates)
-- **Wishlists / favorites** (P2 — placeholder button exists, needs DB table + API + UI)
-- **Redis cache layer** (P3 — Upstash Redis for product listings)
+- ✅ **Email notifications** (P1 — done v0.5.0, needs SMTP creds)
+- ✅ **Wishlists / favorites** (P2 — done v0.5.0)
+- ✅ **Redis cache layer** (P3 — done v0.6.0, opt-in via Upstash)
 - **CDN image optimisation** (P3 — Cloudinary/imgproxy for responsive WebP)
-- **Product variants** (P3 — schema rework, significant scope)
+- ✅ **Product variants** (P3 — done v0.6.0)

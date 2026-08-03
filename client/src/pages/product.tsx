@@ -6,8 +6,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useCart } from "@/hooks/use-cart";
 import { useWishlist } from "@/hooks/use-wishlist";
 import { useCurrency } from "@/hooks/use-currency";
-import { Product as ProductType } from "@shared/schema";
+import { Product as ProductType, ProductVariant, ProductImage } from "@shared/schema";
 import { StarIcon, CheckIcon, GlobeIcon, HeartIcon } from "lucide-react";
+
+interface ProductWithVariants extends ProductType {
+  variants?: ProductVariant[];
+  images?: ProductImage[];
+}
 
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
@@ -15,22 +20,34 @@ export default function ProductPage() {
   const { isWishlisted, toggle } = useWishlist();
   const { formatPrice } = useCurrency();
   const [selectedImage, setSelectedImage] = useState(0);
-
-  // Mock additional product images (in a real app, these would come from the product data)
-  const additionalImages = [
-    "https://images.unsplash.com/photo-1623998021446-45cd9b013eee?ixlib=rb-1.2.1&auto=format&fit=crop&w=200&q=80",
-    "https://images.unsplash.com/photo-1622434641406-a158123450f9?ixlib=rb-1.2.1&auto=format&fit=crop&w=200&q=80",
-    "https://images.unsplash.com/photo-1526045612212-70caf35c14df?ixlib=rb-1.2.1&auto=format&fit=crop&w=200&q=80",
-  ];
+  const [selectedVariantId, setSelectedVariantId] = useState<number | undefined>(undefined);
 
   // Fetch product data
   const {
     data: product,
     isLoading,
     error,
-  } = useQuery<ProductType>({
+  } = useQuery<ProductWithVariants>({
     queryKey: [`/api/products/${id}`],
   });
+
+  const variants = product?.variants ?? [];
+  const galleryImages = product?.images ?? [];
+
+  // Effective selection: an explicit user choice wins, otherwise fall back to
+  // the default in-stock option. Derived at render time (no effect, no
+  // cascading setState) so the page always has a valid selection.
+  const effectiveVariantId =
+    selectedVariantId ??
+    variants.find((v) => v.isDefault && v.isActive && v.stockQuantity > 0)?.id ??
+    variants.find((v) => v.isActive && v.stockQuantity > 0)?.id ??
+    variants[0]?.id;
+  const selectedVariant = variants.find((v) => v.id === effectiveVariantId);
+
+  const selectVariant = (variantId: number) => {
+    setSelectedVariantId(variantId);
+    setSelectedImage(0);
+  };
 
   useEffect(() => {
     document.title = product ? `${product.name} - RetailTrove` : "Product - RetailTrove";
@@ -78,15 +95,24 @@ export default function ProductPage() {
     );
   }
 
-  // Generate images array - main image first, then additional images
-  const allImages = [product.imageUrl, ...additionalImages];
+  // Real gallery images from the DB. The hero is the variant's own image when
+  // a variant is selected, otherwise the product's primary image. Thumbnails
+  // always lead with the current hero so a variant swap re-renders cleanly.
+  const variantImage = selectedVariant?.imageUrl;
+  const galleryUrls = galleryImages.map((img) => img.url);
+  const thumbnails = variantImage
+    ? [variantImage, ...galleryUrls]
+    : galleryUrls.length > 0
+      ? [product.imageUrl, ...galleryUrls]
+      : [product.imageUrl];
+  const activeImage = thumbnails[selectedImage] ?? thumbnails[0];
 
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Product",
     name: product.name,
     description: product.description,
-    image: allImages,
+    image: thumbnails,
     offers: {
       "@type": "Offer",
       price: product.price,
@@ -112,29 +138,27 @@ export default function ProductPage() {
           {/* Product Images */}
           <div className="lg:max-w-lg lg:self-end">
             <div className="rounded-lg overflow-hidden mb-4">
-              <img
-                src={allImages[selectedImage]}
-                alt={product.name}
-                className="w-full h-96 object-cover"
-              />
+              <img src={activeImage} alt={product.name} className="w-full h-96 object-cover" />
             </div>
-            <div className="grid grid-cols-4 gap-4">
-              {allImages.map((image, index) => (
-                <button
-                  key={index}
-                  onClick={() => setSelectedImage(index)}
-                  className={`rounded-md overflow-hidden border-2 ${
-                    selectedImage === index ? "border-secondary-500" : "border-gray-200"
-                  }`}
-                >
-                  <img
-                    src={image}
-                    alt={`${product.name} - View ${index + 1}`}
-                    className="w-full h-20 object-cover"
-                  />
-                </button>
-              ))}
-            </div>
+            {thumbnails.length > 1 && (
+              <div className="grid grid-cols-4 gap-4">
+                {thumbnails.map((image, index) => (
+                  <button
+                    key={`${image}-${index}`}
+                    onClick={() => setSelectedImage(index)}
+                    className={`rounded-md overflow-hidden border-2 ${
+                      selectedImage === index ? "border-secondary-500" : "border-gray-200"
+                    }`}
+                  >
+                    <img
+                      src={image}
+                      alt={`${product.name} - View ${index + 1}`}
+                      className="w-full h-20 object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Product Info */}
@@ -160,8 +184,10 @@ export default function ProductPage() {
               <h1 className="text-3xl font-bold text-primary-900">{product.name}</h1>
               <h2 className="sr-only">Product information</h2>
               <div className="mt-2 flex items-center">
-                <p className="text-3xl text-primary-900">{formatPrice(Number(product.price))}</p>
-                {product.originalPrice && (
+                <p className="text-3xl text-primary-900">
+                  {formatPrice(Number(selectedVariant?.price ?? product.price))}
+                </p>
+                {product.originalPrice && !selectedVariant && (
                   <p className="ml-2 text-lg text-gray-500 line-through">
                     {formatPrice(Number(product.originalPrice))}
                   </p>
@@ -176,35 +202,54 @@ export default function ProductPage() {
               </div>
             </div>
 
-            <div className="mt-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium text-primary-900">Color</h3>
-                <a
-                  href="#"
-                  className="text-sm font-medium text-secondary-600 hover:text-secondary-500"
-                >
-                  Size guide
-                </a>
-              </div>
+            {variants.length > 0 && (
+              <div className="mt-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium text-primary-900">Options</h3>
+                  <span className="text-sm text-gray-500">
+                    {selectedVariant ? selectedVariant.name : "Select an option"}
+                  </span>
+                </div>
 
-              <div className="mt-2">
-                <div className="flex items-center space-x-3">
-                  <button className="relative -m-0.5 p-0.5 rounded-full ring-2 ring-secondary-500 focus:outline-none">
-                    <span className="block h-5 w-5 rounded-full bg-gray-800"></span>
-                  </button>
-                  <button className="relative -m-0.5 p-0.5 rounded-full ring-2 ring-transparent hover:ring-gray-300 focus:outline-none">
-                    <span className="block h-5 w-5 rounded-full bg-gray-500"></span>
-                  </button>
-                  <button className="relative -m-0.5 p-0.5 rounded-full ring-2 ring-transparent hover:ring-gray-300 focus:outline-none">
-                    <span className="block h-5 w-5 rounded-full bg-amber-700"></span>
-                  </button>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {variants.map((variant) => {
+                    const isSelected = variant.id === effectiveVariantId;
+                    const isUnavailable = !variant.isActive || variant.stockQuantity < 1;
+                    return (
+                      <button
+                        key={variant.id}
+                        type="button"
+                        onClick={() => {
+                          if (!isUnavailable) selectVariant(variant.id);
+                        }}
+                        disabled={isUnavailable}
+                        aria-pressed={isSelected}
+                        className={`px-4 py-2 rounded-md border-2 text-sm font-medium transition-colors ${
+                          isUnavailable
+                            ? "border-gray-100 text-gray-300 line-through cursor-not-allowed"
+                            : isSelected
+                              ? "border-secondary-500 bg-secondary-50 text-secondary-700"
+                              : "border-gray-200 text-gray-700 hover:border-gray-400"
+                        }`}
+                      >
+                        {variant.name}
+                        {isUnavailable && <span className="sr-only"> (unavailable)</span>}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-            </div>
+            )}
 
             <div className="mt-8 flex flex-col space-y-4">
               <Button
-                onClick={() => addToCart(product)}
+                onClick={() =>
+                  addToCart(product, {
+                    variantId: effectiveVariantId,
+                    variant: selectedVariant,
+                  })
+                }
+                disabled={variants.length > 0 && !selectedVariant}
                 size="lg"
                 className="w-full bg-secondary-600 hover:bg-secondary-700 text-white"
               >

@@ -106,8 +106,11 @@ export default function Checkout() {
       const orderItems = cart.map((item) => ({
         productId: item.product.id,
         productName: item.product.name,
-        price: item.product.price,
+        price: item.variant?.price ?? item.product.price,
         quantity: item.quantity,
+        ...(item.variantId !== undefined && item.variantId !== null
+          ? { variantId: item.variantId, variantName: item.variant?.name }
+          : {}),
       }));
 
       // Create order first

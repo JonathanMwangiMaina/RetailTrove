@@ -6,6 +6,8 @@ import {
   insertOrderItemSchema,
   insertFaqSchema,
   insertCartItemSchema,
+  insertProductVariantSchema,
+  insertProductImageSchema,
 } from "../shared/schema.js";
 import { requireAuth, requireRole } from "./auth.js";
 import crypto from "crypto";
@@ -131,7 +133,11 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
       if (!product) {
         return res.status(404).json({ message: "Product not found" });
       }
-      res.json(product);
+      const [variants, images] = await Promise.all([
+        storage.getProductVariants(id),
+        storage.getProductImages(id),
+      ]);
+      res.json({ ...product, variants, images });
     } catch (error) {
       console.error(`Error fetching product ${req.params.id}:`, error);
       res.status(500).json({ message: "Failed to fetch product" });
@@ -210,6 +216,193 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     }
   });
 
+  // ── Product Variant Routes ────────────────────────────────────────────────
+
+  post("/products/:id/variants", writeLimiter, requireAuth, async (req: Request, res: Response) => {
+    try {
+      const productId = parseInt(req.params.id, 10);
+      if (isNaN(productId)) {
+        return res.status(400).json({ message: "Invalid product ID format" });
+      }
+      const existing = await storage.getProductById(productId);
+      if (!existing) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+      const role = req.session.role;
+      if (role === "vendor" && existing.vendorId !== req.session.userId) {
+        return res.status(403).json({ message: "You can only edit your own products" });
+      }
+      const validated = insertProductVariantSchema.parse({ ...req.body, productId });
+      const created = await storage.createProductVariant(validated);
+      logAudit(req, { action: "variant_created", entityType: "product", entityId: productId });
+      res.status(201).json(created);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error(`Error creating variant for product ${req.params.id}:`, error);
+      res.status(500).json({ message: "Failed to create variant" });
+    }
+  });
+
+  put(
+    "/products/:id/variants/:variantId",
+    writeLimiter,
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const productId = parseInt(req.params.id, 10);
+        const variantId = parseInt(req.params.variantId, 10);
+        if (isNaN(productId) || isNaN(variantId)) {
+          return res.status(400).json({ message: "Invalid ID format" });
+        }
+        const variant = await storage.getProductVariantById(variantId);
+        if (!variant || variant.productId !== productId) {
+          return res.status(404).json({ message: "Variant not found" });
+        }
+        const existing = await storage.getProductById(productId);
+        const role = req.session.role;
+        if (role === "vendor" && existing?.vendorId !== req.session.userId) {
+          return res.status(403).json({ message: "You can only edit your own products" });
+        }
+        const validated = insertProductVariantSchema
+          .partial()
+          .omit({ productId: true })
+          .parse(req.body);
+        const updated = await storage.updateProductVariant(variantId, validated);
+        logAudit(req, { action: "variant_updated", entityType: "product", entityId: productId });
+        res.json(updated);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return res.status(400).json({ message: "Validation error", errors: error.errors });
+        }
+        console.error(`Error updating variant ${req.params.variantId}:`, error);
+        res.status(500).json({ message: "Failed to update variant" });
+      }
+    },
+  );
+
+  del(
+    "/products/:id/variants/:variantId",
+    writeLimiter,
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const productId = parseInt(req.params.id, 10);
+        const variantId = parseInt(req.params.variantId, 10);
+        if (isNaN(productId) || isNaN(variantId)) {
+          return res.status(400).json({ message: "Invalid ID format" });
+        }
+        const variant = await storage.getProductVariantById(variantId);
+        if (!variant || variant.productId !== productId) {
+          return res.status(404).json({ message: "Variant not found" });
+        }
+        const existing = await storage.getProductById(productId);
+        const role = req.session.role;
+        if (role === "vendor" && existing?.vendorId !== req.session.userId) {
+          return res.status(403).json({ message: "You can only edit your own products" });
+        }
+        await storage.deleteProductVariant(variantId);
+        logAudit(req, { action: "variant_deleted", entityType: "product", entityId: productId });
+        res.json({ message: "Variant deleted" });
+      } catch (error) {
+        console.error(`Error deleting variant ${req.params.variantId}:`, error);
+        res.status(500).json({ message: "Failed to delete variant" });
+      }
+    },
+  );
+
+  // ── Product Gallery Image Routes ──────────────────────────────────────────
+
+  post(
+    "/products/:id/images",
+    writeLimiter,
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const productId = parseInt(req.params.id, 10);
+        if (isNaN(productId)) {
+          return res.status(400).json({ message: "Invalid product ID format" });
+        }
+        const existing = await storage.getProductById(productId);
+        if (!existing) {
+          return res.status(404).json({ message: "Product not found" });
+        }
+        const role = req.session.role;
+        if (role === "vendor" && existing.vendorId !== req.session.userId) {
+          return res.status(403).json({ message: "You can only edit your own products" });
+        }
+        const validated = insertProductImageSchema.parse({ ...req.body, productId });
+        const created = await storage.createProductImage(validated);
+        logAudit(req, { action: "image_created", entityType: "product", entityId: productId });
+        res.status(201).json(created);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return res.status(400).json({ message: "Validation error", errors: error.errors });
+        }
+        console.error(`Error adding image to product ${req.params.id}:`, error);
+        res.status(500).json({ message: "Failed to add image" });
+      }
+    },
+  );
+
+  del(
+    "/products/:id/images/:imageId",
+    writeLimiter,
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const productId = parseInt(req.params.id, 10);
+        const imageId = parseInt(req.params.imageId, 10);
+        if (isNaN(productId) || isNaN(imageId)) {
+          return res.status(400).json({ message: "Invalid ID format" });
+        }
+        const existing = await storage.getProductById(productId);
+        if (!existing) {
+          return res.status(404).json({ message: "Product not found" });
+        }
+        const role = req.session.role;
+        if (role === "vendor" && existing.vendorId !== req.session.userId) {
+          return res.status(403).json({ message: "You can only edit your own products" });
+        }
+        await storage.deleteProductImage(imageId);
+        logAudit(req, { action: "image_deleted", entityType: "product", entityId: productId });
+        res.json({ message: "Image removed" });
+      } catch (error) {
+        console.error(`Error removing image ${req.params.imageId}:`, error);
+        res.status(500).json({ message: "Failed to remove image" });
+      }
+    },
+  );
+
+  put(
+    "/products/:id/images/:imageId/primary",
+    writeLimiter,
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const productId = parseInt(req.params.id, 10);
+        const imageId = parseInt(req.params.imageId, 10);
+        if (isNaN(productId) || isNaN(imageId)) {
+          return res.status(400).json({ message: "Invalid ID format" });
+        }
+        const existing = await storage.getProductById(productId);
+        if (!existing) {
+          return res.status(404).json({ message: "Product not found" });
+        }
+        const role = req.session.role;
+        if (role === "vendor" && existing.vendorId !== req.session.userId) {
+          return res.status(403).json({ message: "You can only edit your own products" });
+        }
+        await storage.setPrimaryProductImage(productId, imageId);
+        res.json({ message: "Primary image updated" });
+      } catch (error) {
+        console.error(`Error setting primary image ${req.params.imageId}:`, error);
+        res.status(500).json({ message: "Failed to update primary image" });
+      }
+    },
+  );
+
   // ── Cart Routes ─────────────────────────────────────────────────────────────
 
   router.get("/cart", async (_req: Request, res: Response) => {
@@ -230,6 +423,20 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
   post("/cart", writeLimiter, async (req: Request, res: Response) => {
     try {
       const validated = insertCartItemSchema.parse(req.body);
+
+      if (validated.variantId !== undefined && validated.variantId !== null) {
+        const variant = await storage.getProductVariantById(validated.variantId);
+        if (!variant || variant.productId !== validated.productId) {
+          return res.status(404).json({ message: "Product variant not found" });
+        }
+        if (!variant.isActive) {
+          return res.status(400).json({ message: "This variant is no longer available" });
+        }
+        if (variant.stockQuantity < 1) {
+          return res.status(400).json({ message: `"${variant.name}" is out of stock` });
+        }
+      }
+
       const newItem = await storage.addToCart(validated);
       res.status(201).json(newItem);
     } catch (error) {
@@ -390,7 +597,22 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
         if (!product) {
           return res.status(400).json({ message: `Product #${item.productId} not found` });
         }
-        const unitPrice = Number(product.price);
+
+        let unitPrice = Number(product.price);
+
+        if (item.variantId !== undefined && item.variantId !== null) {
+          const variant = await storage.getProductVariantById(item.variantId);
+          if (!variant || variant.productId !== item.productId) {
+            return res.status(400).json({ message: `Variant #${item.variantId} not found` });
+          }
+          if (variant.price !== null && variant.price !== undefined) {
+            unitPrice = Number(variant.price);
+          }
+          if (!item.variantName) {
+            item.variantName = variant.name;
+          }
+        }
+
         const qty = item.quantity ?? 1;
         expectedSubtotal += unitPrice * qty;
       }

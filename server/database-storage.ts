@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { db } from "./db.js";
+import { cache, cacheKeys, CACHE_TTLS } from "./cache.js";
 import {
   products,
   users,
@@ -7,6 +8,8 @@ import {
   orderItems,
   cartItems,
   wishlistItems,
+  productVariants,
+  productImages,
   bannerSettings,
   siteContent,
   siteSettings,
@@ -21,6 +24,10 @@ import {
   teamMembers,
   type Product,
   type InsertProduct,
+  type ProductVariant,
+  type InsertProductVariant,
+  type ProductImage,
+  type InsertProductImage,
   type User,
   type InsertUser,
   type Order,
@@ -48,7 +55,7 @@ import {
   type TeamMember,
   type InsertTeamMember,
 } from "../shared/schema.js";
-import { eq, and, or, sql, gt, gte, lte, ilike, desc } from "drizzle-orm";
+import { eq, and, or, sql, gt, gte, lte, ilike, desc, isNull, type SQL } from "drizzle-orm";
 import { IStorage } from "./storage.js";
 
 export class DatabaseStorage implements IStorage {
@@ -109,6 +116,10 @@ export class DatabaseStorage implements IStorage {
     minRating?: number;
     inStock?: boolean;
   }): Promise<{ data: Product[]; nextCursor: number | null }> {
+    const key = cacheKeys.productsList(params);
+    const cached = await cache.get<{ data: Product[]; nextCursor: number | null }>(key);
+    if (cached) return cached;
+
     const limit = Math.min(params.limit ?? 20, 100);
     const conditions = [
       or(eq(products.approvalStatus, "approved"), eq(products.approvalStatus, "APPROVED")),
@@ -154,11 +165,16 @@ export class DatabaseStorage implements IStorage {
     const data = hasMore ? rows.slice(0, limit) : rows;
     const nextCursor = hasMore ? data[data.length - 1].id : null;
 
-    return { data, nextCursor };
+    const result = { data, nextCursor };
+    await cache.set(key, result, CACHE_TTLS.productsList);
+    return result;
   }
 
   async getFeaturedProducts(): Promise<Product[]> {
-    return await db
+    const cached = await cache.get<Product[]>(cacheKeys.featuredProducts);
+    if (cached) return cached;
+
+    const featured = await db
       .select()
       .from(products)
       .where(
@@ -167,10 +183,15 @@ export class DatabaseStorage implements IStorage {
           or(eq(products.approvalStatus, "approved"), eq(products.approvalStatus, "APPROVED")),
         ),
       );
+    await cache.set(cacheKeys.featuredProducts, featured, CACHE_TTLS.featuredProducts);
+    return featured;
   }
 
   async getNewArrivals(): Promise<Product[]> {
-    return await db
+    const cached = await cache.get<Product[]>(cacheKeys.newArrivals);
+    if (cached) return cached;
+
+    const newArrivals = await db
       .select()
       .from(products)
       .where(
@@ -179,6 +200,8 @@ export class DatabaseStorage implements IStorage {
           or(eq(products.approvalStatus, "approved"), eq(products.approvalStatus, "APPROVED")),
         ),
       );
+    await cache.set(cacheKeys.newArrivals, newArrivals, CACHE_TTLS.newArrivals);
+    return newArrivals;
   }
 
   async getProductsByCategory(category: string): Promise<Product[]> {
@@ -194,7 +217,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getProductById(id: number): Promise<Product | undefined> {
+    const key = cacheKeys.product(id);
+    const cached = await cache.get<Product>(key);
+    if (cached) return cached;
+
     const [product] = await db.select().from(products).where(eq(products.id, id));
+    if (product) {
+      await cache.set(key, product, CACHE_TTLS.product);
+    }
     return product;
   }
 
@@ -219,6 +249,7 @@ export class DatabaseStorage implements IStorage {
 
     const [newProduct] = await db.insert(products).values(valuesToInsert).returning();
 
+    await cache.delPrefix("products:");
     return newProduct;
   }
 
@@ -250,11 +281,17 @@ export class DatabaseStorage implements IStorage {
       .set(updateData)
       .where(eq(products.id, id))
       .returning();
+    if (updated) {
+      await cache.delPrefix("products:");
+    }
     return updated;
   }
 
   async deleteProduct(id: number): Promise<boolean> {
     const result = await db.delete(products).where(eq(products.id, id));
+    if ((result.rowCount ?? 0) > 0) {
+      await cache.delPrefix("products:");
+    }
     return (result.rowCount ?? 0) > 0;
   }
 
@@ -268,11 +305,138 @@ export class DatabaseStorage implements IStorage {
       .set({ approvalStatus: status })
       .where(eq(products.id, id))
       .returning();
+    if (updated) {
+      await cache.delPrefix("products:");
+    }
     return updated;
   }
 
   async getVendorProducts(vendorId: number): Promise<Product[]> {
     return await db.select().from(products).where(eq(products.vendorId, vendorId));
+  }
+
+  // ── Product Variant Operations ─────────────────────────────────────────────
+
+  async getProductVariants(productId: number): Promise<ProductVariant[]> {
+    return await db
+      .select()
+      .from(productVariants)
+      .where(and(eq(productVariants.productId, productId), eq(productVariants.isActive, true)))
+      .orderBy(desc(productVariants.isDefault));
+  }
+
+  async getProductVariantById(id: number): Promise<ProductVariant | undefined> {
+    const [variant] = await db.select().from(productVariants).where(eq(productVariants.id, id));
+    return variant;
+  }
+
+  async createProductVariant(variant: InsertProductVariant): Promise<ProductVariant> {
+    const valuesToInsert: typeof productVariants.$inferInsert = {
+      productId: variant.productId,
+      name: variant.name,
+      sku: variant.sku ?? null,
+      price: variant.price !== undefined && variant.price !== null ? String(variant.price) : null,
+      stockQuantity: variant.stockQuantity ?? 0,
+      isDefault: variant.isDefault ?? false,
+      isActive: variant.isActive ?? true,
+    };
+    const [created] = await db.insert(productVariants).values(valuesToInsert).returning();
+    await cache.delPrefix("products:");
+    return created;
+  }
+
+  async updateProductVariant(
+    id: number,
+    data: Partial<InsertProductVariant>,
+  ): Promise<ProductVariant | undefined> {
+    const updateData: Record<string, unknown> = {};
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.sku !== undefined) updateData.sku = data.sku ?? null;
+    if (data.price !== undefined)
+      updateData.price = data.price !== null ? String(data.price) : null;
+    if (data.stockQuantity !== undefined) updateData.stockQuantity = data.stockQuantity;
+    if (data.isDefault !== undefined) updateData.isDefault = data.isDefault;
+    if (data.isActive !== undefined) updateData.isActive = data.isActive;
+
+    const [updated] = await db
+      .update(productVariants)
+      .set(updateData)
+      .where(eq(productVariants.id, id))
+      .returning();
+    if (updated) {
+      await cache.delPrefix("products:");
+    }
+    return updated;
+  }
+
+  async deleteProductVariant(id: number): Promise<boolean> {
+    const result = await db.delete(productVariants).where(eq(productVariants.id, id));
+    if ((result.rowCount ?? 0) > 0) {
+      await cache.delPrefix("products:");
+    }
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async decrementVariantStock(
+    variantId: number,
+    quantity: number,
+  ): Promise<ProductVariant | undefined> {
+    const [updated] = await db
+      .update(productVariants)
+      .set({
+        stockQuantity: sql`greatest(${productVariants.stockQuantity} - ${quantity}, 0)`,
+      })
+      .where(eq(productVariants.id, variantId))
+      .returning();
+    if (updated) {
+      await cache.delPrefix("products:");
+    }
+    return updated;
+  }
+
+  // ── Product Gallery Image Operations ───────────────────────────────────────
+
+  async getProductImages(productId: number): Promise<ProductImage[]> {
+    return await db
+      .select()
+      .from(productImages)
+      .where(eq(productImages.productId, productId))
+      .orderBy(productImages.sortOrder);
+  }
+
+  async createProductImage(image: InsertProductImage): Promise<ProductImage> {
+    const [created] = await db
+      .insert(productImages)
+      .values({
+        productId: image.productId,
+        url: image.url,
+        altText: image.altText ?? null,
+        sortOrder: image.sortOrder ?? 0,
+        isPrimary: image.isPrimary ?? false,
+      })
+      .returning();
+    await cache.delPrefix("products:");
+    return created;
+  }
+
+  async deleteProductImage(id: number): Promise<boolean> {
+    const result = await db.delete(productImages).where(eq(productImages.id, id));
+    if ((result.rowCount ?? 0) > 0) {
+      await cache.delPrefix("products:");
+    }
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async setPrimaryProductImage(productId: number, imageId: number): Promise<void> {
+    await db
+      .update(productImages)
+      .set({ isPrimary: false })
+      .where(eq(productImages.productId, productId));
+    await db
+      .update(productImages)
+      .set({ isPrimary: true })
+      .where(eq(productImages.id, imageId));
+    await cache.delPrefix("products:");
   }
 
   // ── Cart Operations ────────────────────────────────────────────────────────
@@ -285,6 +449,7 @@ export class DatabaseStorage implements IStorage {
         quantity: cartItems.quantity,
         cartId: cartItems.cartId,
         userId: cartItems.userId,
+        variantId: cartItems.variantId,
         product: {
           id: products.id,
           name: products.name,
@@ -304,9 +469,21 @@ export class DatabaseStorage implements IStorage {
           approvalStatus: products.approvalStatus,
           createdAt: products.createdAt,
         },
+        variant: {
+          id: productVariants.id,
+          productId: productVariants.productId,
+          name: productVariants.name,
+          sku: productVariants.sku,
+          price: productVariants.price,
+          stockQuantity: productVariants.stockQuantity,
+          isDefault: productVariants.isDefault,
+          isActive: productVariants.isActive,
+          createdAt: productVariants.createdAt,
+        },
       })
       .from(cartItems)
       .innerJoin(products, eq(cartItems.productId, products.id))
+      .leftJoin(productVariants, eq(cartItems.variantId, productVariants.id))
       .where(eq(cartItems.cartId, cartId));
 
     return items as CartItemWithProduct[];
@@ -318,6 +495,34 @@ export class DatabaseStorage implements IStorage {
   }
 
   async addToCart(item: InsertCartItem): Promise<CartItem> {
+    const conditions: SQL[] = [
+      eq(cartItems.productId, item.productId!),
+      item.variantId !== undefined && item.variantId !== null
+        ? eq(cartItems.variantId, item.variantId)
+        : isNull(cartItems.variantId),
+      item.cartId !== undefined && item.cartId !== null
+        ? eq(cartItems.cartId, item.cartId)
+        : isNull(cartItems.cartId),
+      item.userId !== undefined && item.userId !== null
+        ? eq(cartItems.userId, item.userId)
+        : isNull(cartItems.userId),
+    ];
+
+    const existing = await db
+      .select()
+      .from(cartItems)
+      .where(and(...conditions))
+      .limit(1);
+
+    if (existing.length > 0) {
+      const [updated] = await db
+        .update(cartItems)
+        .set({ quantity: sql`${cartItems.quantity} + ${item.quantity ?? 1}` })
+        .where(eq(cartItems.id, existing[0].id))
+        .returning();
+      return updated;
+    }
+
     const [newItem] = await db
       .insert(cartItems)
       .values({
@@ -325,6 +530,7 @@ export class DatabaseStorage implements IStorage {
         quantity: item.quantity ?? 1,
         cartId: item.cartId,
         userId: item.userId ?? null,
+        variantId: item.variantId ?? null,
       })
       .returning();
     return newItem;
@@ -418,22 +624,34 @@ export class DatabaseStorage implements IStorage {
             productName: item.productName,
             price: item.price ? String(item.price) : null,
             quantity: item.quantity ?? 1,
+            variantId: item.variantId ?? null,
+            variantName: item.variantName ?? null,
           })),
         );
 
-        // Decrement stock for each ordered item
+        // Decrement stock for each ordered item — single decrement, variant-level when present
         for (const item of items) {
           const qty = item.quantity ?? 1;
-          await tx
-            .update(products)
-            .set({
-              stockQuantity: sql`GREATEST(${products.stockQuantity} - ${qty}, 0)`,
-              inStock: sql`CASE WHEN ${products.stockQuantity} - ${qty} <= 0 THEN false ELSE ${products.inStock} END`,
-            })
-            .where(eq(products.id, item.productId!));
+          if (item.variantId) {
+            await tx
+              .update(productVariants)
+              .set({
+                stockQuantity: sql`GREATEST(${productVariants.stockQuantity} - ${qty}, 0)`,
+              })
+              .where(eq(productVariants.id, item.variantId));
+          } else {
+            await tx
+              .update(products)
+              .set({
+                stockQuantity: sql`GREATEST(${products.stockQuantity} - ${qty}, 0)`,
+                inStock: sql`CASE WHEN ${products.stockQuantity} - ${qty} <= 0 THEN false ELSE ${products.inStock} END`,
+              })
+              .where(eq(products.id, item.productId!));
+          }
         }
       }
 
+      await cache.delPrefix("products:");
       return newOrder;
     });
   }
@@ -447,6 +665,9 @@ export class DatabaseStorage implements IStorage {
       })
       .where(eq(products.id, productId))
       .returning();
+    if (updated) {
+      await cache.delPrefix("products:");
+    }
     return updated;
   }
 
@@ -528,7 +749,12 @@ export class DatabaseStorage implements IStorage {
   // ── CMS & Settings Operations ──────────────────────────────────────────────
 
   async getSiteSettings(): Promise<SiteSettings[]> {
-    return await db.select().from(siteSettings);
+    const cached = await cache.get<SiteSettings[]>(cacheKeys.siteSettings);
+    if (cached) return cached;
+
+    const settings = await db.select().from(siteSettings);
+    await cache.set(cacheKeys.siteSettings, settings, CACHE_TTLS.siteSettings);
+    return settings;
   }
 
   async updateSiteSetting(key: string, value: string): Promise<SiteSettings | undefined> {
@@ -540,9 +766,11 @@ export class DatabaseStorage implements IStorage {
         .set({ value, updatedAt: new Date() })
         .where(eq(siteSettings.key, key))
         .returning();
+      await cache.del(cacheKeys.siteSettings);
       return updated;
     } else {
       const [created] = await db.insert(siteSettings).values({ key, value }).returning();
+      await cache.del(cacheKeys.siteSettings);
       return created;
     }
   }

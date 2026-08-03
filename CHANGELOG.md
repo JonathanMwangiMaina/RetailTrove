@@ -7,6 +7,49 @@ This project does not currently use semantic versioning — entries are dated.
 
 ---
 
+## [v0.6.0] — Redis Cache, Product Variants & Real Gallery Images (2026-08-03)
+
+### Added
+
+#### Redis Cache Layer (P3)
+- `server/cache.ts` — optional Upstash Redis client (`@upstash/redis`): lazy `getCache()` returns `null` when `UPSTASH_REST_URL`/`UPSTASH_REST_TOKEN` are unset (no stubs, never throws), `CACHE_TTLS` map, deterministic `cacheKeys.productsList(filters)`, and best-effort `get`/`set`/`del`/`delPrefix` helpers that swallow errors (DB remains the source of truth)
+- Read-through caching in `server/database-storage.ts`: `getProductsPaginated` (keyed by filters), `getFeaturedProducts`, `getNewArrivals`, `getProductById`, `getSiteSettings`
+- Cache invalidation on writes: `cache.delPrefix("products:")` in `createProduct`/`updateProduct`/`deleteProduct`/`approveProduct`/`decrementStock`/`createOrder` (single stock decrement also invalidates), `cache.del(cacheKeys.siteSettings)` in `updateSiteSetting`
+- `.env.example`: optional `UPSTASH_REDIS_REST_URL=` / `UPSTASH_REDIS_REST_TOKEN=` (empty = cache disabled)
+- `server/__tests__/cache.test.ts` — 11 tests (fake client, keys, hit/miss, exact/prefix delete, disabled no-ops, error swallowing)
+
+#### Product Variants (P3)
+- `product_variants` table in `shared/schema.ts` (serial id, `product_id` FK cascade, `name`, `sku`, `price` override, `stock_quantity`, `is_default`, `is_active`, `image_url`); `cart_items.variant_id`, `order_items.variant_id` + `order_items.variant_name`
+- Storage (`server/storage.ts` + `server/database-storage.ts`): `getProductVariants`, `getProductVariantById`, `createProductVariant`, `updateProductVariant`, `deleteProductVariant`, `decrementVariantStock`; `getCart` left-joins variant data; `addToCart` merges duplicate product+variant rows and increments quantity; `createOrder` persists `variantName` and decrements **variant** stock when a variant is present (single decrement preserved)
+- API: `GET /api/products/:id` returns `variants`; variant CRUD at `POST/PUT/DELETE /api/products/:id/variants[/:variantId]`; `POST /api/cart` validates variant existence/ownership/activity/stock; `POST /api/orders` prices by variant and backfills `variantName`
+- Client: product page option selector (derived default selection, disabled when out of stock, aria-pressed), cart lines show variant name + variant price, checkout sends `variantId`/`variantName`, subtotal uses variant price
+- Migration `migrations/0005_add_product_variants.sql` (idempotent; backfills `is_active`/`image_url` on existing prod table)
+
+#### Product Gallery Images (removes hardcoded stubs)
+- `product_images` table (product FK cascade, `url`, `alt_text`, `sort_order`, `is_primary`) in `shared/schema.ts`
+- Storage: `getProductImages`, `createProductImage`, `deleteProductImage`, `setPrimaryProductImage`
+- API: `GET /api/products/:id` returns `images`; `POST /api/products/:id/images`, `DELETE /api/products/:id/images/:imageId`, `PUT /api/products/:id/images/:imageId/primary`
+- Client: product page gallery now renders real DB images; hero swaps to a variant's own `imageUrl` when a variant is selected; the previous hardcoded 3-image mock gallery (`client/src/pages/product.tsx` `additionalImages`) is removed entirely
+- Migration `migrations/0006_add_product_images.sql`
+
+#### Price Formatting
+- `client/src/lib/currencies.ts` `formatPrice` now uses `toLocaleString("en-US")`, so prices in the thousands and above get automatic comma grouping (e.g. `$1,299.00`, `KSh 12,500`) while sub-thousand values are unchanged
+
+#### CI / DevOps
+- `.github/workflows/ci.yml`: new `test` job (`npm ci` + `npm run test`) between `typecheck` and `build`; `build` now `needs: [lint, typecheck, test]`
+- `.github/workflows/routine-daily-repo-maintenance.yml`: stack context updated (LIVE Lemon Squeezy + M-Pesa, Brevo SMTP, Upstash Redis, key files) + KNOWN CRITICAL RULES expanded to 11
+
+### Tests
+- `server/__tests__/variants.test.ts` — 16 tests: product detail returns variants + images, cart rejects unknown/out-of-stock/inactive variants, order pricing by variant price, zod validation for variants/images/order/cart items
+- Full suite: **101 tests passing** (85 previous + 16 new)
+
+### Setup required (Supabase SQL Editor)
+1. `migrations/0005_add_product_variants.sql` — variants table + cart/order variant columns
+2. `migrations/0006_add_product_images.sql` — gallery images table
+3. Optional: set `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` in Vercel dashboard to activate caching
+
+---
+
 ## [v0.5.0] — Email Notifications, Wishlists & RLS (2026-08-02)
 
 ### Added

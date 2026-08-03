@@ -1,11 +1,17 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { Product, CartItemWithProduct, InsertCartItem } from "@shared/schema";
+import { Product, ProductVariant, CartItemWithProduct, InsertCartItem } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
+export interface AddToCartOptions {
+  quantity?: number;
+  variantId?: number;
+  variant?: ProductVariant | null;
+}
+
 interface CartContextType {
   cart: CartItemWithProduct[];
-  addToCart: (product: Product, quantity?: number) => Promise<void>;
+  addToCart: (product: Product, options?: number | AddToCartOptions) => Promise<void>;
   updateQuantity: (itemId: number, quantity: number) => Promise<void>;
   removeFromCart: (itemId: number) => Promise<void>;
   clearCart: () => void;
@@ -33,7 +39,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   // Calculate derived values
   const subtotal = cart.reduce(
-    (total, item) => total + Number(item.product.price) * (item.quantity ?? 1),
+    (total, item) =>
+      total + Number(item.variant?.price ?? item.product.price) * (item.quantity ?? 1),
     0,
   );
 
@@ -68,12 +75,19 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Add item to cart
-  const addToCart = async (product: Product, quantity: number = 1) => {
+  const addToCart = async (product: Product, options: number | AddToCartOptions = 1) => {
     try {
       const cartId = getCartId();
+      const opts: AddToCartOptions = typeof options === "number" ? { quantity: options } : options;
+      const quantity = opts.quantity ?? 1;
+      const variantId = opts.variantId;
+      const variant = opts.variant ?? null;
 
-      // Check if product is already in cart
-      const existingItem = cart.find((item) => item.product.id === product.id);
+      // Check if product (same variant) is already in cart
+      const existingItem = cart.find(
+        (item) =>
+          item.product.id === product.id && (item.variantId ?? null) === (variantId ?? null),
+      );
 
       if (existingItem) {
         // Update quantity if already in cart
@@ -84,17 +98,19 @@ export function CartProvider({ children }: { children: ReactNode }) {
           productId: product.id,
           quantity,
           cartId,
+          ...(variantId !== undefined ? { variantId } : {}),
         };
 
         const res = await apiRequest("POST", "/api/cart", cartItem);
         const newItem = await res.json();
 
         // We need to combine with product info
-        setCart((prev) => [...prev, { ...newItem, product }]);
+        setCart((prev) => [...prev, { ...newItem, product, variant }]);
 
+        const label = variant?.name ? `${product.name} (${variant.name})` : product.name;
         toast({
           title: "Added to cart",
-          description: `${product.name} has been added to your cart`,
+          description: `${label} has been added to your cart`,
         });
       }
     } catch (error) {
