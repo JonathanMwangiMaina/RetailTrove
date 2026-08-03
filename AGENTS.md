@@ -532,6 +532,11 @@ Removed `.env` line from `.gitignore` (`.gitignore:3`). The file is already forc
 - `prettier --check`: clean ✅
 - `vite build`: clean ✅
 
+### Prod schema applied 2026-08-03 (migrations via raw pg)
+- **Operational discovery:** migrations CAN be applied to prod from WSL — `npm run db:push` is unreachable (ETIMEDOUT port 6543), but a raw `pg` pool with `ssl: { rejectUnauthorized: false }` connects fine (same path as `e2e/helpers/db.ts`). Applied 0005 + 0006 this way (`e2e/results/tmp-apply-migrations.cjs`).
+- **Why it mattered:** prod already had a partial `product_variants` table (missing `is_active`, `image_url`) and no `product_images` table, so `GET /api/products/:id` 500'd on every product (`getProductVariants` queried the missing `is_active` column; `getProductImages` queried a missing table). After applying both idempotent migrations, detail returns `variants`/`images` arrays normally.
+- Deploy `eadf294` (v0.6.0) verified live; prod product detail endpoints return 200 with `variants: []`/`images: []` for products without variants/images.
+
 ### Setup required (Supabase SQL Editor)
 1. `migrations/0005_add_product_variants.sql`
 2. `migrations/0006_add_product_images.sql`
