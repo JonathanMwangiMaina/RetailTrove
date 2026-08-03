@@ -15,6 +15,9 @@ export default tseslint.config(
       "supabase/**",
       "*.config.*",
       "import-schema.js",
+      "playwright-report/**",
+      "test-results/**",
+      "e2e/results/**",
     ],
   },
 
