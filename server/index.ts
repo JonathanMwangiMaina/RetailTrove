@@ -218,7 +218,7 @@ app.get("/api/health", async (_req: Request, res: Response) => {
     uptime: Math.floor(process.uptime()),
     database: dbStatus,
     environment: process.env.NODE_ENV ?? "development",
-    version: "0.5.4",
+    version: "0.5.5",
   });
 });
 

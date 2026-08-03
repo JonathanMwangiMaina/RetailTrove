@@ -415,10 +415,6 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
 
       const newOrder = await storage.createOrder(validatedOrder, validatedItems);
 
-      for (const item of validatedItems) {
-        await storage.decrementStock(item.productId, item.quantity ?? 1);
-      }
-
       logAudit(req, { action: "order_created", entityType: "order", entityId: newOrder.id });
 
       if (orderData.cartId) {
