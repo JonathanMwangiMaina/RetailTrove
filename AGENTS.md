@@ -457,6 +457,46 @@ Removed `.env` line from `.gitignore` (`.gitignore:3`). The file is already forc
 
 ---
 
+## v0.5.x Production M-Pesa E2E Verification (2026-08-03)
+
+### Verified Live on Production (https://retailtrove.vercel.app)
+- **Real sandbox STK push** → `/api/checkout/mpesa` returns 200 `{MerchantRequestID, CheckoutRequestID}` (after user fixed dashboard `MPESA_PASSKEY`)
+- Order created → STK push → simulated success callback → order flips `paid` **synchronously** (poll 1) on 0.5.5
+- **Loyalty**: vendor account earned 65 pts/order (orders #9, #10 → 130 pts, bronze) with matching `loyalty_transactions` rows
+- **Stock**: product 28 restocked to 50 → 44 after a 6-qty order → **single decrement confirmed**
+- **Analytics**: `today.ordersCreated/paidOrders/paidRevenue` aggregate correctly
+- Order 6 flipped `failed` via a **real sandbox cancel callback** (lookup + update path works in prod)
+
+### Bugs Found + Fixed (prod E2E)
+| Bug | Root cause | Fix |
+|-----|-----------|-----|
+| No loyalty points ever | All users had `auth_user_id = NULL` (manual/user rows never set it) → `orders.userId` null → loyalty/“my orders”/wishlists silently no-op | `crypto.randomUUID()` in `auth.ts` register, `database-storage.ts` `ensureDefaultAdmin`, `routes.ts` POST `/admin/users`; backfilled prod DB with `gen_random_uuid()` |
+| Orders stuck `pending` for minutes | Vercel serverless freezes the function right after `res.send` — post-ack DB work is unreliable | Process ResultCode-0 DB update **BEFORE** the 200 ack in `server/index.ts` + `api/index.ts`; email + loyalty in try/catch; all paths ack 200 |
+| Stock 50 → 26 for two 6-qty orders (expected 38) | **Double decrement**: `createOrder` already decrements inside its DB tx AND `/api/orders` looped `storage.decrementStock` per item | Removed the redundant loop in `routes.ts` (stock now decrements only inside `createOrder` tx) |
+
+### Critical Operational Facts
+- **Vercel env = dashboard vars, NOT git `.env`.** AGENTS.md's v0.4.7 “Vercel reads .env from git” is **disproven by live behavior**: updating dashboard `MPESA_PASSKEY` made live STK push work while git `.env` was unchanged. Deleting dashboard vars breaks M-Pesa (no fallback). Dashboard “Redeploy” can reuse a stale env snapshot — a fresh `main` push is the reliable trigger.
+- **Serverless webhook freeze is a timing lottery, not binary**: an old (0.5.3) deployment's frozen post-ack work resumed minutes later and flipped order 8 to paid (receipt `SIMQA2JXHZ`, no loyalty — legacy code didn't award points). Current code awards before ack, so it's reliable.
+- **Sandbox callbacks**: the real success callback does NOT auto-fire in this setup (only cancel/failure did, on order 6). Simulation of the success callback is required and valid.
+- **Local harness TLS block**: `server/db.ts` strict TLS (`SUPABASE_CA_CERT`, `rejectUnauthorized:true`) → `SELF_SIGNED_CERT_IN_CHAIN` from WSL. Only raw `pg` with `ssl:{rejectUnauthorized:false}` works (e2e helpers). Server code can't be verified locally against prod DB.
+- **CI transient failure**: run for `6eb6ba5` failed in ~8s (both gates, no step detail, logs 403 without admin). Same repo + workflow ran fine next push (`ddde1ed` → 0.5.5 live). Treat sub-30s gate failures as transient before debugging.
+- **ESLint was linting generated artifacts** (`playwright-report/`, `test-results/`, `e2e/results/` → 4000+ errors). All three now in `eslint.config.mjs` ignores (were already in `.gitignore`).
+
+### Prod DB State (reference)
+- Orders: 1-5 `pending` (early probes), 6 `failed`, 7 `paid` (no user_id), 8/9/10 `paid` (vendor user_id)
+- Users: id 1 admin `be65935d-…`, id 2 vendor `3b9f3157-8b43-4b52-8e8b-72a92e14d345`, id 3 customer `93a4cf2b-…` (backfilled `auth_user_id`)
+- Loyalty: vendor 130 pts (orders #9, #10); admin/customer accounts exist (0 pts); product 28 = 44
+
+### Verification Tooling (e2e/results/tmp-* — gitignored)
+- `tmp-full-paid-flow.cjs` — login → order → STK push → simulated success callback → poll → FINDINGS (loyalty/stock/today)
+- `tmp-poll-deploy.sh` — polls `/api/health` until target version is live
+- `tmp-commit-msg.txt` — commit messages (PowerShell `-m` truncates on `:`)
+
+### Commits
+`f4a44d9` v0.5.3 version bump → `c079476` v0.5.4 authUserId linkage + callback-before-ack → `6eb6ba5` v0.5.5 remove double stock decrement → `ddde1ed` ESLint ignores for artifacts (0.5.5 went live with this push)
+
+---
+
 ## Git Environment Quirks
 
 ### Push requires plain `git push` (NOT `GIT_SSH_COMMAND`)
