@@ -542,6 +542,13 @@ Removed `.env` line from `.gitignore` (`.gitignore:3`). The file is already forc
 2. `migrations/0006_add_product_images.sql`
 3. Optional: `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` in Vercel dashboard to activate cache
 
+### Redis cache ACTIVATED + verified in prod (2026-08-03)
+- **Upstash CLI is the only reliable token source.** `npm i -g @upstash/cli` (v1.1.0), `upstash redis list` → copy the standard `rest_token` from the CLI output. Tokens pasted from the Upstash console REST row (or found in git commit `90cdb5c`) were **stale** → `WRONGPASS invalid username-password pair or user is disabled`. Decode test: `Buffer.from(tok.slice(12), 'base64').toString()` should equal the DB access key.
+- `.env` now has the verified token; probe `e2e/results/tmp-upstash-probe.cjs` → `set+get: pong` / `PING_OK`.
+- Remote had its own `.env` Upstash commit (`90cdb5c`) that was never fetched locally — after rebase BOTH token lines merged into `.env` (duplicate keys). Dotenv keeps the FIRST occurrence, so the stale token silently won. **Always grep for duplicate env keys after a rebase.**
+- Prod verified 2026-08-03: `GET /api/products` + `/api/products/featured` populated Upstash keys `products:featured` and `products:list::::::::20` (list key encodes filters, `::` for empty values). Query via `curl -H "Authorization: Bearer $TOKEN" https://<endpoint>/keys/products:*` (basic `-u token` prompts for a password — use Bearer).
+- Commits: `90cdb5c` (remote Upstash config) → rebase → `77e94cb` chore: activate Upstash Redis cache credentials in env.
+
 ---
 
 ## Git Environment Quirks
