@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { db } from "./db.js";
 import {
   products,
@@ -799,6 +800,7 @@ export class DatabaseStorage implements IStorage {
         role: "admin",
         status: "active",
         isApproved: true,
+        authUserId: crypto.randomUUID(),
       });
     }
   }

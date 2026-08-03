@@ -109,13 +109,14 @@ app.post(
 
 // ── M-Pesa Callback ─────────────────────────────────────────────────────────
 app.post("/api/mpesa/callback", express.json(), async (req: Request, res: Response) => {
-  // Always respond 200 immediately — Safaricom retries aggressively on failure
-  res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
-
+  // Process the payment state change BEFORE acking — on serverless the function
+  // can be frozen right after the response, so post-ack work is unreliable.
   try {
     const { Body } = req.body;
     const { stkCallback } = Body ?? {};
-    if (!stkCallback) return;
+    if (!stkCallback) {
+      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
+    }
 
     const {
       ResultCode,
@@ -129,16 +130,15 @@ app.post("/api/mpesa/callback", express.json(), async (req: Request, res: Respon
 
     if (!order) {
       console.warn(`[M-Pesa] No order found for CheckoutRequestID: ${CheckoutRequestID}`);
-      return;
+      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
     }
 
     if (order.paymentStatus !== "pending") {
       console.log(`[M-Pesa] Order #${order.id} already ${order.paymentStatus} — skipping duplicate`);
-      return;
+      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
     }
 
     if (ResultCode === 0) {
-      // Extract receipt number from callback metadata
       const metadata: Record<string, any> = {};
       (CallbackMetadata?.Item ?? []).forEach((item: any) => {
         metadata[item.Name] = item.Value;
@@ -149,17 +149,24 @@ app.post("/api/mpesa/callback", express.json(), async (req: Request, res: Respon
         mpesaReceiptNumber: metadata.MpesaReceiptNumber ?? null,
       });
       console.log(`[M-Pesa] Order #${order.id} paid — receipt: ${metadata.MpesaReceiptNumber}`);
-      const items = await storage.getOrderItems(order.id);
-      await sendOrderConfirmationEmail(order, items);
-      await awardLoyaltyPointsForOrder(order);
+      try {
+        const items = await storage.getOrderItems(order.id);
+        await sendOrderConfirmationEmail(order, items);
+        await awardLoyaltyPointsForOrder(order);
+      } catch (sideErr: any) {
+        console.error("[M-Pesa] side-effect error (order is already paid):", sideErr.message);
+      }
     } else {
       await storage.updateOrderPayment(order.id, { paymentStatus: "failed" });
       console.warn(
         `[M-Pesa] Order #${order.id} payment failed: ${ResultDesc} (code: ${ResultCode})`,
       );
     }
+
+    return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
   } catch (err: any) {
     console.error("[M-Pesa] callback processing error:", err.message);
+    return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
   }
 });
 
@@ -211,7 +218,7 @@ app.get("/api/health", async (_req: Request, res: Response) => {
     uptime: Math.floor(process.uptime()),
     database: dbStatus,
     environment: process.env.NODE_ENV ?? "development",
-    version: "0.5.3",
+    version: "0.5.4",
   });
 });
 

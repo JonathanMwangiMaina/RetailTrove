@@ -674,6 +674,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
         passwordHash: hash,
         role: role || "customer",
         isApproved: true,
+        authUserId: crypto.randomUUID(),
       });
 
       const { passwordHash: _, ...sanitized } = newUser as Record<string, any>;

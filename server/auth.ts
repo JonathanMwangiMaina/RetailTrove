@@ -95,7 +95,7 @@ export function setupAuth(app: Express) {
         name: parsedInput.name || "",
         passwordHash,
         role: "customer",
-        authUserId: req.body.authUserId || undefined,
+        authUserId: req.body.authUserId || crypto.randomUUID(),
       });
 
       req.session.userId = newUser.id;
