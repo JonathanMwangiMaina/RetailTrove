@@ -7,147 +7,63 @@ vi.mock("../db.js", () => ({
 
 vi.mock("../email.js", () => ({
   sendOrderConfirmationEmail: vi.fn().mockResolvedValue(undefined),
+  sendOrderStatusEmail: vi.fn().mockResolvedValue(undefined),
 }));
 
-const orders = new Map<number, any>();
-const orderItems = new Map<number, any[]>();
+vi.mock("../loyalty-service.js", () => ({
+  awardLoyaltyPointsForOrder: vi.fn().mockResolvedValue(undefined),
+}));
 
-const mockStorage = {
-  getOrderById: vi.fn((id: number) => orders.get(id)),
-  getOrderByStripeSessionId: vi.fn(),
-  getOrderByIdempotencyKey: vi.fn(),
-  getOrderItems: vi.fn(async (id: number) => orderItems.get(id) ?? []),
-  updateOrderPayment: vi.fn(async (id: number, data: any) => {
-    const order = orders.get(id);
-    if (!order) return undefined;
-    Object.assign(order, data);
-    return order;
-  }),
-  createOrder: vi.fn(),
-  getAllOrders: vi.fn().mockResolvedValue([]),
-  getOrdersByUserId: vi.fn().mockResolvedValue([]),
-  decrementStock: vi.fn(),
-  getLowStockProducts: vi.fn().mockResolvedValue([]),
-  getUser: vi.fn(),
-  getUserByEmail: vi.fn(),
-  getUserByAuthUserId: vi.fn(),
-  createUser: vi.fn(),
-  getAllUsers: vi.fn().mockResolvedValue([]),
-  updateUser: vi.fn(),
-  deleteUser: vi.fn(),
-  getAllProducts: vi.fn().mockResolvedValue([]),
-  getProductsPaginated: vi.fn().mockResolvedValue({ data: [], nextCursor: null }),
-  getFeaturedProducts: vi.fn().mockResolvedValue([]),
-  getNewArrivals: vi.fn().mockResolvedValue([]),
-  getProductsByCategory: vi.fn().mockResolvedValue([]),
-  getProductById: vi.fn(),
-  createProduct: vi.fn(),
-  updateProduct: vi.fn(),
-  deleteProduct: vi.fn(),
-  getPendingProducts: vi.fn().mockResolvedValue([]),
-  approveProduct: vi.fn(),
-  getVendorProducts: vi.fn().mockResolvedValue([]),
-  getCart: vi.fn().mockResolvedValue([]),
-  getCartItemById: vi.fn(),
-  addToCart: vi.fn(),
-  updateCartItem: vi.fn(),
-  deleteCartItem: vi.fn(),
-  clearCart: vi.fn(),
-  getSiteSettings: vi.fn().mockResolvedValue([]),
-  updateSiteSetting: vi.fn(),
-  getBanner: vi.fn(),
-  updateBanner: vi.fn(),
-  getSiteContent: vi.fn(),
-  updateSiteContent: vi.fn(),
-  getAllFaqs: vi.fn().mockResolvedValue([]),
-  getPublicFaqs: vi.fn().mockResolvedValue([]),
-  getVendorFaqs: vi.fn().mockResolvedValue([]),
-  createFaq: vi.fn(),
-  updateFaq: vi.fn(),
-  deleteFaq: vi.fn(),
-  recordVisit: vi.fn(),
-  getAllVisits: vi.fn().mockResolvedValue([]),
-  subscribeNewsletter: vi.fn(),
-  getNewsletterSubscribers: vi.fn().mockResolvedValue([]),
-  deleteNewsletterSubscriber: vi.fn(),
-  getPublicTestimonials: vi.fn().mockResolvedValue([]),
-  getAllTestimonials: vi.fn().mockResolvedValue([]),
-  createTestimonial: vi.fn(),
-  updateTestimonial: vi.fn(),
-  deleteTestimonial: vi.fn(),
-  getPublicTeamMembers: vi.fn().mockResolvedValue([]),
-  getAllTeamMembers: vi.fn().mockResolvedValue([]),
-  getTeamMemberById: vi.fn(),
-  createTeamMember: vi.fn(),
-  updateTeamMember: vi.fn(),
-  deleteTeamMember: vi.fn(),
-  createResetToken: vi.fn(),
-  getResetToken: vi.fn(),
-  useResetToken: vi.fn(),
-  getLoyaltyAccount: vi.fn(),
-  addLoyaltyPoints: vi.fn(),
-  redeemLoyaltyPoints: vi.fn(),
-  getLoyaltyTransactions: vi.fn().mockResolvedValue([]),
-  getAllLoyaltyAccounts: vi.fn().mockResolvedValue([]),
-  createAuditLog: vi.fn(),
-  getAuditLogs: vi.fn().mockResolvedValue([]),
-  ensureBanner: vi.fn().mockResolvedValue(undefined),
-  ensureDefaultAdmin: vi.fn().mockResolvedValue(undefined),
-  ensureSiteContent: vi.fn().mockResolvedValue(undefined),
-  ensureSiteSettings: vi.fn().mockResolvedValue(undefined),
-  ensureDefaultFaqs: vi.fn().mockResolvedValue(undefined),
-};
+const { orders, orderItems, mockStorage } = vi.hoisted(() => {
+  const orders = new Map<number, any>();
+  const orderItems = new Map<number, any[]>();
+
+  const mockStorage = {
+    getOrderById: vi.fn((id: number) => orders.get(id)),
+    getOrderByStripeSessionId: vi.fn(),
+    getOrderItems: vi.fn(async (id: number) => orderItems.get(id) ?? []),
+    markOrderPaymentStatus: vi.fn(
+      async (id: number, fromStatus: string, toStatus: string, extra?: any) => {
+        const order = orders.get(id);
+        if (!order || order.paymentStatus !== fromStatus) return undefined;
+        order.paymentStatus = toStatus;
+        if (extra?.stripePaymentIntentId !== undefined)
+          order.stripePaymentIntentId = extra.stripePaymentIntentId;
+        return order;
+      },
+    ),
+    releaseOrderStock: vi.fn(async (id: number) => {
+      const order = orders.get(id);
+      if (!order || order.stockReleased) return false;
+      order.stockReleased = true;
+      return true;
+    }),
+    updateOrderPayment: vi.fn(async (id: number, data: any) => {
+      const order = orders.get(id);
+      if (!order) return undefined;
+      Object.assign(order, data);
+      return order;
+    }),
+    getUserByAuthUserId: vi.fn(),
+    addLoyaltyPoints: vi.fn().mockResolvedValue({}),
+    createOrder: vi.fn(),
+    decrementStock: vi.fn(),
+  };
+
+  return { orders, orderItems, mockStorage };
+});
 
 vi.mock("../storage.js", () => ({ storage: mockStorage }));
 
-import express, { type Request, type Response } from "express";
-import request from "supertest";
-import { sendOrderConfirmationEmail } from "../email.js";
-
-function buildWebhookApp() {
-  const app = express();
-  app.use(express.json());
-
-  app.post("/api/webhooks/lemonsqueezy", express.json(), async (req: Request, res: Response) => {
-    try {
-      const payload = req.body;
-      const orderId = Number(payload?.meta?.custom_data?.order_id);
-
-      if (orderId) {
-        const existingOrder = await mockStorage.getOrderById(orderId);
-        if (!existingOrder) {
-          // no matching order — skip
-        } else if (existingOrder.paymentStatus !== "pending") {
-          console.log(`[LS] Order #${orderId} already ${existingOrder.paymentStatus} — skipping`);
-        } else if (req.headers["x-event-name"] === "order_created") {
-          await mockStorage.updateOrderPayment(orderId, {
-            paymentStatus: "paid",
-            stripePaymentIntentId: String(payload.data.id ?? ""),
-          });
-          const paidOrder = await mockStorage.getOrderById(orderId);
-          if (paidOrder) {
-            const items = await mockStorage.getOrderItems(orderId);
-            await sendOrderConfirmationEmail(paidOrder, items);
-          }
-        } else if (req.headers["x-event-name"] === "order_refunded") {
-          await mockStorage.updateOrderPayment(orderId, { paymentStatus: "refunded" });
-        }
-      }
-
-      res.status(200).json({ received: true });
-    } catch (err: any) {
-      console.error("[LS] webhook error:", err.message);
-      res.status(200).json({ received: true });
-    }
-  });
-
-  return app;
-}
+import { processLemonSqueezyWebhook } from "../payment-callbacks.js";
+import { sendOrderConfirmationEmail, sendOrderStatusEmail } from "../email.js";
+import { awardLoyaltyPointsForOrder } from "../loyalty-service.js";
 
 const mockOrder = {
   id: 1,
   paymentStatus: "pending",
   total: "100.00",
+  stockReleased: false,
 };
 
 beforeEach(() => {
@@ -158,78 +74,102 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe("Lemon Squeezy Webhook", () => {
+describe("Lemon Squeezy Webhook (real handler)", () => {
   it("marks order as paid on order_created event", async () => {
-    const app = buildWebhookApp();
+    const handled = await processLemonSqueezyWebhook("order_created", {
+      meta: { custom_data: { order_id: 1 } },
+      data: { id: "ls-order-123" },
+    });
 
-    await request(app)
-      .post("/api/webhooks/lemonsqueezy")
-      .set("x-event-name", "order_created")
-      .send({
-        meta: { custom_data: { order_id: 1 } },
-        data: { id: "ls-order-123" },
-      })
-      .expect(200);
-
-    expect(mockStorage.updateOrderPayment).toHaveBeenCalledWith(1, {
-      paymentStatus: "paid",
+    expect(handled).toBe(true);
+    expect(mockStorage.markOrderPaymentStatus).toHaveBeenCalledWith(1, "pending", "paid", {
       stripePaymentIntentId: "ls-order-123",
     });
+    expect(orders.get(1).paymentStatus).toBe("paid");
     expect(sendOrderConfirmationEmail).toHaveBeenCalledWith(
       expect.objectContaining({ id: 1, paymentStatus: "paid" }),
       expect.arrayContaining([expect.objectContaining({ productId: 3 })]),
     );
+    expect(awardLoyaltyPointsForOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 1, paymentStatus: "paid" }),
+    );
+    expect(mockStorage.releaseOrderStock).not.toHaveBeenCalled();
   });
 
-  it("does not send a confirmation email on refund", async () => {
-    const app = buildWebhookApp();
+  it("marks order as refunded and releases stock on order_refunded event", async () => {
+    orders.set(1, { ...mockOrder, paymentStatus: "paid" });
 
-    await request(app)
-      .post("/api/webhooks/lemonsqueezy")
-      .set("x-event-name", "order_refunded")
-      .send({
-        meta: { custom_data: { order_id: 1 } },
-        data: { id: "ls-order-123" },
-      })
-      .expect(200);
-
-    expect(mockStorage.updateOrderPayment).toHaveBeenCalledWith(1, {
-      paymentStatus: "refunded",
+    const handled = await processLemonSqueezyWebhook("order_refunded", {
+      meta: { custom_data: { order_id: 1 } },
+      data: { id: "ls-order-123" },
     });
+
+    expect(handled).toBe(true);
+    expect(mockStorage.markOrderPaymentStatus).toHaveBeenCalledWith(1, "paid", "refunded");
+    expect(orders.get(1).paymentStatus).toBe("refunded");
+    expect(orders.get(1).stockReleased).toBe(true);
+    expect(mockStorage.releaseOrderStock).toHaveBeenCalledWith(1);
     expect(sendOrderConfirmationEmail).not.toHaveBeenCalled();
+    expect(sendOrderStatusEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 1, paymentStatus: "refunded" }),
+      expect.arrayContaining([expect.objectContaining({ productId: 3 })]),
+      "cancelled",
+    );
+    expect(awardLoyaltyPointsForOrder).not.toHaveBeenCalled();
+  });
+
+  it("does not release stock twice on a repeated refund", async () => {
+    orders.set(1, { ...mockOrder, paymentStatus: "paid" });
+    const payload = {
+      meta: { custom_data: { order_id: 1 } },
+      data: { id: "ls-order-123" },
+    };
+
+    await processLemonSqueezyWebhook("order_refunded", payload);
+    await processLemonSqueezyWebhook("order_refunded", payload);
+
+    expect(mockStorage.markOrderPaymentStatus).toHaveBeenCalledTimes(2);
+    expect(sendOrderStatusEmail).toHaveBeenCalledTimes(1);
+    expect(mockStorage.releaseOrderStock).toHaveBeenCalledTimes(1);
   });
 
   it("skips processing when order already paid (idempotency)", async () => {
     orders.set(1, { ...mockOrder, paymentStatus: "paid" });
-    const app = buildWebhookApp();
 
-    await request(app)
-      .post("/api/webhooks/lemonsqueezy")
-      .set("x-event-name", "order_created")
-      .send({
-        meta: { custom_data: { order_id: 1 } },
-        data: { id: "ls-order-456" },
-      })
-      .expect(200);
+    const handled = await processLemonSqueezyWebhook("order_created", {
+      meta: { custom_data: { order_id: 1 } },
+      data: { id: "ls-order-456" },
+    });
 
-    expect(mockStorage.updateOrderPayment).not.toHaveBeenCalled();
+    expect(handled).toBe(false);
+    expect(mockStorage.markOrderPaymentStatus).toHaveBeenCalledWith(1, "pending", "paid", {
+      stripePaymentIntentId: "ls-order-456",
+    });
+    expect(orders.get(1).paymentStatus).toBe("paid");
+    expect(sendOrderConfirmationEmail).not.toHaveBeenCalled();
+    expect(awardLoyaltyPointsForOrder).not.toHaveBeenCalled();
+  });
+
+  it("does nothing when order not found", async () => {
+    orders.clear();
+
+    const handled = await processLemonSqueezyWebhook("order_created", {
+      meta: { custom_data: { order_id: 999 } },
+      data: { id: "ls-order-789" },
+    });
+
+    expect(handled).toBe(false);
+    expect(mockStorage.markOrderPaymentStatus).not.toHaveBeenCalled();
     expect(sendOrderConfirmationEmail).not.toHaveBeenCalled();
   });
 
-  it("returns 200 even when order not found", async () => {
-    orders.clear();
-    const app = buildWebhookApp();
+  it("does nothing on an unrecognised event name", async () => {
+    const handled = await processLemonSqueezyWebhook("order_updated", {
+      meta: { custom_data: { order_id: 1 } },
+      data: { id: "ls-order-789" },
+    });
 
-    await request(app)
-      .post("/api/webhooks/lemonsqueezy")
-      .set("x-event-name", "order_created")
-      .send({
-        meta: { custom_data: { order_id: 999 } },
-        data: { id: "ls-order-789" },
-      })
-      .expect(200);
-
-    expect(mockStorage.updateOrderPayment).not.toHaveBeenCalled();
-    expect(sendOrderConfirmationEmail).not.toHaveBeenCalled();
+    expect(handled).toBe(false);
+    expect(mockStorage.markOrderPaymentStatus).not.toHaveBeenCalled();
   });
 });

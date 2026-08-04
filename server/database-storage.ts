@@ -432,10 +432,7 @@ export class DatabaseStorage implements IStorage {
       .update(productImages)
       .set({ isPrimary: false })
       .where(eq(productImages.productId, productId));
-    await db
-      .update(productImages)
-      .set({ isPrimary: true })
-      .where(eq(productImages.id, imageId));
+    await db.update(productImages).set({ isPrimary: true }).where(eq(productImages.id, imageId));
     await cache.delPrefix("products:");
   }
 
@@ -576,10 +573,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async addToWishlist(authUserId: string, productId: number): Promise<void> {
-    await db
-      .insert(wishlistItems)
-      .values({ userId: authUserId, productId })
-      .onConflictDoNothing();
+    await db.insert(wishlistItems).values({ userId: authUserId, productId }).onConflictDoNothing();
   }
 
   async removeFromWishlist(authUserId: string, productId: number): Promise<void> {
@@ -611,9 +605,9 @@ export class DatabaseStorage implements IStorage {
           paymentProvider: order.paymentProvider ?? null,
           stripeSessionId: order.stripeSessionId ?? null,
           stripePaymentIntentId: order.stripePaymentIntentId ?? null,
-           mpesaReceiptNumber: order.mpesaReceiptNumber ?? null,
-           idempotencyKey: order.idempotencyKey ?? null,
-         })
+          mpesaReceiptNumber: order.mpesaReceiptNumber ?? null,
+          idempotencyKey: order.idempotencyKey ?? null,
+        })
         .returning();
 
       if (items.length > 0) {
@@ -703,10 +697,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getOrdersByUserId(authUserId: string): Promise<Order[]> {
-    return await db
-      .select()
-      .from(orders)
-      .where(eq(orders.userId, authUserId));
+    return await db.select().from(orders).where(eq(orders.userId, authUserId));
   }
 
   async updateOrderPayment(
@@ -733,6 +724,61 @@ export class DatabaseStorage implements IStorage {
 
     await db.update(orders).set(updates).where(eq(orders.id, id));
     return this.getOrderById(id);
+  }
+
+  async markOrderPaymentStatus(
+    id: number,
+    fromStatus: string,
+    toStatus: string,
+    extra?: { mpesaReceiptNumber?: string; stripePaymentIntentId?: string },
+  ): Promise<Order | undefined> {
+    const updates: Record<string, unknown> = { paymentStatus: toStatus };
+    if (extra?.mpesaReceiptNumber !== undefined)
+      updates.mpesaReceiptNumber = extra.mpesaReceiptNumber;
+    if (extra?.stripePaymentIntentId !== undefined)
+      updates.stripePaymentIntentId = extra.stripePaymentIntentId;
+
+    const [updated] = await db
+      .update(orders)
+      .set(updates)
+      .where(and(eq(orders.id, id), eq(orders.paymentStatus, fromStatus)))
+      .returning();
+    return updated;
+  }
+
+  async releaseOrderStock(orderId: number): Promise<boolean> {
+    let released = false;
+    await db.transaction(async (tx) => {
+      const [order] = await tx.select().from(orders).where(eq(orders.id, orderId));
+      if (!order || order.stockReleased) return;
+
+      const items = await tx.select().from(orderItems).where(eq(orderItems.orderId, orderId));
+      for (const item of items) {
+        const qty = item.quantity ?? 1;
+        if (item.variantId) {
+          await tx
+            .update(productVariants)
+            .set({ stockQuantity: sql`${productVariants.stockQuantity} + ${qty}` })
+            .where(eq(productVariants.id, item.variantId));
+        } else if (item.productId) {
+          await tx
+            .update(products)
+            .set({
+              stockQuantity: sql`${products.stockQuantity} + ${qty}`,
+              inStock: sql`CASE WHEN ${products.stockQuantity} + ${qty} > 0 THEN true ELSE ${products.inStock} END`,
+            })
+            .where(eq(products.id, item.productId));
+        }
+      }
+
+      await tx.update(orders).set({ stockReleased: true }).where(eq(orders.id, orderId));
+      released = true;
+    });
+
+    if (released) {
+      await cache.delPrefix("products:");
+    }
+    return released;
   }
 
   async getOrderItems(orderId: number): Promise<OrderItem[]> {

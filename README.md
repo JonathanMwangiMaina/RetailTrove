@@ -1,6 +1,6 @@
 # RetailTrove — Full-Stack E-Commerce Platform
 
-> **Status:** Phases 1–4 complete. Latest: **v0.6.0** — Upstash Redis cache layer, product variants (size/color with variant-level pricing, stock and images), real DB-driven product galleries (hardcoded mock images removed), automatic comma formatting for thousand+ prices, CI test job, plus the full v0.5.x line: production M-Pesa pipeline verified end-to-end live on https://retailtrove.vercel.app, email notifications, wishlists, RLS policies, payment idempotency, health checks, Sentry, CI/CD, and **101 passing tests**.
+> **Status:** Phases 1–4 complete. Latest: **v0.7.0** — self-hosted CDN image optimisation (sharp `/api/image` proxy serving cached WebP/AVIF, `OptimizedImage` responsive component with srcset/lazy-load/fallback across 10 render sites), plus the v0.6.0 line: Upstash Redis cache, product variants, DB-driven galleries, comma-formatted prices, CI test job, and the full v0.5.x line: production M-Pesa pipeline verified end-to-end live on https://retailtrove.vercel.app, email notifications, wishlists, RLS policies, payment idempotency, health checks, Sentry, CI/CD, and **121 passing tests**.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19.1-61dafb)](https://react.dev/)
@@ -771,16 +771,16 @@ Copy `.env.example` to `.env` and populate:
 - ✅ Input sanitisation via recursive xss() on req.body/query/params
 - ✅ Structured JSON error handler with request IDs
 - ✅ Audit logging (auditLogs table, logAudit() helper, admin Audit Logs tab)
-- ✅ Vitest tests (101 tests: unit + payment/order/cart/wishlist/variant/cache integration)
+- ✅ Vitest tests (121 tests: unit + payment/order/cart/wishlist/variant/cache/image integration)
 - ✅ Cursor-based pagination on GET /api/products
 
-### Phase 4 (Performance & Scale) — Complete ✅ (v0.6.0)
+### Phase 4 (Performance & Scale) — Complete ✅ (v0.7.0)
 
 - ✅ Sentry error monitoring (DSN-guarded init, no crash when unset)
 - ✅ Redis cache layer (Upstash: product listings, featured, new arrivals, site settings)
 - ✅ Product variants (size/color, variant pricing + stock + images)
 - ✅ DB-driven product gallery images (mock Unsplash stubs removed)
-- - CDN image optimisation (P3 — not started)
+- ✅ CDN image optimisation (self-hosted sharp `/api/image` proxy → cached WebP/AVIF + `OptimizedImage` component, v0.7.0)
 
 ---
 
@@ -788,7 +788,7 @@ Copy `.env.example` to `.env` and populate:
 
 **Test Runner:** Vitest 4.1.10
 
-**Current Status:** 101 tests across 11 test files.
+**Current Status:** 121 tests across 13 test files.
 
 | Test File | Tests | Coverage |
 |---|---|---|
@@ -800,6 +800,8 @@ Copy `.env.example` to `.env` and populate:
 | `server/__tests__/wishlist.test.ts` | 8 | Wishlist: auth required, add/remove, idempotent add, 404, invalid id |
 | `server/__tests__/cache.test.ts` | 11 | Cache: keys, hit/miss, exact/prefix delete, disabled no-ops, error swallowing |
 | `server/__tests__/variants.test.ts` | 16 | Variants: product-detail response, cart validation, order variant pricing, zod schemas |
+| `server/__tests__/image-proxy.test.ts` | 12 | Image proxy: private-IP matrix, URL validation, SSRF block, WebP encode + cache headers, redirects, size caps |
+| `client/src/__tests__/image.test.ts` | 8 | Image helpers: isOptimizableImage matrix, proxy URL encoding, srcSet ladder |
 | `client/src/lib/__tests__/currencies.test.ts` | 17 | CURRENCY array, lookup, conversion, formatting |
 | `client/src/lib/__tests__/countries.test.ts` | 9 | COUNTRIES array, sorting, lookup |
 | `shared/__tests__/schemas.test.ts` | 9 | insertUserSchema, insertProductSchema validation |
@@ -906,7 +908,7 @@ npm run test:watch  # Watch mode
 - [x] Sentry middleware guard (prevents crash when SENTRY_DSN unset)
 - [x] Architecture Decision Records (8 ADRs in docs/adr/)
 - [x] Redis cache layer (Upstash read-through for products/site settings, v0.6.0)
-- [ ] CDN image optimisation (P3 — not started)
+- [x] CDN image optimisation (self-hosted sharp `/api/image` proxy + `OptimizedImage`, v0.7.0)
 
 ---
 
@@ -924,12 +926,19 @@ Key architectural decisions are documented as ADRs (Architecture Decision Record
 | 006 | [Payment Idempotency Strategy](docs/adr/ADR-006-payment-idempotency.md) | ✅ Accepted |
 | 007 | [Sentry Guard Pattern](docs/adr/ADR-007-sentry-guard-pattern.md) | ✅ Accepted |
 | 008 | [Server-Side Order Total Verification](docs/adr/ADR-008-server-side-total-verification.md) | ✅ Accepted |
+| 009 | [Self-Hosted Image Optimization Proxy](docs/adr/ADR-009-self-hosted-image-optimization-proxy.md) | ✅ Accepted |
 
 Each ADR follows the [MADR](https://adr.github.io/madr/) template: Context → Decision → Consequences.
 
 ## Changelog
 
 See `CHANGELOG.md` for complete version history.
+
+### v0.7.0 — CDN Image Optimisation (2026-08-04)
+
+- **Added:** Self-hosted image optimization proxy `GET /api/image` — sharp-based resize + WebP/AVIF re-encode, SSRF-guarded (private-IP rejection, manual redirect validation, 10 MB cap), served with `Cache-Control: immutable` so the Vercel CDN caches each URL variant. No account/API keys/migrations needed.
+- **Added:** `OptimizedImage` component — `srcSet`/`sizes`, lazy-load by default (`eager` + `fetchPriority="high"` for LCP), graceful fallback chain (proxy → original → hide), rolled out to all 10 image render sites (product cards/detail, cart, wishlist, admin pending/team, home hero/promos, about, contact/terms/privacy heroes).
+- **Added:** 12 proxy tests + 8 image-helper tests — **all 121 tests pass**
 
 ### v0.6.0 — Redis Cache, Product Variants & Real Gallery Images (2026-08-03)
 

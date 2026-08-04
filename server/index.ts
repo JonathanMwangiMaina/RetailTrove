@@ -7,12 +7,12 @@ import { pool } from "./db.js";
 import { registerRoutes } from "./routes.js";
 import { setupAuth } from "./auth.js";
 import { storage } from "./storage.js";
-import { globalLimiter } from "./middleware/rate-limiter.js";
+import { globalLimiter, imageLimiter } from "./middleware/rate-limiter.js";
 import { sanitizeInput } from "./middleware/sanitize.js";
 import { handleCsrfToken, csrfSynchronisedProtection } from "./middleware/csrf.js";
 import { verifyLemonSqueezyWebhook } from "./payment-service.js";
-import { sendOrderConfirmationEmail } from "./email.js";
-import { awardLoyaltyPointsForOrder } from "./loyalty-service.js";
+import { processLemonSqueezyWebhook, processMpesaCallback } from "./payment-callbacks.js";
+import { imageProxyHandler } from "./image-proxy.js";
 import * as Sentry from "@sentry/node";
 
 if (process.env.SENTRY_DSN) {
@@ -64,7 +64,6 @@ app.post(
     try {
       const rawBody = req.body as Buffer;
       const signature = req.headers["x-signature"] as string | undefined;
-      const eventName = req.headers["x-event-name"] as string | undefined;
 
       if (!verifyLemonSqueezyWebhook(rawBody, signature)) {
         console.warn("[Lemon Squeezy] Invalid webhook signature");
@@ -72,31 +71,9 @@ app.post(
       }
 
       const payload = JSON.parse(rawBody.toString());
-      const orderId = Number(payload?.meta?.custom_data?.order_id);
+      const eventName = req.headers["x-event-name"] as string | undefined;
 
-      if (orderId) {
-        const existingOrder = await storage.getOrderById(orderId);
-        if (existingOrder && existingOrder.paymentStatus !== "pending") {
-          console.log(
-            `[Lemon Squeezy] Order #${orderId} already ${existingOrder.paymentStatus} — skipping`,
-          );
-        } else if (eventName === "order_created") {
-          await storage.updateOrderPayment(orderId, {
-            paymentStatus: "paid",
-            stripePaymentIntentId: String(payload.data.id ?? ""),
-          });
-          console.log(`[Lemon Squeezy] Order #${orderId} marked as paid`);
-          const paidOrder = await storage.getOrderById(orderId);
-          if (paidOrder) {
-            const items = await storage.getOrderItems(orderId);
-            await sendOrderConfirmationEmail(paidOrder, items);
-            await awardLoyaltyPointsForOrder(paidOrder);
-          }
-        } else if (eventName === "order_refunded") {
-          await storage.updateOrderPayment(orderId, { paymentStatus: "refunded" });
-          console.log(`[Lemon Squeezy] Order #${orderId} refunded`);
-        }
-      }
+      await processLemonSqueezyWebhook(eventName ?? "", payload);
 
       // Must return 200 to acknowledge receipt
       res.status(200).json({ received: true });
@@ -112,57 +89,7 @@ app.post("/api/mpesa/callback", express.json(), async (req: Request, res: Respon
   // Process the payment state change BEFORE acking — on serverless the function
   // can be frozen right after the response, so post-ack work is unreliable.
   try {
-    const { Body } = req.body;
-    const { stkCallback } = Body ?? {};
-    if (!stkCallback) {
-      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
-    }
-
-    const {
-      ResultCode,
-      ResultDesc,
-      MerchantRequestID: _mrid,
-      CheckoutRequestID,
-      CallbackMetadata,
-    } = stkCallback;
-
-    const order = await storage.getOrderByStripeSessionId(CheckoutRequestID);
-
-    if (!order) {
-      console.warn(`[M-Pesa] No order found for CheckoutRequestID: ${CheckoutRequestID}`);
-      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
-    }
-
-    if (order.paymentStatus !== "pending") {
-      console.log(`[M-Pesa] Order #${order.id} already ${order.paymentStatus} — skipping duplicate`);
-      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
-    }
-
-    if (ResultCode === 0) {
-      const metadata: Record<string, any> = {};
-      (CallbackMetadata?.Item ?? []).forEach((item: any) => {
-        metadata[item.Name] = item.Value;
-      });
-
-      await storage.updateOrderPayment(order.id, {
-        paymentStatus: "paid",
-        mpesaReceiptNumber: metadata.MpesaReceiptNumber ?? null,
-      });
-      console.log(`[M-Pesa] Order #${order.id} paid — receipt: ${metadata.MpesaReceiptNumber}`);
-      try {
-        const items = await storage.getOrderItems(order.id);
-        await sendOrderConfirmationEmail(order, items);
-        await awardLoyaltyPointsForOrder(order);
-      } catch (sideErr: any) {
-        console.error("[M-Pesa] side-effect error (order is already paid):", sideErr.message);
-      }
-    } else {
-      await storage.updateOrderPayment(order.id, { paymentStatus: "failed" });
-      console.warn(
-        `[M-Pesa] Order #${order.id} payment failed: ${ResultDesc} (code: ${ResultCode})`,
-      );
-    }
-
+    await processMpesaCallback(req.body);
     return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
   } catch (err: any) {
     console.error("[M-Pesa] callback processing error:", err.message);
@@ -177,6 +104,10 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   req.headers["x-request-id"] = req.headers["x-request-id"] || crypto.randomUUID();
   next();
 });
+
+// Image optimization proxy — mounted before sanitize/session/global limiter so
+// GET /api/image requests stay stateless and never hit the 500/hr app limiter.
+app.get("/api/image", imageLimiter, imageProxyHandler());
 
 app.use(sanitizeInput);
 
@@ -218,7 +149,7 @@ app.get("/api/health", async (_req: Request, res: Response) => {
     uptime: Math.floor(process.uptime()),
     database: dbStatus,
     environment: process.env.NODE_ENV ?? "development",
-    version: "0.6.0",
+    version: "0.9.0",
   });
 });
 

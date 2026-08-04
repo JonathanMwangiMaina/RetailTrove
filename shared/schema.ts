@@ -132,6 +132,7 @@ export const orders = pgTable("orders", {
   stripePaymentIntentId: text("stripe_payment_intent_id"), // Lemon Squeezy order ID / M-Pesa MerchantRequestID
   mpesaReceiptNumber: text("mpesa_receipt_number"), // M-Pesa receipt (e.g. "QHJ7A1BCDE")
   idempotencyKey: text("idempotency_key"), // Unique per payment attempt — prevents duplicate callback processing
+  stockReleased: boolean("stock_released").default(false), // True once stock is restored after failed/refunded payment
   shippingStatus: text("shipping_status").default("pending"), // "pending" | "processing" | "shipped" | "delivered" | "cancelled"
   shippedAt: timestamp("shipped_at"),
 });

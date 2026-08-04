@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { OptimizedImage } from "@/components/ui/optimized-image";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -116,9 +117,13 @@ export default function TeamTab({ members }: Props) {
                 <TableRow key={m.id}>
                   <TableCell className="text-xs text-muted-foreground">{m.displayOrder ?? 0}</TableCell>
                   <TableCell>
-                    <img
+                    <OptimizedImage
                       src={m.imageUrl}
                       alt={m.name}
+                      width={40}
+                      height={40}
+                      hiddenOnError
+                      sizes="40px"
                       className="h-10 w-10 rounded-full object-cover"
                     />
                   </TableCell>

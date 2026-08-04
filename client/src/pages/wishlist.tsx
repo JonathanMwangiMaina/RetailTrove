@@ -6,6 +6,7 @@ import { useCurrency } from "@/hooks/use-currency";
 import { useCart } from "@/hooks/use-cart";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { OptimizedImage } from "@/components/ui/optimized-image";
 import { HeartIcon, Loader2, ShoppingBagIcon, Trash2Icon } from "lucide-react";
 
 export default function WishlistPage() {
@@ -72,9 +73,12 @@ export default function WishlistPage() {
             >
               <Link href={`/product/${product.id}`}>
                 <div className="relative h-56 overflow-hidden cursor-pointer">
-                  <img
+                  <OptimizedImage
                     src={product.imageUrl}
                     alt={product.name}
+                    width={224}
+                    height={224}
+                    sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
                     className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
                   />
                   {product.badge && (

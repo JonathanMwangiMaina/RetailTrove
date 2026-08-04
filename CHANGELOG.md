@@ -7,6 +7,112 @@ This project does not currently use semantic versioning — entries are dated.
 
 ---
 
+## [v0.9.0] — Customer Notification Pipeline (P2) (2026-08-04)
+
+### Added
+- **Scenario-based transactional email pipeline** in `server/email.ts` — a single `sendOrderStatusEmail(order, items, scenario)` builds copy from a shared `SCENARIO_COPY` map for `payment_success`, `payment_failed`, `processing`, `shipped`, `delivered`, and `cancelled`. `pending` is intentionally a no-op. The existing `sendOrderConfirmationEmail` / `sendShippingStatusEmail` remain as thin wrappers so all callers and test mocks keep working.
+- **Payment-failed emails** — `server/payment-callbacks.ts` now sends a `payment_failed` email when an M-Pesa callback transitions an order `pending → failed` (before stock release), and a `cancelled` email when a Lemon Squeezy webhook refunds an order `paid → refunded`. Both run only on the winning CAS transition (never on duplicates) and inside try/catch.
+- **Recipient fallback** — `resolveOrderEmail(order)` prefers the checkout email, then resolves the registered user's email by auth UUID via `storage.getUserByAuthUserId(order.userId)`. Emails with no resolvable recipient are skipped.
+- **Admin shipping updates email on every actual change** — `PUT /api/admin/orders/:id/shipping` now compares old vs new `shippingStatus` and sends the update email on any real change, dropping the previous `paymentStatus === "paid"` gate.
+
+### Tests
+- `server/__tests__/email.test.ts` — 12 new tests against the real module with a mocked nodemailer transporter + storage: `resolveOrderEmail` precedence (checkout email → auth-user fallback → null), each scenario's subject/copy delivered to `almanbergazi@duck.com`, `payment_failed` omits the shipping address, no-op when the recipient can't be resolved, and `pending`/unknown shipping statuses are no-ops.
+- `server/__tests__/mpesa-callback.test.ts` — failure path now asserts the `payment_failed` email fires exactly once (including under a repeated failure callback).
+- `server/__tests__/lemonsqueezy-webhook.test.ts` — refund path now asserts the `cancelled` email fires exactly once (including under a repeated refund).
+- Full suite: **147 tests passing** (134 previous + 12 email + 1 duplicate-failure-email)
+
+### Verified
+- `tsc --noEmit`: 0 errors
+- `vitest run`: 147/147 passing
+- `eslint`: 0 errors (pre-existing `no-explicit-any` warnings only)
+- `prettier --check`: clean
+- `vite build`: success
+
+## [v0.8.1] — Checkout Race Conditions (P1) (2026-08-04)
+
+### Fixed
+- **Atomic payment-status transitions** — payment callbacks (Lemon Squeezy webhook + M-Pesa callback) previously used a check-then-update pattern (`getOrderById` → check `pending` → `updateOrderPayment`), a TOCTOU race that let two concurrent/duplicate callbacks both process the same order. Now handled by a new compare-and-swap `storage.markOrderPaymentStatus(orderId, fromStatus, toStatus)` (`UPDATE … WHERE payment_status = fromStatus`, returns the row or `undefined`) in a shared `server/payment-callbacks.ts` module used by both `server/index.ts` and `api/index.ts`. Exactly one callback wins; the rest become no-ops.
+- **Stock never restored on failed/refunded payments** — stock was decremented inside the `createOrder` transaction but never given back when a payment failed (`pending → failed`) or was refunded (`paid → refunded`). New `storage.releaseOrderStock(orderId)` runs in a transaction, restores each line item (variant or product) and flips a new `stock_released` boolean column so a repeated callback can never double-restore.
+- **M-Pesa `ResultCode === 0` missed the string `"0"`** — the callback now accepts `ResultCode === 0 || ResultCode === "0"` and tolerates a missing `CallbackMetadata` block (receipt becomes `undefined` instead of crashing).
+- **Client hard-navigated after a fixed 3 s delay** — `checkout.tsx` used `setTimeout(3000)` then navigated; the confirmation page always showed "success" regardless of the real result. Checkout now navigates immediately and `order-confirmation.tsx` polls the real payment status via a new public, non-PII `GET /api/orders/:id/status` endpoint (returns `paymentStatus`, `paymentProvider`, `mpesaReceiptNumber` only). It shows a waiting spinner while `pending`, a failure state with retry/contact-support when `failed`, an alert when `refunded`, and the full success summary once `paid`. Polls every 2 s up to 60 s, then shows a "taking longer than expected" notice.
+
+### Tests
+- `server/__tests__/mpesa-callback.test.ts` — 8 tests now run against the **real** handler (imported from `server/payment-callbacks.ts`): success (CAS + email + loyalty), string `"0"`, missing `CallbackMetadata`, failure releases stock, **no double stock release on a repeated failure callback**, **idempotent when two callbacks race (one CAS wins)**, unknown order, malformed body
+- `server/__tests__/lemonsqueezy-webhook.test.ts` — 6 tests against the real handler: `order_created` (CAS + email + loyalty), `order_refunded` (CAS + stock release), **no double release on repeated refund**, already-paid idempotency, unknown order, unrecognised event
+- `server/__tests__/order-status.test.ts` — 4 tests for the new status endpoint: status/provider/receipt returned **without leaking PII**, pending state, 404 unknown order, 400 invalid id
+- Full suite: **134 tests passing** (126 previous + 8 new)
+
+### Verified
+- `tsc --noEmit`: 0 errors
+- `vitest run`: 134/134 passing
+- `eslint`: 0 errors (pre-existing `no-explicit-any` warnings only)
+- `prettier --check`: clean
+- `vite build`: success
+
+### Setup required (Supabase SQL Editor)
+- `migrations/0007_add_stock_released.sql` — adds the `stock_released` guard column
+
+---
+
+## [v0.8.0] — Analytics Revenue Fix (P0) (2026-08-04)
+
+### Fixed
+- **Revenue mismatch between Orders tab and Analytics tab** (root cause: `server/routes.ts` `/api/admin/analytics/summary` summed **all** orders — pending + failed + paid — into `totalRevenue`; Orders tab correctly counted only `paid`):
+  - `totalRevenue` now sums only `paymentStatus === "paid"` (matches the $57k paid revenue shown in Orders)
+  - Added `bookedRevenue` (all orders) to the summary payload for reference; `paidOrders`/`paidRevenue` unchanged
+  - `/api/admin/analytics/sales-trend` now filters to `paid` orders before aggregating revenue **and** order count (previously the revenue trend line included pending/failed orders)
+- Analytics tab (`analytics-tab.tsx`) needs no change — it renders `summary.totalRevenue`, which is now paid-only
+
+### Tests
+- `server/__tests__/analytics.test.ts` — 5 tests (real `registerRoutes` + mocked storage): 401 without admin session, summary `totalRevenue` excludes pending/failed/refunded, zero-revenue case, sales-trend aggregates paid-only, empty trend when nothing paid
+- Full suite: **126 tests passing** (121 previous + 5 new)
+
+### Verified
+- `tsc --noEmit`: 0 errors
+- `vitest run`: 126/126 passing
+- `eslint`: 0 errors (pre-existing `no-explicit-any` warnings only)
+- `prettier --check`: clean
+- `vite build`: success
+
+---
+
+## [v0.7.0] — CDN Image Optimisation (P3) (2026-08-04)
+
+### Added
+
+#### Self-hosted image proxy (`GET /api/image`)
+- `server/image-proxy.ts` — sharp (v0.35.3) based on-demand image optimizer, no external account/API keys required:
+  - Fetches the remote raster image server-side, resizes with `sharp` (`w` ≤ 2048, aspect preserved, `withoutEnlargement`), re-encodes to WebP or AVIF (`q` 1-100, default 80, `fit` cover/contain/fill/inside/outside)
+  - Serves `Cache-Control: public, max-age=31536000, immutable` → Vercel CDN caches each URL variant after first request
+- SSRF hardening: http(s) only, DNS-resolved host must not be loopback/RFC1918/link-local/CGNAT/multicast (rejects on ANY resolved address), redirects followed manually (max 3) and re-validated per hop, source payload capped at 10 MB, 10 s fetch timeout, output re-encoded so no user-controlled bytes reach the browser
+- Registered in both `api/index.ts` and `server/index.ts` before `sanitizeInput`/session/`globalLimiter` so image requests stay stateless and never hit the 500/hr app limiter; dedicated `imageLimiter` (1200 req/15 min)
+- No new env vars, no migration, no CSP change needed (`imgSrc` already allows `'self'`)
+
+#### Client responsive-image layer
+- `client/src/lib/image.ts` — `isOptimizableImage` (skips SVG/data/blob/relative), `optimizedImageUrl`, `buildSrcSet` (320→1920 width ladder)
+- `client/src/components/ui/optimized-image.tsx` — `OptimizedImage` component: emits `srcSet`/`sizes`, `loading="lazy"` by default (optional `eager` + `fetchPriority="high"` for LCP images), intrinsic `width`/`height` hints, and a graceful fallback chain: proxy → original URL → hide on error (`hiddenOnError` for admin/team avatars)
+
+#### Optimized render sites (10 files)
+- Commerce: `product-card.tsx`, `product.tsx` hero + gallery thumbnails, `cart-item.tsx`, `wishlist.tsx`
+- Admin: `pending-tab.tsx`, `team-tab.tsx`
+- Marketing: `home.tsx` hero (eager) + promo tiles, `about.tsx` hero/story/team, `contact.tsx`/`terms.tsx`/`privacy.tsx` heroes
+- Third-party payment SVGs (checkout/footer) intentionally left direct — no benefit proxying vectors
+
+### Tests
+- `server/__tests__/image-proxy.test.ts` — 12 tests: `isPrivateIp` range matrix, missing/invalid URL, non-http, SVG rejection (no fetch), private-host block (no fetch), real sharp WebP encode + cache headers, redirect following/validation, fetch failure, oversize cap, undecodable payload
+- `client/src/__tests__/image.test.ts` — 8 tests: `isOptimizableImage` matrix, URL encoding, `buildSrcSet` ladder/single-width
+- Full suite: **121 tests passing** (101 previous + 20 new)
+
+### Verified
+- `tsc --noEmit`: 0 errors
+- `vitest run`: 121/121 passing
+- `eslint`: 0 errors (pre-existing `no-explicit-any` warnings only)
+- `prettier --check`: clean
+- `vite build`: success
+- Real-network smoke: `GET /api/image?url=…unsplash…&w=300` → 200 `image/webp` (RIFF), 10 KB, immutable cache header
+
+---
+
 ## [v0.6.0] — Redis Cache, Product Variants & Real Gallery Images (2026-08-03)
 
 ### Added

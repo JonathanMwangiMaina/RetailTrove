@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/components/ui/product-card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { OptimizedImage } from "@/components/ui/optimized-image";
 import { StarIcon } from "lucide-react";
 import { Product, Testimonial } from "@shared/schema";
 import { useState, useEffect } from "react";
@@ -102,9 +103,12 @@ export default function Home() {
       <section className="relative">
         <div className="absolute inset-0 bg-gradient-to-r from-primary-900/90 to-primary-800/70 z-10"></div>
         <div className="relative h-[500px] overflow-hidden">
-          <img
+          <OptimizedImage
             src="https://images.unsplash.com/photo-1441986300917-64674bd600d8?ixlib=rb-1.2.1&auto=format&fit=crop&w=1200&q=80"
             alt="Hero"
+            eager
+            width={1200}
+            height={500}
             className="w-full h-full object-cover"
           />
         </div>
@@ -237,9 +241,12 @@ export default function Home() {
           <div className="grid md:grid-cols-2 gap-8">
             <div className="relative rounded-lg overflow-hidden">
               <div className="absolute inset-0 bg-gradient-to-r from-primary-900/80 to-primary-800/70 z-10"></div>
-              <img
+              <OptimizedImage
                 src="https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?ixlib=rb-1.2.1&auto=format&fit=crop&w=700&q=80"
                 alt="Men's Collection"
+                width={560}
+                height={256}
+                sizes="(min-width: 768px) 50vw, 100vw"
                 className="w-full h-64 object-cover"
               />
               <div className="absolute inset-0 flex items-center justify-center z-20">
@@ -260,9 +267,12 @@ export default function Home() {
 
             <div className="relative rounded-lg overflow-hidden">
               <div className="absolute inset-0 bg-gradient-to-r from-secondary-900/80 to-secondary-800/70 z-10"></div>
-              <img
+              <OptimizedImage
                 src="https://images.unsplash.com/photo-1483985988355-763728e1935b?ixlib=rb-1.2.1&auto=format&fit=crop&w=700&q=80"
                 alt="Women's Collection"
+                width={560}
+                height={256}
+                sizes="(min-width: 768px) 50vw, 100vw"
                 className="w-full h-64 object-cover"
               />
               <div className="absolute inset-0 flex items-center justify-center z-20">

@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { OptimizedImage } from "@/components/ui/optimized-image";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
@@ -37,9 +38,12 @@ export default function About() {
       <div className="relative bg-gray-50">
         <div className="absolute inset-0 bg-gradient-to-r from-primary-900/90 to-primary-800/70 overflow-hidden">
           <div className="absolute inset-0">
-            <img
+            <OptimizedImage
               src="https://images.unsplash.com/photo-1702047109910-43af92894dc1?auto=format&fit=crop&w=1950&q=80"
               alt="Team collaborating with hands together"
+              eager
+              width={1950}
+              height={500}
               className="h-full w-full object-cover opacity-30"
             />
           </div>
@@ -96,9 +100,12 @@ export default function About() {
           </div>
           <div className="mt-10 lg:mt-0">
             <div className="aspect-w-16 aspect-h-9 rounded-lg overflow-hidden">
-              <img
+              <OptimizedImage
                 src="https://images.unsplash.com/photo-1507679799987-c73779587ccf?ixlib=rb-1.2.1&auto=format&fit=crop&w=1200&q=80"
                 alt="Our team"
+                width={560}
+                height={315}
+                sizes="(min-width: 1024px) 50vw, 100vw"
                 className="w-full h-full object-cover"
               />
             </div>
@@ -210,9 +217,13 @@ export default function About() {
             {teamMembers.map((member) => (
               <div key={member.id} className="text-center">
                 <div className="relative h-48 w-48 mx-auto rounded-full overflow-hidden">
-                  <img
+                  <OptimizedImage
                     src={member.imageUrl}
                     alt={member.name}
+                    width={192}
+                    height={192}
+                    hiddenOnError
+                    sizes="192px"
                     className="w-full h-full object-cover"
                   />
                 </div>

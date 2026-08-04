@@ -23,3 +23,11 @@ export const writeLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: "Too many write requests, please try again later." },
 });
+
+export const imageLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 1200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many image requests, please try again later." },
+});

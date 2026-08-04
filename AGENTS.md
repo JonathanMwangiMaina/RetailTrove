@@ -10,7 +10,7 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 - **Platform:** Windows (PowerShell) + WSL Ubuntu 26.04
 - **Node.js:** `/home/bergazi21/.nvm/versions/node/v22.23.1/bin/node` (via nvm in WSL)
 - **Windows tsc:** `& "C:\Program Files\nodejs\node.exe" ".\node_modules\typescript\bin\tsc" --noEmit`
-- **Tests:** ✅ Fixed — `npm i` from WSL installs Linux native bindings; all 101 tests pass in WSL
+- **Tests:** ✅ Fixed — `npm i` from WSL installs Linux native bindings; all 121 tests pass in WSL
 - **DB push:** `npm run db:push` unreachable from WSL (ETIMEDOUT on Supabase port 6543) — must use Supabase SQL Editor
 - **ESLint 10 (flat config) + Prettier 3:** 0 errors, 65 warnings (all `no-explicit-any`, 16 in test files)
 - **Git remote:** SSH (`git@github.com:JonathanMwangiMaina/RetailTrove.git`)
@@ -40,7 +40,7 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 | 7 | **Idempotency keys on payments** | **P2 — Medium** | 2-3 hours | ✅ Done. `idempotency_key` column on orders, status check in M-Pesa callback + LS webhook, key generated on payment initiation. Run `migrations/add-idempotency-key.sql` in Supabase to apply. |
 | 8 | **Product variants** (size, color) | **P3 — Nice-to-have** | 8-12 hours | ✅ Done (v0.6.0). `product_variants` table, variant CRUD API, product-page selector, variant pricing/stock in cart + orders, variant image hero. Run `migrations/0005_add_product_variants.sql`. |
 | 9 | **Redis cache layer** | **P3 — Nice-to-have** | 3-4 hours | ✅ Done (v0.6.0). `server/cache.ts` + `@upstash/redis`, read-through for product listings/featured/new arrivals/site settings, invalidates on writes. Opt-in via `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN`. |
-| 10 | **CDN image optimisation** | **P3 — Nice-to-have** | 1-2 hours | Cloudinary or imgproxy for responsive sizing + WebP. Images are currently raw Unsplash URLs. Nice-to-have for performance score. |
+| 10 | **CDN image optimisation** | **P3 — Nice-to-have** | 1-2 hours | ✅ Done (v0.7.0). Self-hosted `/api/image` sharp proxy (WebP/AVIF, SSRF-guarded, immutable CDN cache) + `OptimizedImage` component (srcset/sizes, lazy-load, graceful fallback) across all 10 image render sites. No external account needed. |
 
 ### Priority Rationale
 - **P0:** Directly blocks A-tier (no CI = no confidence, no tests = regression risk on every deploy)
@@ -60,8 +60,51 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 | 2 | **Wishlists / favorites** | **P2 — Medium** | 3-4 hours | ✅ Done (v0.5.0). Table + API + UI shipped. Run `migrations/0003_add_wishlist_items.sql`. |
 | 3 | **Supabase RLS policies** | **P2 — Medium** | 30 min | ✅ Done. `migrations/rls-policies.sql` ready — execute in Supabase SQL Editor. |
 | 4 | **Redis cache layer** | **P3 — Nice-to-have** | 3-4 hours | ✅ Done (v0.6.0). Upstash read-through for products/site settings. Opt-in via `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN`. |
-| 5 | **CDN image optimisation** | **P3 — Nice-to-have** | 1-2 hours | Cloudinary/imgproxy for responsive WebP images. Currently raw Unsplash URLs. |
+| 5 | **CDN image optimisation** | **P3 — Nice-to-have** | 1-2 hours | ✅ Done (v0.7.0). Self-hosted `/api/image` sharp proxy + `OptimizedImage` component across all render sites. No account needed. |
 | 6 | **Product variants** | **P3 — Nice-to-have** | 8-12 hours | ✅ Done (v0.6.0). `product_variants` table + cart/order changes + UI selectors + gallery images. Run `migrations/0005_add_product_variants.sql` + `migrations/0006_add_product_images.sql`. |
+
+---
+
+## Planned Sessions — P0–P4 Improvement Plan (daily workflow)
+
+**Workflow:** One scheduled session per day (as done for CDN optimisation v0.7.0). Tackle sessions in priority order. After each session: mark it done in the table below, add a `## v0.x.y` section to the changelog + this file, verify (tsc/vitest/eslint/prettier/build), and commit.
+
+| # | Session | Status | Est. Time | Root cause / approach |
+|---|---------|--------|-----------|------------------------|
+| **P0** | **Analytics revenue mismatch** | ✅ Done (v0.8.0) | 1-2 hrs | `routes.ts:1057` `totalRevenue` summed ALL orders (pending+failed+paid = $453k); Orders tab correctly sums paid only ($57k). `totalRevenue` is now paid-only, `bookedRevenue` added for reference, `sales-trend` counts paid only. |
+| **P1** | **Checkout race conditions** | ✅ Done (v0.8.1) | 4-6 hrs | (1) Stock never restored when payment fails/refunds — added `releaseOrderStock` guarded by new `stock_released` column (migration 0007). (2) TOCTOU in callbacks — added atomic CAS `markOrderPaymentStatus` used from shared `server/payment-callbacks.ts`. (3) M-Pesa `ResultCode === "0"` now accepted. (4) Client polls real status via new `GET /api/orders/:id/status` instead of fixed 3 s. |
+| **P2** | **Customer notification pipeline (Brevo)** | ⏳ | 3-5 hrs | Email exists for success + 4 shipping statuses. Missing: payment-failed email, emails for `cancelled`/`processing` (gated by `paid && ≠pending` at `routes.ts:721`), recipient fallback to auth user email, optional Brevo Transactional API template IDs. |
+| **P3** | **Shop price slider $9.99–$4,000** | ⏳ | 1 hr | `shop.tsx:98-105` slider hardcodes `KES` + `min=0 max=1000`. Backend already accepts arbitrary `minPrice`/`maxPrice` (`routes.ts:51-52`) — client-only change to USD `$9.99–$4,000`. |
+| **P4** | **Admin "Journey" Sankey tab** | ⏳ | 3-5 hrs | recharts 2.15 already ships Sankey — no new dep. New `GET /api/admin/analytics/journey` + pure `buildJourneyGraph(visits, orders)` (session reconstruct by userEmail/order of `user_visits`). New `journey-tab.tsx` + admin.tsx tab. |
+
+### Session details
+
+**P0 — Analytics revenue mismatch**
+- `server/routes.ts` `/admin/analytics/summary`: `totalRevenue` should sum only `paymentStatus === "paid"`; add `bookedRevenue` (all orders) for reference; keep `paidOrders`. Analytics tab (`analytics-tab.tsx:95`) needs no change — it renders `summary.totalRevenue`.
+- `server/routes.ts` `/admin/analytics/sales-trend`: filter `paid` before aggregating revenue AND order count.
+- New `server/__tests__/analytics.test.ts` (mock storage pattern from `orders.test.ts`): summary excludes pending/failed/refunded; trend counts paid only.
+- Verify: `tsc --noEmit` · `vitest run` (121 → ~130) · eslint · prettier · `vite build`.
+
+**P1 — Checkout race conditions**
+- Atomic transition: `markOrderPaymentStatus(orderId, fromStatus, toStatus)` in `database-storage.ts` (or make `updateOrderPayment` conditional) returning `rowCount`; use in both `server/index.ts` + `api/index.ts` callbacks.
+- Stock compensation: `restoreStock`/`restoreVariantStock` in storage; restore on `pending→failed` and `paid→refunded`, guarded by `stock_released` boolean column (migration) to avoid double-restore.
+- M-Pesa: accept `ResultCode === 0 || ResultCode === "0"`; tolerate missing `CallbackMetadata`.
+- Client: `order-confirmation.tsx` poll `GET /api/orders/:id` (owner) or reuse admin path; show real paid/failed.
+- Tests: concurrent double-callback, stock restore on fail/refund, string result code.
+
+**P2 — Customer notification pipeline**
+- `server/email.ts`: refactor to scenario copy map: `payment_success`, `payment_failed`, `processing`, `shipped`, `delivered`, `cancelled` (pending = no-op). Shared `emailShell` exists.
+- Optional Brevo Transactional API: `BREVO_API_KEY` + `BREVO_*_TEMPLATE_ID` env → `POST /smtp/email`, Nodemailer/SMTP fallback (lazy transporter already handles unset creds).
+- Wire failure email into M-Pesa callbacks + LS webhook (refund too). Admin status PUT: email on every actual change (compare old/new), drop the `paid &&` gate.
+- `resolveOrderEmail(order)` → `order.email` → `users.email` by `order.userId` (auth UUID).
+- Tests: email scenario unit tests (mocked transporter); callback asserts failure email fired.
+
+**P3 — Shop price slider**
+- `client/src/pages/shop.tsx` FilterSidebar: `min={9.99}`, `max={4000}`, `step={1}`, default `[9.99, 4000]`, USD label `$9.99 – $4,000`. Update any reset logic.
+
+**P4 — Admin Journey Sankey**
+- Backend: `GET /api/admin/analytics/journey` → `buildJourneyGraph(visits, orders)` pure function, stages `Home→Shop→Product→Cart→Checkout→Paid/Failed/Pending/Refunded`, per-stage conversion + drop-off. New `server/__tests__/journey.test.ts`.
+- Client: new `admin/journey-tab.tsx` (recharts `SankeyChart`), register tab in `admin.tsx`.
 
 ---
 
@@ -285,6 +328,10 @@ create table public.audit_logs (
 - `client/src/pages/login.tsx` — zxcvbn strength meter
 - `client/src/components/layout/header.tsx` — Radix DropdownMenu
 - `server/__tests__/variants.test.ts` + `server/__tests__/cache.test.ts` — v0.6.0 variant/cache tests
+- `server/image-proxy.ts` — self-hosted sharp image proxy (`GET /api/image`, SSRF-guarded, immutable CDN cache)
+- `server/__tests__/image-proxy.test.ts` + `client/src/__tests__/image.test.ts` — v0.7.0 image proxy + helper tests
+- `client/src/lib/image.ts` — `isOptimizableImage`/`optimizedImageUrl`/`buildSrcSet`
+- `client/src/components/ui/optimized-image.tsx` — responsive, lazy, fallback-aware image component
 - `eslint.config.mjs` — ESLint 10 flat config
 - `.prettierrc` + `.prettierignore` — Prettier config
 - `.gitignore` — Excludes `.env`, `*.swp`, `node_modules`
@@ -499,6 +546,83 @@ Removed `.env` line from `.gitignore` (`.gitignore:3`). The file is already forc
 
 ---
 
+## v0.8.1 Checkout Race Conditions (P1) (2026-08-04)
+
+### Root Causes
+1. **TOCTOU in payment callbacks** — both `server/index.ts` + `api/index.ts` did `getOrderById` → check `paymentStatus !== "pending"` → `updateOrderPayment`; two concurrent/duplicate callbacks could both pass the check and double-process.
+2. **Stock never restored** — `createOrder` decrements stock inside its DB transaction but nothing gave it back when payment failed (`pending → failed`) or refunded (`paid → refunded`).
+3. **M-Pesa strict number check** — `ResultCode === 0` misses the string `"0"` Safaricom sometimes sends.
+4. **Client fixed 3 s redirect** — `checkout.tsx:168` `setTimeout` then navigated; the confirmation page always rendered the success layout regardless of the real payment result.
+
+### Fix
+- **Shared handler module** `server/payment-callbacks.ts` — `processMpesaCallback(body)` + `processLemonSqueezyWebhook(eventName, payload)`, imported by both `server/index.ts` and `api/index.ts`. Callbacks still run BEFORE the 200 ack (serverless-freeze-safe).
+- **Atomic CAS** — `storage.markOrderPaymentStatus(id, fromStatus, toStatus, extra?)` in `database-storage.ts` (`UPDATE … WHERE payment_status = fromStatus` + `.returning()`); returns the updated order or `undefined` when another callback already transitioned it. Receipt/intent IDs are set in the same UPDATE.
+- **Stock compensation** — `storage.releaseOrderStock(orderId)` transaction: restore each `order_items` line (variant via `productVariants`, else `products`, re-marking `inStock` when stock > 0), set `stock_released = true`, invalidate `products:` cache. Guards double-restore; called on `pending → failed` (M-Pesa) and `paid → refunded` (LS).
+- **M-Pesa robustness** — accepts `ResultCode === 0 || ResultCode === "0"`; `CallbackMetadata` optional (receipt `undefined` instead of crash).
+- **Client** — `checkout.tsx` navigates immediately after STK push; `order-confirmation.tsx` polls new public `GET /api/orders/:id/status` (non-PII: `paymentStatus`, `paymentProvider`, `mpesaReceiptNumber`) every 2 s up to 60 s and renders pending/failed/refunded/success views. No synchronous setState in the effect (render-phase derived `view`), so the react-compiler lint stays clean.
+- Migration `migrations/0007_add_stock_released.sql` (idempotent `ADD COLUMN IF NOT EXISTS`).
+
+### Tests (real handlers, 134 total)
+- `mpesa-callback.test.ts` (8) + `lemonsqueezy-webhook.test.ts` (6) rewritten to import from `server/payment-callbacks.ts` (previously they re-implemented the handler inline — drift risk). Mock storage uses `vi.hoisted` because the imported module now transitively imports `storage.js` (old files never did, so the bare `vi.mock` factory never ran in TDZ).
+- `order-status.test.ts` (4) — real routes (`registerRoutes`), asserts no PII leakage.
+- Double-callback races: second CAS returns `undefined` → email/loyalty/stock-release fire exactly once.
+
+### Verification
+- `tsc --noEmit`: 0 errors ✅ · `vitest run`: 134/134 ✅ · `eslint`: 0 errors ✅ · `prettier --check`: clean ✅ · `vite build`: success ✅
+
+### Setup required (Supabase SQL Editor)
+- `migrations/0007_add_stock_released.sql` — `ALTER TABLE orders ADD COLUMN IF NOT EXISTS stock_released boolean NOT NULL DEFAULT false;`
+
+## v0.8.0 Analytics Revenue Fix (P0) (2026-08-04)
+
+### Root Cause
+`/api/admin/analytics/summary` (`server/routes.ts`) summed **all** orders (pending + failed + paid = $453,077.37) into `totalRevenue`, while the Orders tab (`admin/orders-tab.tsx:110`) correctly sums only `paid` orders ($57,173.04). The sales-trend endpoint had the same bug (revenue line included pending/failed orders).
+
+### Fix
+- `routes.ts` summary: `totalRevenue` = paid orders only; `paidRevenue` = `totalRevenue`; new `bookedRevenue` (all orders) added to the payload for reference; `paidOrders` kept
+- `routes.ts` sales-trend: `if (o.paymentStatus !== "paid") continue;` before revenue + count aggregation
+- Analytics tab needs no change (renders `summary.totalRevenue`, now paid-only)
+
+### Tests
+- `server/__tests__/analytics.test.ts` — 5 tests using the `checkout-auth.test.ts` pattern (real `registerRoutes` + `vi.mock` storage/db/payment-service/email via `vi.hoisted` mockStorage; `buildApp` with `{ userId: 1, authUserId: "auth-admin", role: "admin" }`): 401 anonymous, paid-only `totalRevenue` + `bookedRevenue` present, zero-revenue, sales-trend paid-only aggregation, empty trend
+- Full suite: **126 tests passing** (121 + 5 new)
+
+### Version / Commits
+- Bumped `package.json` + `package-lock.json` + `api/index.ts` + `server/index.ts` → **0.8.0**
+- CHANGELOG.md: new `## [v0.8.0]` section
+
+### Verification
+- `tsc --noEmit`: 0 errors ✅ · `vitest run`: 126/126 ✅ · `eslint`: 0 errors (pre-existing warnings only) ✅ · `prettier --check`: clean ✅ · `vite build`: success ✅
+
+## v0.7.0 CDN Image Optimisation (2026-08-04)
+
+### Design Decision — Self-hosted proxy over Cloudinary/imgproxy
+No external account, API keys, or third-party uptime dependency. A sharp-based `GET /api/image` serverless route resizes + re-encodes on demand; Vercel CDN caches each URL variant (immutable, 1 year). Client has a graceful fallback chain (proxy → original URL → hide), so even if the function fails the site still renders.
+
+### Backend — `server/image-proxy.ts`
+- Params: `url` (required http/https), `w` (≤2048, aspect preserved, `withoutEnlargement`), `q` (1-100, default 80), `fit` (cover/contain/fill/inside/outside), `format` (webp default | avif)
+- Output: `Cache-Control: public, max-age=31536000, immutable` + `Content-Type: image/webp|avif`
+- **SSRF hardening:** DNS-resolved host rejected if ANY address is loopback/RFC1918/link-local/CGNAT/multicast (`isPrivateIp`); redirects followed manually (max 3) and re-validated per hop; 10 MB source cap; 10 s fetch timeout; SVGs/non-http/data: refused; output is re-encoded so no upstream bytes pass through
+- Mounted in `api/index.ts` + `server/index.ts` **before** `sanitizeInput`/session/`globalLimiter` (stateless, no session writes, not throttled by the 500/hr limiter); own `imageLimiter` (1200/15 min) in `server/middleware/rate-limiter.ts`
+- Requires **no** env vars, migrations, or CSP changes (`imgSrc` already allows `'self'`); sharp 0.35.3 added as a dependency
+
+### Client — `OptimizedImage`
+- `client/src/lib/image.ts`: `isOptimizableImage` (rejects SVG/data/blob/relative/our-own-`/api/image`), `optimizedImageUrl`, `buildSrcSet` (320/480/640/960/1280/1920 ladder)
+- `client/src/components/ui/optimized-image.tsx`: `srcSet`/`sizes`, `loading="lazy"` default, `eager` + `fetchPriority="high"` for LCP, intrinsic `width`/`height` hints, `hiddenOnError` for broken-avatar hiding
+- Rolled out to 10 files: `product-card.tsx`, `product.tsx` (hero eager + thumbs), `cart-item.tsx`, `wishlist.tsx`, admin `pending-tab.tsx` + `team-tab.tsx`, `home.tsx` (hero eager + promos), `about.tsx` (hero/story/team), `contact.tsx`/`terms.tsx`/`privacy.tsx` heroes
+- Payment badges (SVG) intentionally left direct
+
+### Verification
+- `tsc --noEmit`: 0 errors ✅
+- `vitest run`: **121/121 passing** (20 new: 12 proxy + 8 client helpers) ✅
+- `eslint`: 0 errors ✅ | `prettier --check`: clean ✅ | `vite build`: success ✅
+- Real-network smoke (WSL → Unsplash): 200 `image/webp` (RIFF), 10 KB @ w=300, immutable cache header ✅
+
+### Files
+`server/image-proxy.ts` (new) · `server/__tests__/image-proxy.test.ts` (new) · `client/src/lib/image.ts` (new) · `client/src/components/ui/optimized-image.tsx` (new) · `client/src/__tests__/image.test.ts` (new) · `api/index.ts` · `server/index.ts` · `server/middleware/rate-limiter.ts` · 10 client render sites · `package.json` (+sharp) · `CHANGELOG.md`
+
+---
+
 ## v0.6.0 Redis Cache + Product Variants + Gallery Images (2026-08-03)
 
 ### Redis Cache Layer (P3)
@@ -533,7 +657,7 @@ Removed `.env` line from `.gitignore` (`.gitignore:3`). The file is already forc
 - `vite build`: clean ✅
 
 ### Prod schema applied 2026-08-03 (migrations via raw pg)
-- **Operational discovery:** migrations CAN be applied to prod from WSL — `npm run db:push` is unreachable (ETIMEDOUT port 6543), but a raw `pg` pool with `ssl: { rejectUnauthorized: false }` connects fine (same path as `e2e/helpers/db.ts`). Applied 0005 + 0006 this way (`e2e/results/tmp-apply-migrations.cjs`).
+- **Operational discovery:** migrations CAN be applied to prod from WSL — `npm run db:push` is unreachable (ETIMEDOUT port 6543), but a raw `pg` pool with `ssl: { rejectUnauthorized: false }` connects fine (same path as `e2e/helpers/db.ts`). Applied 0005 + 0006 this way (`e2e/results/tmp-apply-migrations.cjs`). **Since 2026-08-04 the Supabase CLI is the preferred path** (`supabase db query --linked --file /mnt/wsl/...`), which runs over the Management API and needs no DB password (see "Git Environment Quirks"). 0007 + the wishlist RLS policies were applied this way.
 - **Why it mattered:** prod already had a partial `product_variants` table (missing `is_active`, `image_url`) and no `product_images` table, so `GET /api/products/:id` 500'd on every product (`getProductVariants` queried the missing `is_active` column; `getProductImages` queried a missing table). After applying both idempotent migrations, detail returns `variants`/`images` arrays normally.
 - Deploy `eadf294` (v0.6.0) verified live; prod product detail endpoints return 200 with `variants: []`/`images: []` for products without variants/images.
 
@@ -558,6 +682,12 @@ When `GIT_SSH_COMMAND='ssh -o BatchMode=yes'` is set, `git push origin main` pro
 
 ### Commit message truncation on `-m` with colon
 When using `git commit -m "message"` inside `wsl -e bash -c` with single-quote wrapping, commit messages containing `:` (colon) get **truncated** to everything before the colon. Workaround: use `echo message > /tmp/msg && git commit -F /tmp/msg` or wrap the entire `wsl` command in double quotes instead of single quotes.
+
+### Supabase CLI paths must be `/mnt/wsl/...` (not `/tmp/...` or relative)
+The `supabase` CLI is installed as a **Windows** binary (`/mnt/c/Users/USER/AppData/Roaming/npm/supabase`), so when invoked from WSL it resolves paths against the Windows filesystem. Any file argument (`--file`, etc.) must use a `/mnt/wsl/...` path — Linux-only paths like `/tmp/...` fail with `NotFound: FileSystem.readFile`. Also note `supabase db query --file` only executes **single statements**; multi-statement migration files (e.g. `migrations/rls-policies.sql`) must be split and run one statement at a time, or the command errors with `cannot insert multiple commands into a prepared statement`.
+
+### Supabase CLI `.env` parsing (multi-line cert)
+The CLI's dotenv parser rejects multi-line unquoted values in `.env`, which previously broke every `supabase db` command in-project (`failed to parse environment file: .env`). `SUPABASE_CA_CERT` is now a single double-quoted line with `\n` escapes (e.g. `SUPABASE_CA_CERT="-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"`). dotenv (npm) and the CLI both decode it back to the identical PEM, so app TLS verification (`server/db.ts` `ca:` + `rejectUnauthorized: true`) is unchanged. If this file is ever regenerated from a multi-line PEM, re-apply the same quoting.
 
 ---
 
@@ -588,7 +718,7 @@ When using `git commit -m "message"` inside `wsl -e bash -c` with single-quote w
 - `tsc --noEmit`: 0 errors
 - `eslint`: 0 errors, ~66 warnings (all `no-explicit-any` pre-existing)
 - `prettier --check`: All files formatted
-- All 101 vitest tests pass (mocked storage, no real DB needed)
+- All 121 vitest tests pass (mocked storage, no real DB needed)
 - UNC path limitation: PowerShell cannot run `tsc` when CWD is `\\wsl.localhost\...` — use WSL instead
 
 ### Commands (WSL)
@@ -616,5 +746,5 @@ wsl -d Ubuntu-26.04 -e bash -c 'cd /mnt/wsl/RetailTrove && git push origin main'
 - ✅ **Email notifications** (P1 — done v0.5.0, needs SMTP creds)
 - ✅ **Wishlists / favorites** (P2 — done v0.5.0)
 - ✅ **Redis cache layer** (P3 — done v0.6.0, opt-in via Upstash)
-- **CDN image optimisation** (P3 — Cloudinary/imgproxy for responsive WebP)
+- ✅ **CDN image optimisation** (P3 — done v0.7.0, self-hosted sharp proxy + OptimizedImage)
 - ✅ **Product variants** (P3 — done v0.6.0)

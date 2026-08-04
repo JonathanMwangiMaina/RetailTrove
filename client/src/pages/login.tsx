@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
@@ -23,7 +23,6 @@ import {
 } from "@/components/ui/select";
 import { ShoppingBag, Loader2 } from "lucide-react";
 import { Link } from "wouter";
-import zxcvbn from "zxcvbn";
 
 const STRENGTH_LABELS = ["Very Weak", "Weak", "Fair", "Strong", "Very Strong"];
 const STRENGTH_COLORS = [
@@ -52,15 +51,32 @@ export default function LoginPage() {
   const [regRole, setRegRole] = useState("customer");
   const [regLoading, setRegLoading] = useState(false);
 
-  const passwordStrength = useMemo(() => {
-    if (!regPassword) return null;
-    const result = zxcvbn(regPassword);
-    return {
-      score: result.score,
-      label: STRENGTH_LABELS[result.score],
-      color: STRENGTH_COLORS[result.score],
+  const [passwordStrength, setPasswordStrength] = useState<{
+    score: number;
+    label: string;
+    color: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!regPassword) return;
+    let cancelled = false;
+    import("zxcvbn").then(({ default: zxcvbn }) => {
+      if (cancelled) return;
+      const result = zxcvbn(regPassword);
+      if (!cancelled) {
+        setPasswordStrength({
+          score: result.score,
+          label: STRENGTH_LABELS[result.score],
+          color: STRENGTH_COLORS[result.score],
+        });
+      }
+    });
+    return () => {
+      cancelled = true;
     };
   }, [regPassword]);
+
+  const displayPasswordStrength = regPassword ? passwordStrength : null;
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -78,6 +94,7 @@ export default function LoginPage() {
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
+    const { default: zxcvbn } = await import("zxcvbn");
     const result = zxcvbn(regPassword);
     if (result.score < 2) {
       toast({
@@ -217,23 +234,28 @@ export default function LoginPage() {
                       required
                       minLength={6}
                     />
-                    {passwordStrength && (
+                    {displayPasswordStrength && (
                       <div className="space-y-1">
                         <div className="flex gap-1">
                           {Array.from({ length: 4 }).map((_, i) => (
                             <div
                               key={i}
                               className={`h-1.5 flex-1 rounded-full transition-colors ${
-                                i < passwordStrength.score ? passwordStrength.color : "bg-gray-200"
+                                i < displayPasswordStrength.score
+                                  ? displayPasswordStrength.color
+                                  : "bg-gray-200"
                               }`}
                             />
                           ))}
                         </div>
                         <p
-                          className={`text-xs font-medium ${passwordStrength.score < 2 ? "text-red-600" : "text-gray-600"}`}
+                          className={`text-xs font-medium ${
+                            displayPasswordStrength.score < 2 ? "text-red-600" : "text-gray-600"
+                          }`}
                         >
-                          {passwordStrength.label}
-                          {passwordStrength.score < 2 && " — please choose a stronger password"}
+                          {displayPasswordStrength.label}
+                          {displayPasswordStrength.score < 2 &&
+                            " — please choose a stronger password"}
                         </p>
                       </div>
                     )}

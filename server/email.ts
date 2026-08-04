@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import type { Order, OrderItem } from "../shared/schema.js";
+import { storage } from "./storage.js";
 
 let transporter: nodemailer.Transporter | null = null;
 
@@ -292,39 +293,119 @@ function shippingAddressHtml(order: Order): string {
   `;
 }
 
-export async function sendOrderConfirmationEmail(order: Order, items: OrderItem[]): Promise<void> {
-  const email = order.email;
+/**
+ * Transactional order-email scenarios. Each maps to a distinct copy block.
+ * `pending` is intentionally NOT a scenario — it is a no-op.
+ */
+export type OrderEmailScenario =
+  "payment_success" | "payment_failed" | "processing" | "shipped" | "delivered" | "cancelled";
+
+const SCENARIO_COPY: Record<
+  OrderEmailScenario,
+  {
+    title: string;
+    subject: string;
+    intro: string;
+    ctaText?: string;
+    ctaColor: string;
+    showShippingAddress: boolean;
+  }
+> = {
+  payment_success: {
+    title: "Thank You for Your Order!",
+    subject: "Order Confirmed",
+    intro: "your order has been confirmed. A receipt is below.",
+    ctaText: "View Your Order",
+    ctaColor: "#059669",
+    showShippingAddress: true,
+  },
+  payment_failed: {
+    title: "Payment Failed",
+    subject: "Payment Failed",
+    intro:
+      "unfortunately your payment for this order could not be processed. No charge was made and your items have been returned to stock.",
+    ctaText: "Try Again",
+    ctaColor: "#dc2626",
+    showShippingAddress: false,
+  },
+  processing: {
+    title: "Your Order Is Being Processed",
+    subject: "Your Order Is Being Processed",
+    intro: "your payment went through and our team is now preparing your items for shipment.",
+    ctaText: "View Your Order",
+    ctaColor: "#059669",
+    showShippingAddress: false,
+  },
+  shipped: {
+    title: "Your Order Has Shipped!",
+    subject: "Your Order Has Shipped!",
+    intro: "great news — your order is on its way! Use the button below to track its progress.",
+    ctaText: "Track Your Order",
+    ctaColor: "#059669",
+    showShippingAddress: false,
+  },
+  delivered: {
+    title: "Your Order Has Been Delivered",
+    subject: "Your Order Has Been Delivered",
+    intro:
+      "your order has arrived. We hope you love everything — thank you for shopping with RetailTrove!",
+    ctaText: "View Your Order",
+    ctaColor: "#059669",
+    showShippingAddress: false,
+  },
+  cancelled: {
+    title: "Your Order Was Cancelled",
+    subject: "Your Order Was Cancelled",
+    intro:
+      "your order has been cancelled. If this is unexpected, please reach out to our support team.",
+    ctaText: "View Your Order",
+    ctaColor: "#dc2626",
+    showShippingAddress: false,
+  },
+};
+
+const SHIPPING_STATUS_SCENARIO: Record<string, OrderEmailScenario> = {
+  processing: "processing",
+  shipped: "shipped",
+  delivered: "delivered",
+  cancelled: "cancelled",
+};
+
+/**
+ * Resolve the recipient email for an order: prefer the address captured at
+ * checkout, fall back to the registered user's email (by auth UUID).
+ */
+export async function resolveOrderEmail(order: Order): Promise<string | null> {
+  if (order.email) return order.email;
+  if (!order.userId) return null;
+  const user = await storage.getUserByAuthUserId(order.userId);
+  return user?.email ?? null;
+}
+
+/**
+ * Send a transactional email for an order using the copy for the given
+ * scenario. Skips silently when no recipient can be resolved.
+ */
+export async function sendOrderStatusEmail(
+  order: Order,
+  items: OrderItem[],
+  scenario: OrderEmailScenario,
+): Promise<void> {
+  const email = await resolveOrderEmail(order);
   if (!email) {
-    console.warn(`[Email] Order #${order.id} has no customer email — skipping confirmation`);
+    console.warn(`[Email] Order #${order.id} has no customer email — skipping ${scenario}`);
     return;
   }
 
+  const copy = SCENARIO_COPY[scenario];
+  const orderIdLabel = `#RT${String(order.id).padStart(4, "0")}`;
   const orderUrl = `${process.env.APP_URL ?? "https://retailtrove.vercel.app"}/order-confirmation?id=${order.id}`;
+  const placedOn = order.createdAt
+    ? new Date(order.createdAt).toLocaleString()
+    : new Date().toLocaleString();
 
-  try {
-    await getTransporter().sendMail({
-      from: FROM_ADDRESS,
-      to: email,
-      subject: `Order Confirmed — #RT${String(order.id).padStart(4, "0")} | RetailTrove`,
-      html: emailShell(
-        "Thank You for Your Order!",
-        `
-          <p style="margin: 0 0 16px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
-            Hi ${order.firstName ?? "there"}, your order has been confirmed. A receipt is below.
-          </p>
-          <p style="margin: 0 0 4px 0; color: #1f2937; font-size: 16px; font-weight: 600;">
-            Order #RT${String(order.id).padStart(4, "0")}
-          </p>
-          <p style="margin: 0 0 20px 0; color: #9ca3af; font-size: 13px;">
-            Placed on ${order.createdAt ? new Date(order.createdAt).toLocaleString() : new Date().toLocaleString()}
-          </p>
-          ${orderItemsTable(items)}
-          <table width="100%" cellpadding="0" cellspacing="0" style="margin: 8px 0 0 0;">
-            <tr>
-              <td style="padding: 8px 0; color: #374151; font-size: 14px; font-weight: 600;">Total (incl. tax)</td>
-              <td style="padding: 8px 0; color: #059669; font-size: 16px; font-weight: 700; text-align: right;">$${Number(order.total ?? 0).toFixed(2)}</td>
-            </tr>
-          </table>
+  const shippingBlock = copy.showShippingAddress
+    ? `
           <table width="100%" cellpadding="0" cellspacing="0" style="margin: 20px 0 0 0; background-color: #f9fafb; border-radius: 6px; padding: 16px;">
             <tr>
               <td>
@@ -333,81 +414,37 @@ export async function sendOrderConfirmationEmail(order: Order, items: OrderItem[
               </td>
             </tr>
           </table>
-          <table cellpadding="0" cellspacing="0" style="margin: 30px 0;">
-            <tr>
-              <td style="background-color: #059669; border-radius: 6px; text-align: center;">
-                <a href="${orderUrl}" style="display: inline-block; padding: 14px 32px; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 16px;">
-                  View Your Order
-                </a>
-              </td>
-            </tr>
-          </table>
-          <p style="margin: 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
-            You'll receive another email when your order ships. Thanks for shopping with RetailTrove!
-          </p>
-        `,
-      ),
-    });
-    console.log(`[Email] Order confirmation sent for order #${order.id} to ${email}`);
-  } catch (error) {
-    console.error(`[Email] Failed to send order confirmation for order #${order.id}:`, error);
-  }
-}
+        `
+    : "";
 
-export async function sendShippingStatusEmail(
-  order: Order,
-  items: OrderItem[],
-  status: string,
-): Promise<void> {
-  const email = order.email;
-  if (!email) {
-    console.warn(`[Email] Order #${order.id} has no customer email — skipping shipping update`);
-    return;
-  }
+  const footerNote =
+    scenario === "payment_failed"
+      ? "No charge was made. You can try again from the order page at any time."
+      : "You'll receive another email when your order ships. Thanks for shopping with RetailTrove!";
 
-  const orderUrl = `${process.env.APP_URL ?? "https://retailtrove.vercel.app"}/order-confirmation?id=${order.id}`;
-
-  const statusCopy: Record<string, { title: string; body: string }> = {
-    processing: {
-      title: "Your Order Is Being Processed",
-      body: "Your payment went through and our team is now preparing your items for shipment.",
-    },
-    shipped: {
-      title: "Your Order Has Shipped!",
-      body: "Great news — your order is on its way! Use the link below to track its progress.",
-    },
-    delivered: {
-      title: "Your Order Has Been Delivered",
-      body: "Your order has arrived. We hope you love everything — thank you for shopping with RetailTrove!",
-    },
-    cancelled: {
-      title: "Your Order Was Cancelled",
-      body: "Your order has been cancelled. If this is unexpected, please reach out to our support team.",
-    },
-  };
-
-  const copy = statusCopy[status] ?? {
-    title: "Your Order Status Has Been Updated",
-    body: "Your order's shipping status has changed. See the details below.",
-  };
+  const contactLine =
+    scenario === "payment_failed"
+      ? ""
+      : ` Questions about your order? <a href="mailto:support@retailtrove.com" style="color: #3b82f6;">Contact support</a>.`;
 
   try {
     await getTransporter().sendMail({
       from: FROM_ADDRESS,
       to: email,
-      subject: `${copy.title} — Order #RT${String(order.id).padStart(4, "0")} | RetailTrove`,
+      subject: `${copy.subject} — ${orderIdLabel} | RetailTrove`,
       html: emailShell(
         copy.title,
         `
           <p style="margin: 0 0 16px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
-            Hi ${order.firstName ?? "there"}, ${copy.body}
+            Hi ${order.firstName ?? "there"}, ${copy.intro}
           </p>
           <p style="margin: 0 0 4px 0; color: #1f2937; font-size: 16px; font-weight: 600;">
-            Order #RT${String(order.id).padStart(4, "0")}
+            Order ${orderIdLabel}
           </p>
           <p style="margin: 0 0 20px 0; color: #9ca3af; font-size: 13px;">
-            Status: <span style="text-transform: capitalize; color: #059669; font-weight: 600;">${status}</span>
+            Placed on ${placedOn}
           </p>
+          ${shippingBlock}
           ${orderItemsTable(items)}
           <table width="100%" cellpadding="0" cellspacing="0" style="margin: 8px 0 0 0;">
             <tr>
@@ -415,23 +452,46 @@ export async function sendShippingStatusEmail(
               <td style="padding: 8px 0; color: #059669; font-size: 16px; font-weight: 700; text-align: right;">$${Number(order.total ?? 0).toFixed(2)}</td>
             </tr>
           </table>
+          ${
+            copy.ctaText
+              ? `
           <table cellpadding="0" cellspacing="0" style="margin: 30px 0;">
             <tr>
-              <td style="background-color: #059669; border-radius: 6px; text-align: center;">
+              <td style="background-color: ${copy.ctaColor}; border-radius: 6px; text-align: center;">
                 <a href="${orderUrl}" style="display: inline-block; padding: 14px 32px; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 16px;">
-                  Track Your Order
+                  ${copy.ctaText}
                 </a>
               </td>
             </tr>
           </table>
+          `
+              : ""
+          }
           <p style="margin: 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
-            Questions about your order? <a href="mailto:support@retailtrove.com" style="color: #3b82f6;">Contact support</a>.
+            ${footerNote}${contactLine}
           </p>
         `,
       ),
     });
-    console.log(`[Email] Shipping status email sent for order #${order.id} to ${email}`);
+    console.log(`[Email] ${scenario} email sent for order #${order.id} to ${email}`);
   } catch (error) {
-    console.error(`[Email] Failed to send shipping status email for order #${order.id}:`, error);
+    console.error(`[Email] Failed to send ${scenario} email for order #${order.id}:`, error);
   }
+}
+
+export async function sendOrderConfirmationEmail(order: Order, items: OrderItem[]): Promise<void> {
+  await sendOrderStatusEmail(order, items, "payment_success");
+}
+
+export async function sendShippingStatusEmail(
+  order: Order,
+  items: OrderItem[],
+  status: string,
+): Promise<void> {
+  const scenario = SHIPPING_STATUS_SCENARIO[status];
+  if (!scenario) {
+    console.warn(`[Email] Order #${order.id} — no email for shipping status "${status}" (no-op)`);
+    return;
+  }
+  await sendOrderStatusEmail(order, items, scenario);
 }

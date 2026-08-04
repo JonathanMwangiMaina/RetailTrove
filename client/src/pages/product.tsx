@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { OptimizedImage } from "@/components/ui/optimized-image";
 import { useCart } from "@/hooks/use-cart";
 import { useWishlist } from "@/hooks/use-wishlist";
 import { useCurrency } from "@/hooks/use-currency";
@@ -138,7 +139,15 @@ export default function ProductPage() {
           {/* Product Images */}
           <div className="lg:max-w-lg lg:self-end">
             <div className="rounded-lg overflow-hidden mb-4">
-              <img src={activeImage} alt={product.name} className="w-full h-96 object-cover" />
+              <OptimizedImage
+                src={activeImage}
+                alt={product.name}
+                width={512}
+                height={384}
+                eager
+                sizes="(min-width: 1024px) 512px, 100vw"
+                className="w-full h-96 object-cover"
+              />
             </div>
             {thumbnails.length > 1 && (
               <div className="grid grid-cols-4 gap-4">
@@ -150,9 +159,12 @@ export default function ProductPage() {
                       selectedImage === index ? "border-secondary-500" : "border-gray-200"
                     }`}
                   >
-                    <img
+                    <OptimizedImage
                       src={image}
                       alt={`${product.name} - View ${index + 1}`}
+                      width={80}
+                      height={80}
+                      sizes="80px"
                       className="w-full h-20 object-cover"
                     />
                   </button>

@@ -314,37 +314,32 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
 
   // ── Product Gallery Image Routes ──────────────────────────────────────────
 
-  post(
-    "/products/:id/images",
-    writeLimiter,
-    requireAuth,
-    async (req: Request, res: Response) => {
-      try {
-        const productId = parseInt(req.params.id, 10);
-        if (isNaN(productId)) {
-          return res.status(400).json({ message: "Invalid product ID format" });
-        }
-        const existing = await storage.getProductById(productId);
-        if (!existing) {
-          return res.status(404).json({ message: "Product not found" });
-        }
-        const role = req.session.role;
-        if (role === "vendor" && existing.vendorId !== req.session.userId) {
-          return res.status(403).json({ message: "You can only edit your own products" });
-        }
-        const validated = insertProductImageSchema.parse({ ...req.body, productId });
-        const created = await storage.createProductImage(validated);
-        logAudit(req, { action: "image_created", entityType: "product", entityId: productId });
-        res.status(201).json(created);
-      } catch (error) {
-        if (error instanceof z.ZodError) {
-          return res.status(400).json({ message: "Validation error", errors: error.errors });
-        }
-        console.error(`Error adding image to product ${req.params.id}:`, error);
-        res.status(500).json({ message: "Failed to add image" });
+  post("/products/:id/images", writeLimiter, requireAuth, async (req: Request, res: Response) => {
+    try {
+      const productId = parseInt(req.params.id, 10);
+      if (isNaN(productId)) {
+        return res.status(400).json({ message: "Invalid product ID format" });
       }
-    },
-  );
+      const existing = await storage.getProductById(productId);
+      if (!existing) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+      const role = req.session.role;
+      if (role === "vendor" && existing.vendorId !== req.session.userId) {
+        return res.status(403).json({ message: "You can only edit your own products" });
+      }
+      const validated = insertProductImageSchema.parse({ ...req.body, productId });
+      const created = await storage.createProductImage(validated);
+      logAudit(req, { action: "image_created", entityType: "product", entityId: productId });
+      res.status(201).json(created);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error(`Error adding image to product ${req.params.id}:`, error);
+      res.status(500).json({ message: "Failed to add image" });
+    }
+  });
 
   del(
     "/products/:id/images/:imageId",
@@ -663,6 +658,26 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     }
   });
 
+  // Public payment-status lookup — minimal, non-PII fields so the order-confirmation
+  // page can poll for the real payment result (replaces a hardcoded redirect delay).
+  router.get("/orders/:id/status", async (req: Request, res: Response) => {
+    try {
+      const orderId = parseInt(req.params.id, 10);
+      if (isNaN(orderId)) return res.status(400).json({ message: "Invalid order ID" });
+      const order = await storage.getOrderById(orderId);
+      if (!order) return res.status(404).json({ message: "Order not found" });
+      res.json({
+        id: order.id,
+        paymentStatus: order.paymentStatus,
+        paymentProvider: order.paymentProvider,
+        mpesaReceiptNumber: order.mpesaReceiptNumber ?? null,
+      });
+    } catch (error) {
+      console.error("Error fetching order status:", error);
+      res.status(500).json({ message: "Failed to fetch order status" });
+    }
+  });
+
   // ── Admin Order Routes ──────────────────────────────────────────────────────
 
   router.get(
@@ -718,7 +733,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
 
         const updated = await storage.updateOrderShippingStatus(orderId, status);
 
-        if (order.paymentStatus === "paid" && status !== "pending") {
+        if (status !== order.shippingStatus) {
           const items = await storage.getOrderItems(orderId);
           await sendShippingStatusEmail(order, items, status);
         }
@@ -1054,9 +1069,10 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
           storage.getAllProducts(),
           storage.getAllVisits(),
         ]);
-        const totalRevenue = orders.reduce((sum, o) => sum + Number(o.total ?? 0), 0);
         const paidOrders = orders.filter((o) => o.paymentStatus === "paid");
-        const paidRevenue = paidOrders.reduce((sum, o) => sum + Number(o.total ?? 0), 0);
+        const totalRevenue = paidOrders.reduce((sum, o) => sum + Number(o.total ?? 0), 0);
+        const paidRevenue = totalRevenue;
+        const bookedRevenue = orders.reduce((sum, o) => sum + Number(o.total ?? 0), 0);
         const totalStock = productsList.reduce((sum, p) => sum + (p.stockQuantity ?? 0), 0);
         const lowStock = productsList.filter(
           (p) => (p.stockQuantity ?? 0) > 0 && (p.stockQuantity ?? 0) <= 5,
@@ -1070,6 +1086,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
           paidOrders: paidOrders.length,
           totalRevenue: Number(totalRevenue.toFixed(2)),
           paidRevenue: Number(paidRevenue.toFixed(2)),
+          bookedRevenue: Number(bookedRevenue.toFixed(2)),
           totalCustomers: users.filter((u) => u.role === "customer").length,
           totalVendors: users.filter((u) => u.role === "vendor").length,
           totalProducts: productsList.length,
@@ -1094,6 +1111,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
         const orders = await storage.getAllOrders();
         const byDate: Record<string, { orders: number; revenue: number }> = {};
         for (const o of orders) {
+          if (o.paymentStatus !== "paid") continue;
           const key = o.createdAt ? new Date(o.createdAt).toISOString().slice(0, 10) : "unknown";
           if (!byDate[key]) byDate[key] = { orders: 0, revenue: 0 };
           byDate[key].orders += 1;

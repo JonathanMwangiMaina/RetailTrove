@@ -163,11 +163,10 @@ export default function Checkout() {
             "Check your phone for the M-Pesa payment prompt. Enter your PIN to complete.",
         });
 
-        // Clear cart and redirect to confirmation after a delay
+        // Clear cart and redirect to confirmation — the confirmation page polls
+        // the real payment status instead of waiting on a fixed timeout.
         clearCart();
-        setTimeout(() => {
-          navigate(`/order-confirmation?id=${orderId}&total=${total}&payment=mpesa`);
-        }, 3000);
+        navigate(`/order-confirmation?id=${orderId}&total=${total}&payment=mpesa`);
         return;
       }
     } catch (error) {

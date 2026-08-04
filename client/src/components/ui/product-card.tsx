@@ -1,6 +1,7 @@
 import { Link } from "wouter";
 import { Product } from "@shared/schema";
 import { Button } from "@/components/ui/button";
+import { OptimizedImage } from "@/components/ui/optimized-image";
 import { useCart } from "@/hooks/use-cart";
 import { useCurrency } from "@/hooks/use-currency";
 import { PlusIcon } from "lucide-react";
@@ -17,9 +18,12 @@ export function ProductCard({ product }: ProductCardProps) {
     <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden group">
       <Link href={`/product/${product.id}`}>
         <div className="relative h-64 overflow-hidden cursor-pointer">
-          <img
+          <OptimizedImage
             src={product.imageUrl}
             alt={product.name}
+            width={256}
+            height={256}
+            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
             className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
           />
           {product.badge && (

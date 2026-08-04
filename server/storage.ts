@@ -140,6 +140,26 @@ export interface IStorage {
     },
   ): Promise<Order | undefined>;
 
+  /**
+   * Atomically transition an order's payment status.
+   * Only succeeds if the current status still equals `fromStatus` (compare-and-swap),
+   * which makes concurrent/duplicate callbacks idempotent — exactly one caller wins.
+   * Returns the updated order, or `undefined` when the CAS failed (already transitioned).
+   */
+  markOrderPaymentStatus(
+    id: number,
+    fromStatus: string,
+    toStatus: string,
+    extra?: { mpesaReceiptNumber?: string; stripePaymentIntentId?: string },
+  ): Promise<Order | undefined>;
+
+  /**
+   * Restore stock for an order's line items. No-ops (returns false) when stock has
+   * already been released for that order (guarded by the `stock_released` column),
+   * so it is safe to call on every failure/refund even with duplicate callbacks.
+   */
+  releaseOrderStock(orderId: number): Promise<boolean>;
+
   updateOrderShippingStatus(id: number, status: string): Promise<Order | undefined>;
 
   // ── CMS & Settings Operations ──────────────────────────────────────────────

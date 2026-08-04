@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { OptimizedImage } from "@/components/ui/optimized-image";
 import { MapPinIcon, PhoneIcon, RectangleEllipsis, ClockIcon, Loader2Icon } from "lucide-react";
 
 // Form validation schema
@@ -89,9 +90,12 @@ export default function Contact() {
       <div className="relative bg-gray-50">
         <div className="absolute inset-0 bg-gradient-to-r from-primary-900/90 to-primary-800/70 overflow-hidden">
           <div className="absolute inset-0">
-            <img
+            <OptimizedImage
               src="https://images.unsplash.com/photo-1534536281715-e28d76689b4d?ixlib=rb-1.2.1&auto=format&fit=crop&w=1950&q=80"
               alt="Contact us"
+              eager
+              width={1950}
+              height={500}
               className="h-full w-full object-cover opacity-30"
             />
           </div>

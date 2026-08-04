@@ -4,6 +4,7 @@ import { useCurrency } from "@/hooks/use-currency";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { OptimizedImage } from "@/components/ui/optimized-image";
 import { CheckCircle, XCircle } from "lucide-react";
 import type { AdminProduct, AdminUser } from "./types";
 
@@ -40,11 +41,14 @@ export default function PendingTab({ pendingProducts, allUsers: _allUsers, getVe
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {pendingProducts.map((p) => (
         <Card key={p.id} className="overflow-hidden">
-          <img
+          <OptimizedImage
             src={p.imageUrl}
             alt={p.name}
+            width={160}
+            height={160}
+            hiddenOnError
+            sizes="160px"
             className="w-full h-40 object-cover"
-            onError={(e) => (e.currentTarget.style.display = "none")}
           />
           <CardContent className="pt-3 pb-3 space-y-2">
             <div className="flex justify-between items-start gap-2">

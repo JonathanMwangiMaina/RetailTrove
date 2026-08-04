@@ -2,6 +2,7 @@ import { CartItemWithProduct } from "@shared/schema";
 import { useCart } from "@/hooks/use-cart";
 import { useCurrency } from "@/hooks/use-currency";
 import { Button } from "@/components/ui/button";
+import { OptimizedImage } from "@/components/ui/optimized-image";
 import { MinusIcon, PlusIcon, TrashIcon } from "lucide-react";
 
 interface CartItemProps {
@@ -18,9 +19,12 @@ export function CartItem({ item, showControls = true }: CartItemProps) {
   return (
     <li className="py-6 flex">
       <div className="flex-shrink-0 w-24 h-24 border border-gray-200 rounded-md overflow-hidden">
-        <img
+        <OptimizedImage
           src={product.imageUrl}
           alt={product.name}
+          width={96}
+          height={96}
+          sizes="96px"
           className="w-full h-full object-center object-cover"
         />
       </div>
