@@ -20,10 +20,63 @@ function getTransporter(): nodemailer.Transporter {
 
 const FROM_ADDRESS = process.env.SMTP_FROM || "RetailTrove <noreply@retailtrove.com>";
 
-export async function sendWelcomeEmail(email: string): Promise<void> {
-  try {
+function fromParts(): { name: string; email: string } {
+  const match = FROM_ADDRESS.match(/^(.*?)\s*<([^>]+)>$/);
+  if (match) return { name: match[1].trim() || "RetailTrove", email: match[2] };
+  return { name: "RetailTrove", email: FROM_ADDRESS };
+}
+
+interface EmailMessage {
+  to: string;
+  subject: string;
+  html: string;
+}
+
+/**
+ * Deliver an email through the configured channel: Brevo Transactional API
+ * v3 when `BREVO_API_KEY` is set, otherwise the Nodemailer/SMTP fallback.
+ * Brevo recommends the API key over SMTP credentials, which Brevo flags and
+ * force-rotates when they leak into a repository. Callers handle errors.
+ */
+async function deliverEmail(message: EmailMessage): Promise<void> {
+  const apiKey = process.env.BREVO_API_KEY;
+  if (apiKey) {
+    await sendViaBrevoApi(apiKey, message);
+  } else {
     await getTransporter().sendMail({
       from: FROM_ADDRESS,
+      to: message.to,
+      subject: message.subject,
+      html: message.html,
+    });
+  }
+}
+
+async function sendViaBrevoApi(apiKey: string, message: EmailMessage): Promise<void> {
+  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "api-key": apiKey,
+    },
+    body: JSON.stringify({
+      sender: fromParts(),
+      to: [{ email: message.to }],
+      subject: message.subject,
+      htmlContent: message.html,
+    }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`Brevo API ${response.status}: ${detail.slice(0, 300)}`);
+  }
+}
+
+export async function sendWelcomeEmail(email: string): Promise<void> {
+  try {
+    await deliverEmail({
       to: email,
       subject: "Welcome to RetailTrove Newsletter!",
       html: `
@@ -113,16 +166,7 @@ export async function sendNewsletterEmail(
     const batchSize = 50;
     for (let i = 0; i < subscribers.length; i += batchSize) {
       const batch = subscribers.slice(i, i + batchSize);
-      await Promise.all(
-        batch.map((email) =>
-          getTransporter().sendMail({
-            from: FROM_ADDRESS,
-            to: email,
-            subject,
-            html: content,
-          }),
-        ),
-      );
+      await Promise.all(batch.map((email) => deliverEmail({ to: email, subject, html: content })));
     }
     console.log(`Newsletter sent to ${subscribers.length} subscribers`);
   } catch (error) {
@@ -133,8 +177,7 @@ export async function sendNewsletterEmail(
 
 export async function sendPasswordResetEmail(email: string, resetUrl: string): Promise<void> {
   try {
-    await getTransporter().sendMail({
-      from: FROM_ADDRESS,
+    await deliverEmail({
       to: email,
       subject: "Reset Your Password — RetailTrove",
       html: `
@@ -428,8 +471,7 @@ export async function sendOrderStatusEmail(
       : ` Questions about your order? <a href="mailto:support@retailtrove.com" style="color: #3b82f6;">Contact support</a>.`;
 
   try {
-    await getTransporter().sendMail({
-      from: FROM_ADDRESS,
+    await deliverEmail({
       to: email,
       subject: `${copy.subject} — ${orderIdLabel} | RetailTrove`,
       html: emailShell(

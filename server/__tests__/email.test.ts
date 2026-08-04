@@ -54,6 +54,7 @@ const items: OrderItem[] = [
 const testRecipient = "almanbergazi@duck.com";
 
 beforeEach(() => {
+  delete process.env.BREVO_API_KEY;
   sendMail.mockClear();
   mockStorage.getUserByAuthUserId.mockReset();
 });
