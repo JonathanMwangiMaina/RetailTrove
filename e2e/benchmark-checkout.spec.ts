@@ -5,8 +5,6 @@ import { createInterface } from "node:readline";
 import { fetchOrderFromSupabase, fetchPurchaseFindings } from "./helpers/db";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "https://retailtrove.vercel.app";
-const VENDOR_EMAIL = process.env.E2E_VENDOR_EMAIL ?? "vendor@retailtrove.com";
-const VENDOR_PASSWORD = process.env.E2E_VENDOR_PASSWORD ?? "vendor123";
 // Safaricom Daraja sandbox test MSISDN — the sandbox auto-simulates the PIN
 // entry for this number and fires the real callback with ResultCode 0.
 const MPESA_PHONE = process.env.E2E_MPESA_PHONE ?? "254708374149";
@@ -54,41 +52,42 @@ const state = {
 };
 
 /**
- * Admin credentials for the analytics check are never stored in the repo.
- * They come from E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD when set, otherwise the
- * script prompts on stdin and waits for the user to type them at the terminal
- * (used for the run only). If neither is available the check is skipped.
+ * Credentials for the scenarios are never stored in the repo. When a scenario
+ * needs them, the script prompts on stdin and waits for the user to type them
+ * at the terminal (used for the run only). If stdin is not a TTY, the check is
+ * skipped (required = false) or the run aborts with a clear error (required).
  */
-async function resolveAdminCredentials(): Promise<{
-  email: string;
-  password: string;
-} | null> {
-  const envEmail = process.env.E2E_ADMIN_EMAIL;
-  const envPassword = process.env.E2E_ADMIN_PASSWORD;
-  if (envEmail && envPassword) return { email: envEmail, password: envPassword };
-
+async function resolveCredentials(
+  role: string,
+  required: boolean,
+): Promise<{ email: string; password: string } | null> {
   if (!process.stdin.isTTY) {
-    console.warn(
-      "[Admin] E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD not set and stdin is not interactive — skipping admin analytics check",
-    );
+    if (required) {
+      throw new Error(
+        `[${role}] credentials are not stored in the repo — run this spec interactively (TTY) so the console prompt can collect them`,
+      );
+    }
+    console.warn(`[${role}] stdin is not interactive — skipping the ${role} check`);
     return null;
   }
 
   const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const ask = (question: string) =>
-    new Promise<string>((resolve) => rl.question(question, resolve));
+  const ask = (question: string) => new Promise<string>((res) => rl.question(question, res));
   try {
-    console.log(
-      "\n[Admin] Enter the admin credentials for the analytics check (used for this run only):",
-    );
-    const email = (await ask("[Admin] Email: ")).trim();
-    const password = await ask("[Admin] Password: ");
-    if (!email || !password) return null;
+    console.log(`\n[${role}] Enter the ${role} credentials (used for this run only):`);
+    const email = (await ask(`[${role}] Email: `)).trim();
+    const password = await ask(`[${role}] Password: `);
+    if (!email || !password) {
+      if (required) throw new Error(`[${role}] Email and password are required`);
+      return null;
+    }
     return { email, password };
   } finally {
     rl.close();
   }
 }
+
+let vendorCredentials: { email: string; password: string } | null = null;
 
 test.afterAll(() => {
   const resultsDir = resolve(process.cwd(), "e2e", "results");
@@ -97,7 +96,7 @@ test.afterAll(() => {
   const report = {
     scenario: "Vendor buys 6× Ceramic Plate via real M-Pesa sandbox STK push",
     baseUrl: BASE_URL,
-    user: VENDOR_EMAIL,
+    user: vendorCredentials?.email ?? "n/a",
     mpesaPhone: MPESA_PHONE,
     orderId: state.orderId,
     productId: state.productId,
@@ -157,10 +156,13 @@ test("Full purchase simulation → wishlist → cart ×6 → M-Pesa sandbox → 
   mark("homepage_load");
 
   // ── 2. Sign in as the vendor (SPA navigation — matches how users really log in) ──
+  const vendor = await resolveCredentials("Vendor", true);
+  if (!vendor) throw new Error("[Vendor] credentials could not be resolved");
+  vendorCredentials = vendor;
   await page.getByRole("link", { name: "Sign In" }).first().click();
   await expect(page.locator("#login-email")).toBeVisible();
-  await page.locator("#login-email").fill(VENDOR_EMAIL);
-  await page.locator("#login-password").fill(VENDOR_PASSWORD);
+  await page.locator("#login-email").fill(vendor.email);
+  await page.locator("#login-password").fill(vendor.password);
   await page.locator("form").getByRole("button", { name: "Sign In" }).click();
   // Signed in = the header swaps "Sign In" for the user dropdown (initials + role).
   await expect(page.getByRole("button", { name: /Vendor|Admin/i })).toBeVisible({
@@ -225,7 +227,7 @@ test("Full purchase simulation → wishlist → cart ×6 → M-Pesa sandbox → 
   // ── 7. Fill the checkout form (name + address are the only mock data) ────────
   await page.locator('input[name="firstName"]').fill("Benchmark");
   await page.locator('input[name="lastName"]').fill("Shopper");
-  await page.locator('input[name="email"]').fill(VENDOR_EMAIL);
+  await page.locator('input[name="email"]').fill(vendor.email);
   await page.locator('input[name="phone"]').fill(MPESA_PHONE);
   await page.locator('input[name="address"]').fill("123 E2E Benchmark Avenue");
   await page.locator('input[name="apartment"]').fill("Benchmark Suite");
@@ -287,9 +289,7 @@ test("Full purchase simulation → wishlist → cart ×6 → M-Pesa sandbox → 
   // ── 12. The wishlist entry persisted (only if the feature is deployed) ───────
   const wishlistRes = await page.request.get(`${BASE_URL}/api/wishlist`);
   if (wishlistRes.status() === 404) {
-    console.warn(
-      "[Wishlist] GET /api/wishlist -> 404 — wishlist not deployed on this version",
-    );
+    console.warn("[Wishlist] GET /api/wishlist -> 404 — wishlist not deployed on this version");
     mark("wishlist_api_missing");
   } else {
     expect(wishlistRes.ok()).toBeTruthy();
@@ -340,7 +340,7 @@ test("Admin dashboard analytics reflect the purchase (interactive login)", async
   page,
   context,
 }) => {
-  const admin = await resolveAdminCredentials();
+  const admin = await resolveCredentials("Admin", false);
   test.skip(!admin, "Admin credentials unavailable (no E2E_ADMIN_* env and no interactive prompt)");
 
   await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
