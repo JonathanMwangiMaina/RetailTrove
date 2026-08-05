@@ -705,6 +705,7 @@ The CLI's dotenv parser rejects multi-line unquoted values in `.env`, which prev
 ### Vercel / Deployment
 - **Do NOT add `.env` to `.gitignore`** — Vercel will exclude it and the app will 500 on every request
 - Env vars in Vercel Dashboard override `.env` from git (but the `.env`-in-git approach currently works)
+- **GitHub push protection blocks Brevo keys.** `BREVO_API_KEY` (Sendinblue key pattern) cannot be committed to git — a push containing it in `.env` is rejected (`GH013 ... Push cannot contain secrets`). Set it in the Vercel Dashboard env vars only (dashboard vars override git `.env`). If ever needed locally/tests, export it as a process env var; never write it to the tracked `.env`. (Other tracked `.env` secrets like `DATABASE_URL`/`SESSION_SECRET` do not trip the scanner.)
 - Vercel deployment triggered by push to `main` via GitHub Actions (`.github/workflows/ci.yml`)
 - `vercel-build` script is `npm run build:client` (only builds Vite client); serverless function is compiled by `@vercel/node` builder automatically
 
