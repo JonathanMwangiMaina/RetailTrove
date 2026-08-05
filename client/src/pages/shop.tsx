@@ -5,6 +5,7 @@ import { ProductCard } from "@/components/ui/product-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { formatPrice } from "@/lib/currencies";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -40,6 +41,9 @@ const CATEGORIES = [
   "Sporting Goods",
   "Footwear",
 ];
+
+const MIN_PRICE = 9.99;
+const MAX_PRICE = 4000;
 
 function FilterSidebar({
   filterCategory,
@@ -95,15 +99,15 @@ function FilterSidebar({
         <h4 className="text-sm font-medium text-gray-900 mb-3">
           Price Range
           <span className="text-muted-foreground font-normal ml-1">
-            KES {priceRange[0]} – {priceRange[1]}
+            {formatPrice(priceRange[0], "USD")} – {formatPrice(priceRange[1], "USD")}
           </span>
         </h4>
         <Slider
           value={priceRange}
           onValueChange={(v: [number, number]) => onPriceRangeChange(v)}
-          min={0}
-          max={1000}
-          step={10}
+          min={MIN_PRICE}
+          max={MAX_PRICE}
+          step={1}
           className="w-full"
         />
       </div>
@@ -153,7 +157,7 @@ export default function Shop({ params }: ShopProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOrder, setSortOrder] = useState("featured");
   const [filterCategory, setFilterCategory] = useState(params?.category || "All Products");
-  const [priceRange, setPriceRange] = useState<[number, number]>([0, 1000]);
+  const [priceRange, setPriceRange] = useState<[number, number]>([MIN_PRICE, MAX_PRICE]);
   const [minRating, setMinRating] = useState<number>(0);
   const [inStockOnly, setInStockOnly] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
@@ -167,8 +171,12 @@ export default function Shop({ params }: ShopProps) {
     if (category) setFilterCategory(category);
     const mp = urlParams.get("minPrice");
     const xp = urlParams.get("maxPrice");
-    if (mp) setPriceRange([parseInt(mp, 10), 1000]);
-    if (xp) setPriceRange([0, parseInt(xp, 10)]);
+    if (mp || xp) {
+      const clamp = (v: number) => Math.min(Math.max(v, MIN_PRICE), MAX_PRICE);
+      const min = mp ? clamp(Number(mp) || MIN_PRICE) : MIN_PRICE;
+      const max = xp ? clamp(Number(xp) || MAX_PRICE) : MAX_PRICE;
+      setPriceRange([Math.min(min, max), Math.max(min, max)]);
+    }
     const mr = urlParams.get("minRating");
     if (mr) setMinRating(parseFloat(mr));
     const ins = urlParams.get("inStock");
@@ -179,8 +187,8 @@ export default function Shop({ params }: ShopProps) {
   const queryParams = new URLSearchParams();
   if (searchQuery) queryParams.set("q", searchQuery);
   if (filterCategory !== "All Products") queryParams.set("category", filterCategory);
-  if (priceRange[0] > 0) queryParams.set("minPrice", String(priceRange[0]));
-  if (priceRange[1] < 1000) queryParams.set("maxPrice", String(priceRange[1]));
+  if (priceRange[0] > MIN_PRICE) queryParams.set("minPrice", String(priceRange[0]));
+  if (priceRange[1] < MAX_PRICE) queryParams.set("maxPrice", String(priceRange[1]));
   if (minRating > 0) queryParams.set("minRating", String(minRating));
   if (inStockOnly) queryParams.set("inStock", "true");
   const queryString = queryParams.toString();
@@ -228,7 +236,7 @@ export default function Shop({ params }: ShopProps) {
   };
 
   const clearAllFilters = () => {
-    setPriceRange([0, 1000]);
+    setPriceRange([MIN_PRICE, MAX_PRICE]);
     setMinRating(0);
     setInStockOnly(false);
     setFilterCategory("All Products");
@@ -236,7 +244,7 @@ export default function Shop({ params }: ShopProps) {
   };
 
   const hasActiveFilters =
-    priceRange[0] > 0 || priceRange[1] < 1000 || minRating > 0 || inStockOnly;
+    priceRange[0] > MIN_PRICE || priceRange[1] < MAX_PRICE || minRating > 0 || inStockOnly;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
