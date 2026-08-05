@@ -5,8 +5,12 @@
   "license": "MIT",
   "scripts": {
     "dev": "tsx server/index.ts",
+    "predev": "npm run check:packages:offline",
     "build:client": "vite build",
+    "prebuild:client": "npm run check:packages:offline",
     "vercel-build": "npm run build:client",
+    "check:packages": "node scripts/check-packages.mjs",
+    "check:packages:offline": "node scripts/check-packages.mjs --offline",
     "start": "node dist/index.js",
     "check": "tsc",
     "lint": "eslint . --ext .ts,.tsx",

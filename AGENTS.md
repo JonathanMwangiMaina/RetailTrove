@@ -7,16 +7,25 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 
 ## Environment
 
-- **Platform:** Windows (PowerShell) + WSL Ubuntu 26.04
-- **Node.js:** `/home/bergazi21/.nvm/versions/node/v22.23.1/bin/node` (via nvm in WSL)
-- **Windows tsc:** `& "C:\Program Files\nodejs\node.exe" ".\node_modules\typescript\bin\tsc" --noEmit`
-- **Tests:** ✅ Fixed — `npm i` from WSL installs Linux native bindings; all 121 tests pass in WSL
-- **DB push:** `npm run db:push` unreachable from WSL (ETIMEDOUT on Supabase port 6543) — must use Supabase SQL Editor
-- **ESLint 10 (flat config) + Prettier 3:** 0 errors, 65 warnings (all `no-explicit-any`, 16 in test files)
-- **Git remote:** SSH (`git@github.com:JonathanMwangiMaina/RetailTrove.git`)
+> **WSL-FIRST RULE (mandatory for opencode):** Every shell command MUST run inside WSL
+> (`wsl -d Ubuntu-26.04 -e bash -c '...'`). The Windows PowerShell host **mangles** arguments
+> passed to `wsl`: it strips embedded double quotes, breaks `node -e`, `python3 -c`, and
+> `printf "..."` inline one-liners, and produces `syntax error near unexpected token`.
+> **Never** write inline scripting with quotes/pipes in the `-c` string. Proven pattern instead:
+> write the script/msg file with the Write tool to `C:\Users\user\AppData\Local\Temp\opencode\`
+> (visible in WSL as `/mnt/c/Users/user/AppData/Local/Temp/opencode/`), then run it via
+> `wsl -d Ubuntu-26.04 -e bash /mnt/c/.../script.mjs` (or reference a commit-message file with
+> `git commit -F`). This file is the workbook — copy the exact recipes in
+> "Commands (WSL — Proven)" below instead of improvising.
+
+- **Platform:** Windows (PowerShell) + WSL Ubuntu 26.04 — but **treat WSL as the only shell** for scripting/commands (see rule above)
+- **Node.js:** `/home/bergazi21/.nvm/versions/node/v22.23.1/bin/node` (via nvm in WSL); always prefix with the full path and export `PATH` inside the `-c` string
+- **Tests:** ✅ 148 vitest tests pass in WSL (`npm ci`/`npm i` from WSL installs Linux native bindings)
+- **DB push:** `npm run db:push` unreachable from WSL (ETIMEDOUT on Supabase port 6543) — use Supabase CLI (`supabase db query --file /mnt/wsl/...`) or SQL Editor
+- **ESLint 10 (flat config) + Prettier 3:** 0 errors, ~66 warnings (all `no-explicit-any`, pre-existing)
+- **Git remote:** SSH (`git@github.com:JonathanMwangiMaina/RetailTrove.git`); push = **plain `git push origin main`** (do NOT set `GIT_SSH_COMMAND` — it silently no-ops the push)
 - **Git config:** `user.name = 'Jonathan Maina'`, `user.email = '104943475+JonathanMwangiMaina@users.noreply.github.com'`
-- **SSH key:** `~/.ssh/id_ed25519`; use `GIT_SSH_COMMAND='ssh -o BatchMode=yes'` for push
-- **PowerShell multiline commits:** Write message to file, then `git commit -F <file>` (PowerShell cannot handle multiline `-m` with `-` chars)
+- **Commits:** write the message to a temp file (Write tool), then `git commit -F <file>` (PowerShell truncates multiline `-m` at `:`; bash `printf` inside `-c` gets mangled)
 
 ---
 
@@ -715,13 +724,20 @@ The CLI's dotenv parser rejects multi-line unquoted values in `.env`, which prev
 - **Prefer module-level throw + export const over lazy getters.** The v0.4.2 `server/db.ts` pattern is the last proven working one: module-level `throw` on missing env vars, then `export const pool`/`export const db` using `new Pool()`/`drizzle()`. This keeps the API surface simple and callers don't need `getPoolOrNull()` checks. Reverted to this in commit `ba17c29`.
 - **Inspect previous commits for last proven/working data patterns before introducing changes.** When debugging a regression, use `git log --oneline` to find the last commit where the feature worked, then `git show <commit>:<file>` to extract the working pattern. Apply that pattern to the current codebase rather than inventing new abstractions. Example: the persistent 500 was only resolved by reverting `server/db.ts` to v0.4.2 (commit `9f33edc`) — the lazy getter abstraction (v0.4.8) introduced a new failure mode.
 - **Ensure package versions match their API.** Before using any imported package API, verify the installed version's API surface with `node -e "const m = require('pkg'); console.log(Object.keys(m).filter(k => ...))"` or equivalent. Sentry v10 (version `10.68.0`) removed `Sentry.Handlers.requestHandler()` and `errorHandler()` — these were replaced by `Sentry.setupExpressErrorHandler(app)`. Using the old API caused the persistent 500 on every request. Always check the version in `node_modules/<pkg>/package.json` before writing import code.
+- **npm lockfile guard (Vercel E404 root cause).** The lockfile once pinned `eslint@10.9.0` + `@eslint/config-helpers@0.9.0` — versions that were **never published** — so every fresh `npm install` on Vercel 404'd and aborted the build before it started. Root cause: the lockfile had drifted from `package.json` (lockfile root spec `^10.9.0` vs package.json `^10.8.0`). Fix procedure: `rm package-lock.json && npm install --package-lock-only && npm ci`. Guard rails (already wired): `scripts/check-packages.mjs` — offline check (lockfile root specs must equal package.json, resolved tarballs must encode declared versions) runs as a vitest test (`server/__tests__/package-lock.test.ts`), as `predev`/`prebuild:client` hooks, and the full registry probe runs in CI's `test` job. Never hand-edit `package-lock.json`; regenerate it.
 - `tsc --noEmit`: 0 errors
 - `eslint`: 0 errors, ~66 warnings (all `no-explicit-any` pre-existing)
 - `prettier --check`: All files formatted
-- All 121 vitest tests pass (mocked storage, no real DB needed)
+- All 148 vitest tests pass (mocked storage, no real DB needed; includes the lockfile-consistency test)
 - UNC path limitation: PowerShell cannot run `tsc` when CWD is `\\wsl.localhost\...` — use WSL instead
 
-### Commands (WSL)
+### Commands (WSL — Proven)
+
+Every one of these has been run to success on this machine. Copy verbatim — do not improvise
+new quoting (PowerShell strips embedded double quotes inside `-c '...'`). For anything with
+quotes/pipes/`node -e`/`python3 -c`, write a `.mjs`/`.sh` file to
+`C:\Users\user\AppData\Local\Temp\opencode\` and run `wsl -d Ubuntu-26.04 -e bash <script>`.
+
 ```bash
 # TypeScript check
 wsl -d Ubuntu-26.04 -e bash -c 'export PATH=/home/bergazi21/.nvm/versions/node/v22.23.1/bin:$PATH && cd /mnt/wsl/RetailTrove && /home/bergazi21/.nvm/versions/node/v22.23.1/bin/node ./node_modules/typescript/bin/tsc --noEmit'
@@ -732,11 +748,21 @@ wsl -d Ubuntu-26.04 -e bash -c 'export PATH=/home/bergazi21/.nvm/versions/node/v
 # Vitest
 wsl -d Ubuntu-26.04 -e bash -c 'export PATH=/home/bergazi21/.nvm/versions/node/v22.23.1/bin:$PATH && cd /mnt/wsl/RetailTrove && /home/bergazi21/.nvm/versions/node/v22.23.1/bin/node ./node_modules/vitest/vitest.mjs run'
 
-# ESLint
+# ESLint (a single file to iterate fast: node ./node_modules/eslint/bin/eslint.js <path>)
 wsl -d Ubuntu-26.04 -e bash -c 'export PATH=/home/bergazi21/.nvm/versions/node/v22.23.1/bin:$PATH && cd /mnt/wsl/RetailTrove && /home/bergazi21/.nvm/versions/node/v22.23.1/bin/node ./node_modules/eslint/bin/eslint.js . --ext .ts,.tsx'
 
 # Prettier check
 wsl -d Ubuntu-26.04 -e bash -c 'export PATH=/home/bergazi21/.nvm/versions/node/v22.23.1/bin:$PATH && cd /mnt/wsl/RetailTrove && /home/bergazi21/.nvm/versions/node/v22.23.1/bin/node ./node_modules/prettier/bin/prettier.cjs --check "client/src/**/*.{ts,tsx,css}" "server/**/*.ts" "api/**/*.ts" "shared/**/*.ts"'
+
+# Package-lock health (see "npm lockfile guard"): offline = fast; full = probes registry tarballs
+wsl -d Ubuntu-26.04 -e bash -c 'export PATH=/home/bergazi21/.nvm/versions/node/v22.23.1/bin:$PATH && cd /mnt/wsl/RetailTrove && npm run check:packages:offline'
+wsl -d Ubuntu-26.04 -e bash -c 'export PATH=/home/bergazi21/.nvm/versions/node/v22.23.1/bin:$PATH && cd /mnt/wsl/RetailTrove && npm run check:packages'
+
+# Clean reinstall from lockfile (replicates Vercel's install; run after touching package.json)
+wsl -d Ubuntu-26.04 -e bash -c 'export PATH=/home/bergazi21/.nvm/versions/node/v22.23.1/bin:$PATH && cd /mnt/wsl/RetailTrove && npm ci'
+
+# Commit: write msg to a temp file first, then
+wsl -d Ubuntu-26.04 -e bash -c 'cd /mnt/wsl/RetailTrove && git add <paths> && git commit -F /mnt/c/Users/user/AppData/Local/Temp/opencode/msg.txt && git push origin main'
 
 # Push (plain git push, no GIT_SSH_COMMAND)
 wsl -d Ubuntu-26.04 -e bash -c 'cd /mnt/wsl/RetailTrove && git push origin main'

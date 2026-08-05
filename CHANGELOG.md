@@ -7,6 +7,27 @@ This project does not currently use semantic versioning — entries are dated.
 
 ---
 
+## [v0.9.1] — P3 Slider + Vercel Build Fix + Package Guard (2026-08-04)
+
+### P3 — Shop price slider (last planned P3 item)
+- `client/src/pages/shop.tsx` — price slider converted from `KES 0–1000` to **USD `$9.99 – $4,000`**: `MIN_PRICE`/`MAX_PRICE` constants, `formatPrice(.., "USD")` label, `step={1}`, decimal-aware URL parsing with clamping + min/max ordering, and new bounds wired into query emission, reset, and `hasActiveFilters`. Backend already accepted arbitrary `minPrice`/`maxPrice` (`server/routes.ts`).
+
+### Fixed — Vercel build aborted at `npm install` (E404)
+- The lockfile pinned `eslint@10.9.0` + `@eslint/config-helpers@0.9.0` — versions that **were never published** to the npm registry — so every fresh install on Vercel 404'd. Root cause: the lockfile had drifted from `package.json` (lockfile root recorded `eslint ^10.9.0`, package.json declares `^10.8.0`). Regenerated `package-lock.json` (`rm package-lock.json && npm install --package-lock-only && npm ci`); it now resolves to `eslint@10.8.0` / `@eslint/config-helpers@0.7.0` and a full registry probe confirms all 698 entries resolve.
+
+### Added — package-consistency guard (tests verify npm packages before build/dev)
+- `scripts/check-packages.mjs` — offline check (lockfile root specs must exactly equal package.json; every `resolved` tarball must encode its declared version) plus a registry probe (HEAD every unique `resolved` URL, fail on 404/403) that directly reproduces Vercel's install failure mode.
+- `server/__tests__/package-lock.test.ts` — runs the offline check inside the vitest suite (148 total).
+- Wired as `predev` + `prebuild:client` npm hooks (`--offline`, fast) and as a `npm run check:packages` step in CI's `test` job (full network probe). Never hand-edit `package-lock.json`.
+
+### Ops
+- `BREVO_API_KEY` **set in Vercel dashboard env vars** (NOT git-tracked `.env` — GitHub push protection blocks the Sendinblue key pattern) — Brevo Transactional API v3 sender is now active in production (SMTP fallback when unset).
+- `AGENTS.md` — WSL-first rule made mandatory for all opencode scripting; "Commands (WSL — Proven)" workbook records only verified recipes; lockfile-guard lesson documented under Engineering Standards.
+- `eslint.config.mjs` — node globals for `scripts/**/*.mjs`.
+
+### Verified
+- `tsc --noEmit`: 0 errors · `vitest run`: 148/148 (17 files) · `eslint`: 0 errors (pre-existing warnings only) · `prettier --check`: clean · `vite build`: success · `check:packages`: all 698 lockfile entries resolve
+
 ## [v0.9.0] — Customer Notification Pipeline (P2) (2026-08-04)
 
 ### Added
