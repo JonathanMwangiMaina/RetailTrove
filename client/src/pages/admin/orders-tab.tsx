@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useCurrency } from "@/hooks/use-currency";
+import { useInTabPagination } from "@/hooks/use-in-tab-pagination";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -106,6 +108,7 @@ function StatusCell({ order }: { order: AdminOrder }) {
 
 export default function OrdersTab({ orders }: Props) {
   const { formatPrice } = useCurrency();
+  const { page, pageCount, pageItems, setPage } = useInTabPagination(orders, 10);
   const totalRevenue = orders
     .filter((o) => o.paymentStatus === "paid")
     .reduce((s, o) => s + parseFloat(o.total ?? "0"), 0);
@@ -133,7 +136,7 @@ export default function OrdersTab({ orders }: Props) {
                 </TableCell>
               </TableRow>
             ) : (
-              orders.map((o) => (
+              pageItems.map((o) => (
                 <TableRow key={o.id}>
                   <TableCell className="text-xs text-muted-foreground">#{o.id}</TableCell>
                   <TableCell className="font-medium">
@@ -158,6 +161,13 @@ export default function OrdersTab({ orders }: Props) {
             )}
           </TableBody>
         </Table>
+        <PaginationControls
+          page={page}
+          pageCount={pageCount}
+          itemCount={orders.length}
+          pageSize={10}
+          onPageChange={setPage}
+        />
       </div>
       {orders.length > 0 && (
         <div className="mt-3 text-right text-sm text-muted-foreground">

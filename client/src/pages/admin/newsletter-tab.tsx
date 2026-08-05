@@ -1,5 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { useInTabPagination } from "@/hooks/use-in-tab-pagination";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   Table,
@@ -20,6 +22,7 @@ interface Props {
 
 export default function NewsletterTab({ subscribers }: Props) {
   const { toast } = useToast();
+  const { page, pageCount, pageItems, setPage } = useInTabPagination(subscribers, 10);
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/admin/newsletter/subscribers/${id}`, {}),
@@ -52,7 +55,7 @@ export default function NewsletterTab({ subscribers }: Props) {
                 </TableCell>
               </TableRow>
             ) : (
-              subscribers.map((s) => (
+              pageItems.map((s) => (
                 <TableRow key={s.id}>
                   <TableCell className="font-medium">{s.email}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">
@@ -83,6 +86,13 @@ export default function NewsletterTab({ subscribers }: Props) {
             )}
           </TableBody>
         </Table>
+        <PaginationControls
+          page={page}
+          pageCount={pageCount}
+          itemCount={subscribers.length}
+          pageSize={10}
+          onPageChange={setPage}
+        />
       </div>
     </>
   );

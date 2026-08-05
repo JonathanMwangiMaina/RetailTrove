@@ -1,3 +1,5 @@
+import { useInTabPagination } from "@/hooks/use-in-tab-pagination";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import {
   Table,
   TableBody,
@@ -14,6 +16,7 @@ interface Props {
 }
 
 export default function AuditTab({ auditLogs }: Props) {
+  const { page, pageCount, pageItems, setPage } = useInTabPagination(auditLogs, 10);
   return (
     <>
       <div className="mb-3 text-sm text-muted-foreground">
@@ -38,7 +41,7 @@ export default function AuditTab({ auditLogs }: Props) {
                 </TableCell>
               </TableRow>
             ) : (
-              auditLogs.map((log) => (
+              pageItems.map((log) => (
                 <TableRow key={log.id}>
                   <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                     {new Date(log.createdAt).toLocaleString()}
@@ -58,6 +61,13 @@ export default function AuditTab({ auditLogs }: Props) {
             )}
           </TableBody>
         </Table>
+        <PaginationControls
+          page={page}
+          pageCount={pageCount}
+          itemCount={auditLogs.length}
+          pageSize={10}
+          onPageChange={setPage}
+        />
       </div>
     </>
   );

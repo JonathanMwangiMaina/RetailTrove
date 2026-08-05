@@ -123,6 +123,25 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     }
   });
 
+  router.get("/products/categories", async (_req: Request, res: Response) => {
+    try {
+      const all = await storage.getAllProducts();
+      const map = new Map<string, Set<string>>();
+      for (const p of all) {
+        if (!p.category) continue;
+        if (!map.has(p.category)) map.set(p.category, new Set());
+        if (p.subcategory) map.get(p.category)!.add(p.subcategory);
+      }
+      const result = Array.from(map.entries())
+        .map(([name, subs]) => ({ name, subcategories: Array.from(subs).sort() }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching product categories:", error);
+      res.json([]);
+    }
+  });
+
   router.get("/products/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id, 10);

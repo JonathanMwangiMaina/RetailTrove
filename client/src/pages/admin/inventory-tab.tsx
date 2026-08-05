@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/use-currency";
+import { useInTabPagination } from "@/hooks/use-in-tab-pagination";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import { apiRequest, invalidateProductQueries } from "@/lib/queryClient";
 import {
   Table,
@@ -42,8 +44,6 @@ export default function InventoryTab({ products, productsLoading }: Props) {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editing, setEditing] = useState<Record<string, unknown> | null>(null);
   const [newProduct, setNewProduct] = useState<Record<string, unknown>>({ ...EMPTY_PRODUCT });
-  const [page, setPage] = useState(0);
-  const PAGE_SIZE = 10;
 
   const { data: lowStockProducts = [] } = useQuery<AdminProduct[]>({
     queryKey: ["/api/admin/low-stock", { threshold: 5 }],
@@ -58,12 +58,10 @@ export default function InventoryTab({ products, productsLoading }: Props) {
     return matchesSearch;
   });
 
+  const { page, pageCount, pageItems, setPage } = useInTabPagination(filtered, 10);
+
   const totalStock = products.reduce((sum, p) => sum + (p.stockQuantity ?? 0), 0);
   const outOfStockCount = products.filter((p) => !p.inStock || (p.stockQuantity ?? 0) === 0).length;
-
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(page, pageCount - 1);
-  const pageItems = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
   const categoryOptions = useMemo(() => {
     const map = new Map<string, Set<string>>();
@@ -274,34 +272,13 @@ export default function InventoryTab({ products, productsLoading }: Props) {
           </TableBody>
         </Table>
         {!productsLoading && filtered.length > 0 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t">
-            <p className="text-xs text-muted-foreground">
-              Showing {safePage * PAGE_SIZE + 1}–
-              {Math.min((safePage + 1) * PAGE_SIZE, filtered.length)} of {filtered.length} product
-              {filtered.length !== 1 ? "s" : ""}
-            </p>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={safePage === 0}
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-              >
-                Previous
-              </Button>
-              <span className="text-xs text-muted-foreground">
-                Page {safePage + 1} of {pageCount}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={safePage >= pageCount - 1}
-                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
+          <PaginationControls
+            page={page}
+            pageCount={pageCount}
+            itemCount={filtered.length}
+            pageSize={10}
+            onPageChange={setPage}
+          />
         )}
       </div>
 

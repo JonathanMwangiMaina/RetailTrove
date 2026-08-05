@@ -1,3 +1,5 @@
+import { useInTabPagination } from "@/hooks/use-in-tab-pagination";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import {
   Table,
   TableBody,
@@ -15,6 +17,7 @@ interface Props {
 }
 
 export default function ActivityTab({ visits }: Props) {
+  const { page, pageCount, pageItems, setPage } = useInTabPagination(visits, 50);
   return (
     <>
       <div className="mb-3 text-sm text-muted-foreground">
@@ -38,7 +41,7 @@ export default function ActivityTab({ visits }: Props) {
                 </TableCell>
               </TableRow>
             ) : (
-              visits.slice(0, 200).map((v) => (
+              pageItems.map((v) => (
                 <TableRow key={v.id}>
                   <TableCell>
                     <div className="font-medium text-sm">{v.userName}</div>
@@ -60,6 +63,13 @@ export default function ActivityTab({ visits }: Props) {
             )}
           </TableBody>
         </Table>
+        <PaginationControls
+          page={page}
+          pageCount={pageCount}
+          itemCount={visits.length}
+          pageSize={50}
+          onPageChange={setPage}
+        />
       </div>
     </>
   );

@@ -29,6 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import type { CategoryOption } from "./admin/types";
 import {
   Select,
   SelectContent,
@@ -122,13 +123,51 @@ function handleInput(setter: (v: ProductFormData) => void, current: ProductFormD
     setter({ ...current, [e.target.name]: e.target.value });
 }
 
+const CATEGORY_OTHER = "__category_other__";
+const SUBCATEGORY_OTHER = "__subcategory_other__";
+
 function ProductForm({
   data,
   setData,
+  categoryOptions,
 }: {
   data: ProductFormData;
   setData: (v: ProductFormData) => void;
+  categoryOptions?: CategoryOption[];
 }) {
+  const selectedCategory = data.category;
+  const subcategories =
+    categoryOptions?.find((c) => c.name === selectedCategory)?.subcategories ?? [];
+
+  const [categoryOtherMode, setCategoryOtherMode] = useState(
+    () =>
+      !!selectedCategory && !(categoryOptions?.some((c) => c.name === selectedCategory) ?? false),
+  );
+  const [subcategoryOtherMode, setSubcategoryOtherMode] = useState(
+    () => !!data.subcategory && !subcategories.includes(data.subcategory ?? ""),
+  );
+
+  const handleCategoryChange = (v: string) => {
+    if (v === CATEGORY_OTHER) {
+      setCategoryOtherMode(true);
+      setSubcategoryOtherMode(false);
+      setData({ ...data, subcategory: "" });
+      return;
+    }
+    setCategoryOtherMode(false);
+    setSubcategoryOtherMode(false);
+    setData({ ...data, category: v, subcategory: "" });
+  };
+
+  const handleSubcategoryChange = (v: string) => {
+    if (v === SUBCATEGORY_OTHER) {
+      setSubcategoryOtherMode(true);
+      return;
+    }
+    setSubcategoryOtherMode(false);
+    setData({ ...data, subcategory: v === "__none__" ? "" : v });
+  };
+
   return (
     <div className="grid gap-4 py-2">
       <div className="grid grid-cols-2 gap-4">
@@ -138,7 +177,36 @@ function ProductForm({
         </div>
         <div className="space-y-1">
           <Label>Category</Label>
-          <Input name="category" value={data.category} onChange={handleInput(setData, data)} />
+          {categoryOptions && categoryOptions.length > 0 ? (
+            <>
+              <Select
+                value={categoryOtherMode ? CATEGORY_OTHER : selectedCategory}
+                onValueChange={handleCategoryChange}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categoryOptions.map((c) => (
+                    <SelectItem key={c.name} value={c.name}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={CATEGORY_OTHER}>Other</SelectItem>
+                </SelectContent>
+              </Select>
+              {categoryOtherMode && (
+                <Input
+                  name="category"
+                  placeholder="Enter custom category"
+                  value={selectedCategory}
+                  onChange={handleInput(setData, data)}
+                />
+              )}
+            </>
+          ) : (
+            <Input name="category" value={data.category} onChange={handleInput(setData, data)} />
+          )}
         </div>
       </div>
       <div className="space-y-1">
@@ -191,11 +259,43 @@ function ProductForm({
         </div>
         <div className="space-y-1">
           <Label>Subcategory</Label>
-          <Input
-            name="subcategory"
-            value={data.subcategory ?? ""}
-            onChange={handleInput(setData, data)}
-          />
+          {categoryOptions && categoryOptions.length > 0 ? (
+            <>
+              <Select
+                value={
+                  subcategoryOtherMode ? SUBCATEGORY_OTHER : (data.subcategory ?? "") || "__none__"
+                }
+                onValueChange={handleSubcategoryChange}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select subcategory" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None</SelectItem>
+                  {subcategories.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={SUBCATEGORY_OTHER}>Other</SelectItem>
+                </SelectContent>
+              </Select>
+              {subcategoryOtherMode && (
+                <Input
+                  name="subcategory"
+                  placeholder="Enter custom subcategory"
+                  value={data.subcategory ?? ""}
+                  onChange={handleInput(setData, data)}
+                />
+              )}
+            </>
+          ) : (
+            <Input
+              name="subcategory"
+              value={data.subcategory ?? ""}
+              onChange={handleInput(setData, data)}
+            />
+          )}
         </div>
       </div>
       <p className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded px-3 py-1.5">
@@ -228,6 +328,9 @@ export default function VendorPage() {
   // ── Queries ──────────────────────────────────────────────────────────────────
   const { data: myProducts = [], isLoading: productsLoading } = useQuery<VendorProduct[]>({
     queryKey: ["/api/vendor/products"],
+  });
+  const { data: categoryOptions = [] } = useQuery<CategoryOption[]>({
+    queryKey: ["/api/products/categories"],
   });
   const { data: myFaqs = [] } = useQuery<VendorFaq[]>({ queryKey: ["/api/faqs/mine"] });
   const { data: customers = [] } = useQuery<Customer[]>({
@@ -532,7 +635,11 @@ export default function VendorPage() {
             <TabsContent value="new">
               <div className="max-w-2xl">
                 <h3 className="font-semibold mb-4">Submit New Product</h3>
-                <ProductForm data={newProduct} setData={setNewProduct} />
+                <ProductForm
+                  data={newProduct}
+                  setData={setNewProduct}
+                  categoryOptions={categoryOptions}
+                />
                 <div className="flex gap-2 mt-4">
                   <Button
                     onClick={() => addProductMutation.mutate(newProduct)}
@@ -681,6 +788,7 @@ export default function VendorPage() {
             <ProductForm
               data={editingProduct}
               setData={setEditingProduct as (v: ProductFormData) => void}
+              categoryOptions={categoryOptions}
             />
           )}
           <DialogFooter>

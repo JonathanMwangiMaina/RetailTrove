@@ -1,5 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { useInTabPagination } from "@/hooks/use-in-tab-pagination";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   Table,
@@ -20,6 +22,7 @@ interface Props {
 
 export default function UsersTab({ customers }: Props) {
   const { toast } = useToast();
+  const { page, pageCount, pageItems, setPage } = useInTabPagination(customers, 10);
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) =>
@@ -62,7 +65,7 @@ export default function UsersTab({ customers }: Props) {
               </TableCell>
             </TableRow>
           ) : (
-            customers.map((u) => (
+            pageItems.map((u) => (
               <TableRow key={u.id}>
                 <TableCell className="font-medium">{u.name}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{u.email}</TableCell>
@@ -110,6 +113,13 @@ export default function UsersTab({ customers }: Props) {
           )}
         </TableBody>
       </Table>
+      <PaginationControls
+        page={page}
+        pageCount={pageCount}
+        itemCount={customers.length}
+        pageSize={10}
+        onPageChange={setPage}
+      />
     </div>
   );
 }
