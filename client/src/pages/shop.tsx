@@ -195,7 +195,7 @@ export default function Shop({ params }: ShopProps) {
   const queryKey = `/api/products${queryString ? `?${queryString}` : ""}`;
 
   const { data: productsResponse, isLoading } = useQuery<
-    { data: Product[]; nextCursor: number | null } | Product[]
+    { data: Product[]; nextCursor: number | null; total: number } | Product[]
   >({
     queryKey: [queryKey],
   });
@@ -220,6 +220,11 @@ export default function Shop({ params }: ShopProps) {
         }
       })
     : [];
+
+  const productCount =
+    productsResponse && !Array.isArray(productsResponse)
+      ? ((productsResponse as { total?: number }).total ?? filteredAndSortedProducts.length)
+      : filteredAndSortedProducts.length;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -254,8 +259,8 @@ export default function Shop({ params }: ShopProps) {
             {filterCategory === "All Products" ? "All Products" : filterCategory}
           </h1>
           <p className="text-gray-500 mt-1">
-            {filteredAndSortedProducts.length} product
-            {filteredAndSortedProducts.length !== 1 ? "s" : ""}
+            {productCount} product
+            {productCount !== 1 ? "s" : ""}
           </p>
         </div>
 

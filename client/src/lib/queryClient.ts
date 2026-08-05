@@ -72,3 +72,19 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+const PRODUCT_QUERY_PREFIXES = [
+  "/api/products",
+  "/api/admin/products",
+  "/api/admin/low-stock",
+  "/api/vendor/products",
+];
+
+export function invalidateProductQueries(): Promise<void> {
+  return queryClient.invalidateQueries({
+    predicate: (query) => {
+      const key = query.queryKey[0];
+      return typeof key === "string" && PRODUCT_QUERY_PREFIXES.some((p) => key.startsWith(p));
+    },
+  });
+}

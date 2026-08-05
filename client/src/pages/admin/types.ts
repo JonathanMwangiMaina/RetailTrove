@@ -99,7 +99,13 @@ export interface SiteContentData {
   content: string;
 }
 
+export interface CategoryOption {
+  name: string;
+  subcategories: string[];
+}
+
 export interface AdminProductFormProps {
   data: Record<string, unknown>;
   setData: (v: Record<string, unknown>) => void;
+  categoryOptions?: CategoryOption[];
 }

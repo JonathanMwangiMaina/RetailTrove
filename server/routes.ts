@@ -998,6 +998,21 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     },
   );
 
+  router.get(
+    "/admin/products",
+    requireAuth,
+    requireRole("admin"),
+    async (_req: Request, res: Response) => {
+      try {
+        const all = await storage.getAllProducts();
+        res.json(all);
+      } catch (error) {
+        console.error("Error fetching all products for admin:", error);
+        res.json([]);
+      }
+    },
+  );
+
   put(
     "/admin/products/:id/approve",
     requireAuth,

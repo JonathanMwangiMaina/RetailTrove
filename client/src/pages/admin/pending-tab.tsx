@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/use-currency";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, invalidateProductQueries } from "@/lib/queryClient";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { OptimizedImage } from "@/components/ui/optimized-image";
@@ -23,7 +23,7 @@ export default function PendingTab({ pendingProducts, allUsers: _allUsers, getVe
       apiRequest("PUT", `/api/admin/products/${id}/approve`, { status }),
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/products/pending"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      void invalidateProductQueries();
       toast({ title: vars.status === "approved" ? "Product Approved ✓" : "Product Rejected" });
     },
   });

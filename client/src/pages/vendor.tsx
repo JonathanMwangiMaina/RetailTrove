@@ -4,7 +4,7 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/use-currency";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, invalidateProductQueries } from "@/lib/queryClient";
 import {
   Table,
   TableBody,
@@ -249,6 +249,7 @@ export default function VendorPage() {
     mutationFn: (data: ProductFormData) => apiRequest("POST", "/api/products", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vendor/products"] });
+      void invalidateProductQueries();
       toast({ title: "Product Submitted", description: "Your product is pending admin approval." });
       setIsAddProductOpen(false);
       setNewProduct({ ...EMPTY_PRODUCT });
@@ -261,6 +262,7 @@ export default function VendorPage() {
     mutationFn: (data: VendorProduct) => apiRequest("PUT", `/api/products/${data.id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vendor/products"] });
+      void invalidateProductQueries();
       toast({ title: "Product Updated", description: "Submitted for admin review." });
       setIsEditProductOpen(false);
     },
@@ -272,6 +274,7 @@ export default function VendorPage() {
     mutationFn: (id: number) => apiRequest("DELETE", `/api/products/${id}`, {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vendor/products"] });
+      void invalidateProductQueries();
       toast({ title: "Product Removed" });
     },
     onError: (e: Error) =>

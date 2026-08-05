@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/use-currency";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, invalidateProductQueries } from "@/lib/queryClient";
 import {
   Table,
   TableBody,
@@ -42,6 +42,8 @@ export default function InventoryTab({ products, productsLoading }: Props) {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editing, setEditing] = useState<Record<string, unknown> | null>(null);
   const [newProduct, setNewProduct] = useState<Record<string, unknown>>({ ...EMPTY_PRODUCT });
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 10;
 
   const { data: lowStockProducts = [] } = useQuery<AdminProduct[]>({
     queryKey: ["/api/admin/low-stock", { threshold: 5 }],
@@ -59,10 +61,26 @@ export default function InventoryTab({ products, productsLoading }: Props) {
   const totalStock = products.reduce((sum, p) => sum + (p.stockQuantity ?? 0), 0);
   const outOfStockCount = products.filter((p) => !p.inStock || (p.stockQuantity ?? 0) === 0).length;
 
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const pageItems = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+
+  const categoryOptions = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const p of products) {
+      if (!p.category) continue;
+      if (!map.has(p.category)) map.set(p.category, new Set());
+      if (p.subcategory) map.get(p.category)!.add(p.subcategory);
+    }
+    return Array.from(map.entries())
+      .map(([name, subs]) => ({ name, subcategories: Array.from(subs).sort() }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [products]);
+
   const addMutation = useMutation({
     mutationFn: (data: Record<string, unknown>) => apiRequest("POST", "/api/products", data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      void invalidateProductQueries();
       toast({ title: "Product Added" });
       setIsAddOpen(false);
       setNewProduct({ ...EMPTY_PRODUCT });
@@ -75,7 +93,7 @@ export default function InventoryTab({ products, productsLoading }: Props) {
     mutationFn: (data: Record<string, unknown>) =>
       apiRequest("PUT", `/api/products/${data.id}`, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      void invalidateProductQueries();
       toast({ title: "Product Updated" });
       setIsEditOpen(false);
     },
@@ -86,7 +104,7 @@ export default function InventoryTab({ products, productsLoading }: Props) {
   const deleteMutation = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/products/${id}`, {}),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      void invalidateProductQueries();
       toast({ title: "Product Deleted" });
     },
   });
@@ -137,7 +155,10 @@ export default function InventoryTab({ products, productsLoading }: Props) {
               placeholder="Search products…"
               className="pl-8"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setPage(0);
+              }}
             />
           </div>
           <div className="flex gap-1">
@@ -147,7 +168,10 @@ export default function InventoryTab({ products, productsLoading }: Props) {
                 variant={stockFilter === f ? "default" : "outline"}
                 size="sm"
                 className="text-xs"
-                onClick={() => setStockFilter(f)}
+                onClick={() => {
+                  setStockFilter(f);
+                  setPage(0);
+                }}
               >
                 {f === "all" ? "All" : f === "low" ? "Low Stock" : "Out of Stock"}
               </Button>
@@ -186,7 +210,7 @@ export default function InventoryTab({ products, productsLoading }: Props) {
                 </TableCell>
               </TableRow>
             ) : (
-              filtered.map((p) => {
+              pageItems.map((p) => {
                 const pct = discountPct(p.price, p.originalPrice);
                 return (
                   <TableRow key={p.id}>
@@ -249,6 +273,36 @@ export default function InventoryTab({ products, productsLoading }: Props) {
             )}
           </TableBody>
         </Table>
+        {!productsLoading && filtered.length > 0 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t">
+            <p className="text-xs text-muted-foreground">
+              Showing {safePage * PAGE_SIZE + 1}–
+              {Math.min((safePage + 1) * PAGE_SIZE, filtered.length)} of {filtered.length} product
+              {filtered.length !== 1 ? "s" : ""}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={safePage === 0}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+              >
+                Previous
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                Page {safePage + 1} of {pageCount}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={safePage >= pageCount - 1}
+                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Add Product Dialog */}
@@ -258,7 +312,11 @@ export default function InventoryTab({ products, productsLoading }: Props) {
             <DialogTitle>Add Product</DialogTitle>
             <DialogDescription>Admin-added products go live immediately.</DialogDescription>
           </DialogHeader>
-          <ProductFormFields data={newProduct} setData={setNewProduct} />
+          <ProductFormFields
+            data={newProduct}
+            setData={setNewProduct}
+            categoryOptions={categoryOptions}
+          />
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAddOpen(false)}>
               Cancel
@@ -284,7 +342,13 @@ export default function InventoryTab({ products, productsLoading }: Props) {
             <DialogTitle>Edit Product</DialogTitle>
             <DialogDescription>Admin edits are saved directly.</DialogDescription>
           </DialogHeader>
-          {editing && <ProductFormFields data={editing} setData={setEditing} />}
+          {editing && (
+            <ProductFormFields
+              data={editing}
+              setData={setEditing}
+              categoryOptions={categoryOptions}
+            />
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditOpen(false)}>
               Cancel

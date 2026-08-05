@@ -55,7 +55,7 @@ import {
   type TeamMember,
   type InsertTeamMember,
 } from "../shared/schema.js";
-import { eq, and, or, sql, gt, gte, lte, ilike, desc, isNull, type SQL } from "drizzle-orm";
+import { eq, and, or, sql, gt, gte, lte, ilike, desc, isNull, count, type SQL } from "drizzle-orm";
 import { IStorage } from "./storage.js";
 
 export class DatabaseStorage implements IStorage {
@@ -115,9 +115,11 @@ export class DatabaseStorage implements IStorage {
     maxPrice?: number;
     minRating?: number;
     inStock?: boolean;
-  }): Promise<{ data: Product[]; nextCursor: number | null }> {
+  }): Promise<{ data: Product[]; nextCursor: number | null; total: number }> {
     const key = cacheKeys.productsList(params);
-    const cached = await cache.get<{ data: Product[]; nextCursor: number | null }>(key);
+    const cached = await cache.get<{ data: Product[]; nextCursor: number | null; total: number }>(
+      key,
+    );
     if (cached) return cached;
 
     const limit = Math.min(params.limit ?? 20, 100);
@@ -161,11 +163,16 @@ export class DatabaseStorage implements IStorage {
       .orderBy(products.id)
       .limit(limit + 1);
 
+    const [countRow] = await db
+      .select({ value: count() })
+      .from(products)
+      .where(and(...conditions));
+
     const hasMore = rows.length > limit;
     const data = hasMore ? rows.slice(0, limit) : rows;
     const nextCursor = hasMore ? data[data.length - 1].id : null;
 
-    const result = { data, nextCursor };
+    const result = { data, nextCursor, total: countRow?.value ?? data.length };
     await cache.set(key, result, CACHE_TTLS.productsList);
     return result;
   }

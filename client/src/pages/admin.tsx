@@ -59,7 +59,7 @@ export default function AdminPage() {
   // ── Queries ──────────────────────────────────────────────────────────────────
   const { data: productsResponse, isLoading: productsLoading } = useQuery<
     AdminProduct[] | { data: AdminProduct[] }
-  >({ queryKey: ["/api/products"] });
+  >({ queryKey: ["/api/admin/products"] });
   const products = Array.isArray(productsResponse)
     ? productsResponse
     : ((productsResponse as { data: AdminProduct[] })?.data ?? []);
