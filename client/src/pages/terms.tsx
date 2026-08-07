@@ -81,7 +81,7 @@ export default function Terms() {
             </div>
           ) : (
             <div className="space-y-6">
-              <p className="text-sm text-gray-500">Last updated: January 1, 2026</p>
+              <p className="text-sm text-gray-500">Last updated: August 6, 2026</p>
 
               <div>
                 <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
@@ -89,103 +89,202 @@ export default function Terms() {
                 </h2>
                 <p className="text-gray-700">
                   By accessing and using RetailTrove, you agree to be bound by these Terms and
-                  Conditions. If you do not agree to these terms, please do not use our platform.
+                  Conditions and our Privacy Policy. If you do not agree, please do not use our
+                  platform.
                 </p>
               </div>
 
               <div>
                 <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
-                  2. Account Registration
+                  2. Eligibility and Account Registration
                 </h2>
                 <p className="text-gray-700">
-                  You must provide accurate and complete information when creating an account. You
-                  are responsible for maintaining the security of your account credentials and for
-                  all activities that occur under your account.
+                  You must be at least 13 years old (or the applicable minimum age in your
+                  jurisdiction) to use our services. You must provide accurate and complete
+                  information when creating an account. You are responsible for safeguarding your
+                  credentials and for all activity that occurs under your account. Notify us
+                  immediately if you suspect unauthorized use.
                 </p>
               </div>
 
               <div>
                 <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
-                  3. Products & Pricing
+                  3. Orders and Payment
                 </h2>
                 <p className="text-gray-700">
-                  All product descriptions, images, and prices are subject to change without notice.
-                  We reserve the right to modify or discontinue any product at any time. We shall
-                  not be liable to you or any third party for any modification, price change,
-                  suspension, or discontinuance of a product.
+                  By placing an order you represent that the information provided is accurate and
+                  that you are authorized to use the chosen payment method. We reserve the right to
+                  refuse or cancel orders for legitimate reasons, including pricing errors, stock
+                  limitations, or suspected fraud. Order totals are verified server-side from our
+                  current prices before payment is initiated, and payment state is advanced only by
+                  verified payment-provider callbacks.
                 </p>
               </div>
 
               <div>
                 <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
-                  4. Orders & Payment
+                  4. Order Confirmation and Receipts
                 </h2>
                 <p className="text-gray-700">
-                  By placing an order, you represent that all information provided is accurate. We
-                  reserve the right to refuse or cancel any order for any reason, including
-                  limitations on quantities available, pricing errors, or suspected fraud. Payment
-                  is processed through our secure payment providers (Lemon Squeezy and M-Pesa).
+                  When you place an order you will receive an order confirmation email, and once
+                  payment succeeds a receipt is issued. For transparency, your account includes a
+                  full order history showing every item purchased, the unit price and quantity of
+                  each line, and the taxes applied to your order total. You may download a receipt
+                  for each order from your account page at any time.
                 </p>
               </div>
 
               <div>
                 <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
-                  5. Shipping & Delivery
+                  5. Pricing, Taxes and Payment Methods
+                </h2>
+                <p className="text-gray-700">
+                  All prices are displayed in US Dollars and include a 10% tax applied at checkout.
+                  We may update prices at any time; the price shown at the moment you confirm an
+                  order is the price you pay. We accept payment through our secure providers — Lemon
+                  Squeezy (card-based checkout) and M-Pesa (Safaricom mobile money). Payments are
+                  processed in real time and recorded with a unique reference on your receipt.
+                </p>
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
+                  6. Loyalty Program
+                </h2>
+                <p className="text-gray-700">
+                  Purchases earn loyalty points (1 point per $1 of order value, rounded up) which
+                  can be redeemed for store credit (100 points = $1). Points are credited after
+                  successful payment and are forfeited if the order is refunded or cancelled.
+                  Participation is subject to our fair-use rules; we may adjust or terminate the
+                  program with notice.
+                </p>
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
+                  7. Shipping and Delivery
                 </h2>
                 <p className="text-gray-700">
                   Shipping times are estimates and may vary based on your location and product
-                  availability. We are not responsible for delays caused by shipping carriers,
-                  customs processing, or events beyond our control.
+                  availability. Once your order ships you will receive a shipping-status email, and
+                  the current status is always visible in your order history. We are not responsible
+                  for delays caused by shipping carriers, customs processing, or events beyond our
+                  control.
                 </p>
               </div>
 
               <div>
                 <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
-                  6. Returns & Refunds
+                  8. Returns, Refunds and Cancellations
                 </h2>
                 <p className="text-gray-700">
-                  You may return most items within 30 days of delivery for a full refund. Items must
-                  be unused and in their original packaging. Digital products and personalized items
-                  are non-refundable. Refunds will be processed to the original payment method
-                  within 5-10 business days.
+                  You may return most physical items within 30 days of delivery for a full refund,
+                  provided they are unused and in original packaging. Digital products and
+                  personalized items are non-refundable. Refunds are processed to the original
+                  payment method within 5–10 business days of approval. If a payment fails or is
+                  refunded, product stock is automatically restored to our inventory.
                 </p>
               </div>
 
               <div>
                 <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
-                  7. Intellectual Property
+                  9. Intellectual Property
                 </h2>
                 <p className="text-gray-700">
                   All content on this platform, including text, graphics, logos, images, and
                   software, is the property of RetailTrove or its content suppliers and is protected
-                  by applicable intellectual property laws.
+                  by applicable intellectual property laws. You may not copy, reproduce, or
+                  redistribute this content without our prior written consent.
                 </p>
               </div>
 
               <div>
                 <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
-                  8. Limitation of Liability
+                  10. User Conduct and Prohibited Activities
                 </h2>
                 <p className="text-gray-700">
-                  RetailTrove shall not be liable for any indirect, incidental, special,
-                  consequential, or punitive damages resulting from your use of or inability to use
-                  our platform or products.
+                  You agree not to misuse the platform: you may not attempt to gain unauthorized
+                  access to accounts or systems, interfere with or overload the service, submit
+                  fraudulent orders or payments, scrape data at scale, or otherwise violate the
+                  security or integrity of the platform. We take fraud and abuse seriously and may
+                  suspend accounts engaged in such activity.
                 </p>
               </div>
 
               <div>
                 <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
-                  9. Changes to Terms
+                  11. Acceptable Use and Security
                 </h2>
                 <p className="text-gray-700">
-                  We reserve the right to update these Terms and Conditions at any time. Changes
-                  will be effective immediately upon posting. Your continued use of the platform
-                  after changes are posted constitutes acceptance of the updated terms.
+                  Our platform employs industry-standard security controls, including rate limiting
+                  and abuse monitoring. You agree not to circumvent these controls or attempt to
+                  probe, bypass, or defeat any security measure. You are responsible for keeping
+                  your login credentials confidential.
                 </p>
               </div>
 
               <div>
-                <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">10. Contact Us</h2>
+                <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
+                  12. Disclaimers and Limitation of Liability
+                </h2>
+                <p className="text-gray-700">
+                  Our platform and products are provided "as is" and "as available" without
+                  warranties of any kind, express or implied, to the maximum extent permitted by
+                  law. To the fullest extent permitted by applicable law, RetailTrove shall not be
+                  liable for any indirect, incidental, special, consequential, or punitive damages
+                  arising from your use of, or inability to use, the platform or products. Nothing
+                  in these terms limits liability that cannot be limited by law.
+                </p>
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
+                  13. Indemnification
+                </h2>
+                <p className="text-gray-700">
+                  You agree to indemnify and hold harmless RetailTrove and its officers, employees,
+                  and agents from and against any claims, damages, liabilities, and expenses arising
+                  out of your use of the platform, your violation of these Terms, or your violation
+                  of any rights of a third party.
+                </p>
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">14. Termination</h2>
+                <p className="text-gray-700">
+                  We may suspend or terminate your access to the platform at any time for breach of
+                  these Terms, fraudulent or abusive behavior, or as required by law. You may close
+                  your account at any time. Termination does not affect rights and obligations that
+                  accrued before termination.
+                </p>
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
+                  15. Governing Law and Disputes
+                </h2>
+                <p className="text-gray-700">
+                  These Terms are governed by the laws of the State of New York, United States,
+                  without regard to its conflict-of-law principles. Any disputes arising from these
+                  Terms or your use of the platform will be resolved through the courts of New York,
+                  subject to any mandatory consumer-protection provisions in your jurisdiction.
+                </p>
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
+                  16. Changes to Terms
+                </h2>
+                <p className="text-gray-700">
+                  We may update these Terms from time to time. Changes take effect when posted on
+                  this page, and the "Last updated" date above reflects the latest revision. Your
+                  continued use of the platform after changes are posted constitutes acceptance of
+                  the updated terms.
+                </p>
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">17. Contact Us</h2>
                 <p className="text-gray-700">
                   If you have any questions about these Terms and Conditions, please contact us at:
                   <br />

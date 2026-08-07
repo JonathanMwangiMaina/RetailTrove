@@ -25,6 +25,7 @@ const Terms = lazy(() => import("@/pages/terms"));
 const LoginPage = lazy(() => import("@/pages/login"));
 const ForgotPasswordPage = lazy(() => import("@/pages/forgot-password"));
 const ResetPasswordPage = lazy(() => import("@/pages/reset-password"));
+const VerifyEmailPage = lazy(() => import("@/pages/verify-email"));
 const AdminPage = lazy(() => import("@/pages/admin"));
 const VendorPage = lazy(() => import("@/pages/vendor"));
 const AccountPage = lazy(() => import("@/pages/account"));
@@ -80,6 +81,7 @@ function Router() {
             <Route path="/login" component={LoginPage} />
             <Route path="/forgot-password" component={ForgotPasswordPage} />
             <Route path="/reset-password" component={ResetPasswordPage} />
+            <Route path="/verify-email" component={VerifyEmailPage} />
             <Route path="/admin" component={AdminPage} />
             <Route path="/vendor" component={VendorPage} />
             <Route path="/account" component={AccountPage} />

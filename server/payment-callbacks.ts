@@ -15,6 +15,76 @@
 import { storage } from "./storage.js";
 import { sendOrderConfirmationEmail, sendOrderStatusEmail } from "./email.js";
 import { awardLoyaltyPointsForOrder } from "./loyalty-service.js";
+import { usdToKes } from "../shared/pricing.js";
+
+/**
+ * Verify that the request originated from an allowlisted Daraja callback IP.
+ * Reads the comma-separated `MPESA_CALLBACK_ALLOWED_IPS` env var (CIDR or exact
+ * IP). When unset, callbacks are accepted (backwards compatible — sandbox
+ * callbacks are simulated), but the deployment should set it to Safaricom's
+ * published Daraja ranges in production. See
+ * https://developer.safaricom.co.ke/DarajaAPI for current ranges.
+ */
+export function isMpesaCallbackAllowedIp(ip: string | undefined): boolean {
+  const raw = process.env.MPESA_CALLBACK_ALLOWED_IPS;
+  if (!raw || raw.trim() === "") return true;
+  if (!ip) return false;
+
+  return raw
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .some((entry) => ipMatches(ip, entry));
+}
+
+function ipMatches(ip: string, entry: string): boolean {
+  if (entry.includes("/")) {
+    const [cidrIp, prefixStr] = entry.split("/");
+    const prefix = Number(prefixStr);
+    if (!Number.isInteger(prefix) || prefix < 0 || prefix > 32) return false;
+    const cidrInt = ipv4ToInt(cidrIp);
+    const ipInt = ipv4ToInt(ip);
+    if (cidrInt === null || ipInt === null) return false;
+    const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0;
+    return (ipInt & mask) === (cidrInt & mask);
+  }
+  return ip === entry;
+}
+
+function ipv4ToInt(ip: string): number | null {
+  const parts = ip.split(".");
+  if (parts.length !== 4) return null;
+  const bytes = parts.map((p) => Number(p));
+  if (bytes.some((b) => !Number.isInteger(b) || b < 0 || b > 255)) return null;
+  return ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) >>> 0;
+}
+
+/**
+ * Expected whole-KES amount a successful M-Pesa callback must report for a
+ * given order, derived from the stored USD total via the shared conversion.
+ */
+export function expectedMpesaAmount(order: { total: string | number | null }): number {
+  return usdToKes(Number(order.total ?? 0));
+}
+
+async function failMpesaOrder(order: { id: number }, reason: string): Promise<void> {
+  const transitioned = await storage.markOrderPaymentStatus(order.id, "pending", "failed");
+  if (!transitioned) {
+    console.log(`[M-Pesa] Order #${order.id} already failed — skipping duplicate`);
+    return;
+  }
+  console.warn(`[M-Pesa] Order #${order.id} payment failed: ${reason}`);
+  try {
+    const items = await storage.getOrderItems(order.id);
+    await sendOrderStatusEmail(transitioned, items, "payment_failed");
+  } catch (sideErr) {
+    console.error(
+      "[M-Pesa] failure email error (order is already failed):",
+      sideErr instanceof Error ? sideErr.message : String(sideErr),
+    );
+  }
+  await storage.releaseOrderStock(order.id);
+}
 
 /**
  * Process a Lemon Squeezy webhook event.
@@ -123,6 +193,23 @@ export async function processMpesaCallback(body: unknown): Promise<void> {
     const receiptNumber =
       typeof receipt === "string" || typeof receipt === "number" ? String(receipt) : undefined;
 
+    // Amount verification: the callback must report the exact whole-KES amount
+    // derived from the stored order total (within a 1-KES rounding tolerance).
+    // A mismatched amount means a provider error or a forged callback — do NOT
+    // accept it as paid; fail the order and release stock instead.
+    const callbackAmount = Number(metadata.Amount);
+    const expected = expectedMpesaAmount(order);
+    if (Number.isFinite(callbackAmount) && Math.abs(callbackAmount - expected) > 1) {
+      console.warn(
+        `[M-Pesa] Order #${order.id} amount mismatch — callback ${callbackAmount} KES, expected ${expected} KES`,
+      );
+      await failMpesaOrder(
+        order,
+        `Amount mismatch (callback ${callbackAmount} vs expected ${expected} KES)`,
+      );
+      return;
+    }
+
     const transitioned = await storage.markOrderPaymentStatus(order.id, "pending", "paid", {
       mpesaReceiptNumber: receiptNumber,
     });
@@ -147,21 +234,5 @@ export async function processMpesaCallback(body: unknown): Promise<void> {
     return;
   }
 
-  const transitioned = await storage.markOrderPaymentStatus(order.id, "pending", "failed");
-  if (!transitioned) {
-    console.log(`[M-Pesa] Order #${order.id} already ${order.paymentStatus} — skipping duplicate`);
-    return;
-  }
-
-  console.warn(`[M-Pesa] Order #${order.id} payment failed: ${ResultDesc} (code: ${ResultCode})`);
-  try {
-    const items = await storage.getOrderItems(order.id);
-    await sendOrderStatusEmail(transitioned, items, "payment_failed");
-  } catch (sideErr) {
-    console.error(
-      "[M-Pesa] failure email error (order is already failed):",
-      sideErr instanceof Error ? sideErr.message : String(sideErr),
-    );
-  }
-  await storage.releaseOrderStock(order.id);
+  await failMpesaOrder(order, `${ResultDesc ?? "STK push failed"} (code: ${String(ResultCode)})`);
 }

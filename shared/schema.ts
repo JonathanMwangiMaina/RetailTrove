@@ -42,6 +42,9 @@ export const users = pgTable("users", {
   isApproved: boolean("is_approved").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   authUserId: uuid("auth_user_id"),
+  emailVerified: boolean("email_verified").notNull().default(false),
+  verificationToken: text("verification_token"),
+  verificationTokenExpiresAt: timestamp("verification_token_expires_at"),
 });
 
 /**
@@ -421,6 +424,10 @@ export const insertUserSchema = createInsertSchema(users, {
   .omit({
     id: true,
     createdAt: true,
+    // Server-controlled: clients can never self-verify or forge tokens.
+    emailVerified: true,
+    verificationToken: true,
+    verificationTokenExpiresAt: true,
   });
 
 export const selectUserSchema = createSelectSchema(users);
@@ -436,6 +443,20 @@ export const insertProductSchema = createInsertSchema(products, {
   id: true,
   createdAt: true,
 });
+
+/**
+ * Client-writable product fields for create/update.
+ * `vendorId`, `approvalStatus`, `id`, `createdAt` are server-controlled and can
+ * never be set from the client (prevents approval/vendor mass assignment).
+ * `featured`/`newArrival` are admin-controlled promotion flags — vendors have
+ * them forced off at the route layer.
+ */
+export const productWriteSchema = insertProductSchema.omit({
+  vendorId: true,
+  approvalStatus: true,
+});
+
+export const productUpdateSchema = productWriteSchema.partial();
 
 export const selectProductSchema = createSelectSchema(products);
 
@@ -479,11 +500,32 @@ export const insertOrderSchema = createInsertSchema(orders, {
   createdAt: true,
 });
 
+/**
+ * Client-writable order fields for `POST /api/orders`.
+ * All payment/shipping state fields are server-controlled:
+ * `paymentStatus` is derived only from provider callbacks, `mpesaReceiptNumber`
+ * only from verified Daraja callbacks, and `shippingStatus` from the fulfilment
+ * workflow — none may be set by the client (prevents payment-status mass
+ * assignment / payment bypass).
+ */
+export const clientOrderSchema = insertOrderSchema.omit({
+  userId: true,
+  paymentStatus: true,
+  paymentProvider: true,
+  stripeSessionId: true,
+  stripePaymentIntentId: true,
+  mpesaReceiptNumber: true,
+  idempotencyKey: true,
+  stockReleased: true,
+  shippingStatus: true,
+  shippedAt: true,
+});
+
 export const selectOrderSchema = createSelectSchema(orders);
 
 export const insertOrderItemSchema = createInsertSchema(orderItems, {
   price: z.string().or(z.number()).optional(),
-  quantity: z.number().int().positive().optional(),
+  quantity: z.number().int().min(1).max(10).optional(),
   variantId: z.number().int().optional(),
   variantName: z.string().max(200).optional(),
 }).omit({
@@ -495,7 +537,7 @@ export const selectOrderItemSchema = createSelectSchema(orderItems);
 // ── Cart Schemas ─────────────────────────────────────────────────────────────
 
 export const insertCartItemSchema = createInsertSchema(cartItems, {
-  quantity: z.number().int().positive().optional(),
+  quantity: z.number().int().min(1).max(10).optional(),
   variantId: z.number().int().optional(),
 }).omit({
   id: true,
@@ -621,7 +663,18 @@ export const selectAuditLogSchema = createSelectSchema(auditLogs);
 
 /** User domain entity types */
 export type User = z.infer<typeof selectUserSchema>;
-export type InsertUser = z.infer<typeof insertUserSchema>;
+
+/**
+ * Insert shape for the users table. The zod `insertUserSchema` deliberately
+ * omits the server-controlled verification fields (client mass-assignment
+ * protection); this intersection adds them back so the storage layer can set
+ * them on registration / resend.
+ */
+export type InsertUser = z.infer<typeof insertUserSchema> & {
+  emailVerified?: boolean;
+  verificationToken?: string | null;
+  verificationTokenExpiresAt?: Date | null;
+};
 
 /** Product catalog domain entity types */
 export type Product = z.infer<typeof selectProductSchema>;

@@ -74,7 +74,14 @@ export function serveStatic(app: Express) {
   }
 
   app.use(express.static(distPath));
-  app.use("*", (_req, res) => {
-    res.sendFile(path.resolve(distPath, "index.html"));
+  app.use("*", (req, res) => {
+    // Only serve the SPA shell for real HTML navigation requests. Other
+    // arbitrary paths (assets, API-like routes, crawlers that don't accept
+    // HTML) get a proper 404 instead of a silent 200.
+    if (req.accepts("html")) {
+      res.sendFile(path.resolve(distPath, "index.html"));
+    } else {
+      res.status(404).json({ message: "Not found" });
+    }
   });
 }

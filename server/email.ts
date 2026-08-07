@@ -247,6 +247,47 @@ export async function sendPasswordResetEmail(email: string, resetUrl: string): P
   }
 }
 
+export async function sendVerificationEmail(email: string, name: string, verificationUrl: string): Promise<void> {
+  try {
+    await deliverEmail({
+      to: email,
+      subject: "Confirm Your Email — RetailTrove",
+      html: emailShell(
+        "Confirm Your Email",
+        `
+        <p style="margin: 0 0 16px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
+          Hi${name ? ` ${name}` : ""}, welcome to RetailTrove.
+        </p>
+        <p style="margin: 0 0 24px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
+          Please confirm that this email address belongs to you before you sign in.
+          The link below expires in <strong>24 hours</strong>.
+        </p>
+        <table cellpadding="0" cellspacing="0" style="margin: 30px 0;">
+          <tr>
+            <td style="background-color: #059669; border-radius: 6px; text-align: center;">
+              <a href="${verificationUrl}" style="display: inline-block; padding: 14px 32px; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 16px;">
+                Confirm My Email
+              </a>
+            </td>
+          </tr>
+        </table>
+        <p style="margin: 24px 0 0 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
+          If you didn't create a RetailTrove account, you can safely ignore this email —
+          no account will become active without this confirmation.
+        </p>
+        <p style="margin: 12px 0 0 0; color: #9ca3af; font-size: 13px; line-height: 1.6;">
+          If the button doesn't work, copy and paste this URL into your browser:<br>
+          <a href="${verificationUrl}" style="color: #3b82f6; word-break: break-all;">${verificationUrl}</a>
+        </p>
+        `,
+      ),
+    });
+    console.log(`Verification email sent to: ${email}`);
+  } catch (error) {
+    console.error("Failed to send verification email:", error);
+  }
+}
+
 /* ============================================================================
  * Transactional Email Helpers
  * ============================================================================ */

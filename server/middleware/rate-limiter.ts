@@ -31,3 +31,19 @@ export const imageLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: "Too many image requests, please try again later." },
 });
+
+export const webhookLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many webhook requests, please try again later." },
+});
+
+export const statusLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many status checks, please try again later." },
+});

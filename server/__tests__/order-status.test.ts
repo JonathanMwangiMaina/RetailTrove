@@ -105,6 +105,9 @@ vi.mock("../payment-service.js", () => ({
     MerchantRequestID: "MERCHANT-1",
     CheckoutRequestID: "CHECKOUT-1",
   })),
+  normalizeKenyanPhone: vi.fn((phone: string) =>
+    phone.startsWith("0") ? "254" + phone.slice(1) : phone,
+  ),
 }));
 
 vi.mock("../email.js", () => ({
@@ -123,9 +126,19 @@ import { registerRoutes } from "../routes.js";
 
 const csrfNoop = (_req: Request, _res: Response, next: NextFunction) => next();
 
-function buildApp(): Express {
+interface SessionStub {
+  userId?: number;
+  authUserId?: string;
+  role?: string;
+}
+
+function buildApp(session: SessionStub = {}): Express {
   const app = express();
   app.use(express.json());
+  app.use((req: Request, _res: Response, next: NextFunction) => {
+    (req as any).session = { ...session };
+    next();
+  });
   registerRoutes(app, csrfNoop);
   return app;
 }
@@ -135,19 +148,36 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe("GET /api/orders/:id/status (public payment-status lookup)", () => {
-  it("returns payment status, provider and receipt for an existing order without auth", async () => {
+describe("GET /api/orders/:id/status (authenticated payment-status lookup)", () => {
+  it("rejects unauthenticated requests (blocks order enumeration)", async () => {
     orders.set(7, {
       id: 7,
       paymentStatus: "paid",
       paymentProvider: "mpesa",
       mpesaReceiptNumber: "QHJ7A1BCDE",
+    });
+
+    const res = await request(buildApp()).get("/api/orders/7/status");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns payment status, provider and receipt for the caller's own order", async () => {
+    orders.set(7, {
+      id: 7,
+      paymentStatus: "paid",
+      paymentProvider: "mpesa",
+      mpesaReceiptNumber: "QHJ7A1BCDE",
+      userId: "auth-customer-1",
       total: "110.00",
       email: "secret@example.com",
       address: "123 Secret St",
     });
 
-    const res = await request(buildApp()).get("/api/orders/7/status").expect(200);
+    const res = await request(
+      buildApp({ userId: 3, authUserId: "auth-customer-1", role: "customer" }),
+    )
+      .get("/api/orders/7/status")
+      .expect(200);
 
     expect(res.body).toEqual({
       id: 7,
@@ -155,28 +185,66 @@ describe("GET /api/orders/:id/status (public payment-status lookup)", () => {
       paymentProvider: "mpesa",
       mpesaReceiptNumber: "QHJ7A1BCDE",
     });
-    // No PII leaks through the public endpoint
+    // No PII leaks through the endpoint
     expect(res.body).not.toHaveProperty("email");
     expect(res.body).not.toHaveProperty("address");
     expect(res.body).not.toHaveProperty("total");
   });
 
-  it("returns pending while payment is still being processed", async () => {
+  it("allows admins to inspect any order", async () => {
+    orders.set(7, {
+      id: 7,
+      paymentStatus: "paid",
+      paymentProvider: "mpesa",
+      userId: "auth-other-user",
+    });
+
+    const res = await request(buildApp({ userId: 1, authUserId: "auth-admin", role: "admin" }))
+      .get("/api/orders/7/status")
+      .expect(200);
+
+    expect(res.body.paymentStatus).toBe("paid");
+  });
+
+  it("rejects access to another user's order", async () => {
+    orders.set(7, {
+      id: 7,
+      paymentStatus: "paid",
+      paymentProvider: "mpesa",
+      userId: "auth-victim",
+    });
+
+    const res = await request(
+      buildApp({ userId: 3, authUserId: "auth-attacker", role: "customer" }),
+    )
+      .get("/api/orders/7/status")
+      .expect(403);
+  });
+
+  it("allows authenticated users to see legacy orders without a bound user", async () => {
     orders.set(8, { id: 8, paymentStatus: "pending", paymentProvider: "mpesa" });
 
-    const res = await request(buildApp()).get("/api/orders/8/status").expect(200);
+    const res = await request(
+      buildApp({ userId: 3, authUserId: "auth-customer-1", role: "customer" }),
+    )
+      .get("/api/orders/8/status")
+      .expect(200);
 
     expect(res.body.paymentStatus).toBe("pending");
   });
 
   it("returns 404 for an unknown order", async () => {
-    const res = await request(buildApp()).get("/api/orders/999/status");
+    const res = await request(buildApp({ userId: 1, authUserId: "auth-admin", role: "admin" })).get(
+      "/api/orders/999/status",
+    );
     expect(res.status).toBe(404);
     expect(res.body.message).toBe("Order not found");
   });
 
   it("returns 400 for a non-numeric order id", async () => {
-    const res = await request(buildApp()).get("/api/orders/abc/status");
+    const res = await request(buildApp({ userId: 1, authUserId: "auth-admin", role: "admin" })).get(
+      "/api/orders/abc/status",
+    );
     expect(res.status).toBe(400);
     expect(res.body.message).toBe("Invalid order ID");
   });

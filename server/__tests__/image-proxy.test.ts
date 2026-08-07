@@ -61,12 +61,13 @@ describe("GET /api/image", () => {
   it("returns 400 when url is missing", async () => {
     const res = await request(makeApp()).get("/api/image");
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe("Missing 'url' query parameter");
+    expect(res.body.error).toBe("Invalid image request");
   });
 
   it("returns 400 for invalid URLs", async () => {
     const res = await request(makeApp()).get("/api/image").query({ url: "not-a-url" });
     expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Invalid image request");
   });
 
   it("returns 400 for non-http protocols", async () => {
@@ -80,6 +81,7 @@ describe("GET /api/image", () => {
       .get("/api/image")
       .query({ url: "https://example.com/logo.svg" });
     expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Invalid image request");
     expect(mocks.lookup).not.toHaveBeenCalled();
   });
 
@@ -90,7 +92,8 @@ describe("GET /api/image", () => {
     const res = await request(makeApp())
       .get("/api/image")
       .query({ url: "http://metadata.local/creds" });
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Invalid image request");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -138,16 +141,17 @@ describe("GET /api/image", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("returns 502 when the source fetch fails", async () => {
+  it("returns 400 when the source fetch fails", async () => {
     stubPublicDns();
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("network error")));
     const res = await request(makeApp())
       .get("/api/image")
       .query({ url: "https://images.unsplash.com/photo-1" });
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Invalid image request");
   });
 
-  it("returns 502 when the source is larger than the cap", async () => {
+  it("returns 400 when the source is larger than the cap", async () => {
     stubPublicDns();
     vi.stubGlobal(
       "fetch",
@@ -161,10 +165,11 @@ describe("GET /api/image", () => {
     const res = await request(makeApp())
       .get("/api/image")
       .query({ url: "https://images.unsplash.com/huge" });
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Invalid image request");
   });
 
-  it("returns 502 for undecodable payloads", async () => {
+  it("returns 400 for undecodable payloads", async () => {
     stubPublicDns();
     const junk = Buffer.from("definitely not an image");
     vi.stubGlobal(
@@ -178,6 +183,24 @@ describe("GET /api/image", () => {
     const res = await request(makeApp())
       .get("/api/image")
       .query({ url: "https://images.unsplash.com/junk" });
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Invalid image request");
+  });
+
+  it("returns an identical error body for every failure mode (no reachability oracle)", async () => {
+    stubPublicDns();
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("network error")));
+    const failing = await request(makeApp())
+      .get("/api/image")
+      .query({ url: "https://images.unsplash.com/photo-1" });
+    const blocked = await request(makeApp())
+      .get("/api/image")
+      .query({ url: "http://metadata.local/creds" });
+    const invalid = await request(makeApp()).get("/api/image").query({ url: "not-a-url" });
+    expect(failing.status).toBe(400);
+    expect(blocked.status).toBe(400);
+    expect(invalid.status).toBe(400);
+    expect(failing.body).toEqual(blocked.body);
+    expect(blocked.body).toEqual(invalid.body);
   });
 });

@@ -7,6 +7,61 @@ This project does not currently use semantic versioning — entries are dated.
 
 ---
 
+## [v0.10.0] — Security Remediation + Email Verification + Order Receipts (2026-08-07)
+
+### Security — Findings-driven hardening (external pentest)
+- **Product write authorization (F1):** `POST/PUT/DELETE /api/products` + variant/image mutations now require admin/vendor role (`isProductWriteRole`) and are rate-limited (`writeLimiter`). Vendors are forced through the pending-approval workflow — `approvalStatus`, `vendorId`, `featured`, `newArrival` are server-controlled and never client-supplied. Writes use field-whitelisting schemas (`productWriteSchema`/`productUpdateSchema`).
+- **Payment-field mass assignment blocked (F2):** order creation parses via `clientOrderSchema` — `paymentStatus`, `paymentProvider`, `mpesaReceiptNumber`, `shippingStatus`, `idempotencyKey`, `userId` are stripped and server-controlled; totals are always recomputed server-side.
+- **Order/status authorization (F3):** `/api/orders/:id/status` is now `requireAuth` + `statusLimiter` + ownership-gated (admins any order; users their own, legacy unbound orders remain accessible). New authenticated `GET /api/orders/:id/receipt` (HTML download, same ownership model). `/api/faqs/all` and `PUT/DELETE /api/faqs/:id` are admin-only.
+- **M-Pesa callback authenticity (F4):** callbacks verify the caller IP against `MPESA_CALLBACK_ALLOWED_IPS` (CIDR/exact; unset = sandbox accept) before processing; non-allowlisted callers get 403 `{ResultCode:1}`.
+- **Session lifecycle (F9):** rolling sessions with 30-minute idle timeout (`SESSION_IDLE_MS`) + hard absolute cap (24 h, `SESSION_ABSOLUTE_MS`) enforced by `enforceSessionAbsoluteTimeout` middleware; session `createdAt` persisted on first authentication.
+- **Cart ownership (F5/F6):** guest carts are bound to the authenticated user server-side (`adoptCart`) and cross-session access rejected via `authUserId`; cart IDs now use `crypto.randomUUID()`.
+- **Stock availability (F11):** order creation returns 400 `Insufficient stock` when quantity exceeds available (route-level pre-check + atomic re-check inside the `createOrder` transaction).
+- **SPA 404 (F12):** prerender edge now serves real 404s for non-allowlisted paths instead of the app shell (bots and users).
+- **Additional hardening:** checkout initiation rejects non-`pending` orders (409, prevents double-charge); M-Pesa amount uses the real `usdToKes` conversion (was raw USD) + Kenyan phone normalization/validation; visit tracking sanitizes paths (HTML/control chars stripped, ≤ 2048 chars); image proxy returns a uniform error (no SSRF reachability oracle); health endpoint no longer leaks version/uptime; `webhookLimiter`/`statusLimiter` rate limiters added.
+
+### Added — Email verification (migration 0012)
+- New accounts are created `email_verified = false` with a 24-hour verification token; sign-in is blocked until the confirmation link is clicked (prevents phantom registrations). `POST /api/auth/verify-email` endpoint + `/verify-email` page. Existing accounts grandfathered (`email_verified = true`).
+
+### Added — Customer order history + receipts
+- `GET /api/orders` is now paginated and enriched with line items + a transparent subtotal/tax/total breakdown (`server/receipt.ts` `orderBreakdown`, tax is the residual so receipts always reconcile with the charged total). Downloadable HTML receipt per order via `GET /api/orders/:id/receipt`. New account `order-history.tsx` panel.
+
+### Added — Legal policies rewrite (migration 0011)
+- GDPR/UK-GDPR-aligned 16-section Privacy Policy and 17-section Terms of Service (data minimization, lawful bases, PCI note, retention, breach notification, international transfers, children's privacy, etc.) seeded into `site_content`; canonical text lives in `server/legal-content.ts`.
+
+### Added — Pricing source of truth
+- `shared/pricing.ts` — `KES_PER_USD = 129.38` with `usdToKes`/`kesToUsd` used by M-Pesa STK Push amounts, catalog display, and receipt breakdowns.
+
+### Ops
+- CI gained a `security` job (`npm audit --omit=dev --audit-level=high`); `build` now depends on `[lint, typecheck, test, security]`.
+- `npm audit fix` applied: 4 advisories resolved (2 high) — production dependency tree is now clean (`npm audit --omit=dev` = 0). 4 moderate dev-only advisories remain (drizzle-kit's bundled esbuild ≤ 0.24.2; fix requires a breaking drizzle-kit upgrade) — intentionally left.
+- Migrations `0010` (unique newsletter email index), `0011` (legal policies), `0012` (email verification) applied to production 2026-08-07; `0013` (RLS/PCI hardening) verified already live (all policy names present, grants/column revokes confirmed).
+- Version bumped to **0.10.0**.
+
+### Verified
+- `tsc --noEmit`: 0 errors · `vitest run`: **209/209 passing (20 files)** · `eslint`: 0 errors (114 pre-existing warnings) · `prettier --check`: clean · `vite build`: success
+
+## [v0.9.2] — Vendor Catalogue Imports + Admin/Vendor UX + E2E Credential Security (2026-08-05)
+
+### Added — Vendor product data imports
+- `migrations/0008_add_eastmatt_promo_products.sql` — imported **48 EastMatt promo products** (`vendor_id=20`, EastMatt vendor account) into production.
+- `migrations/0009_add_magunas_promo_products.sql` — imported **51 Magunas promo products** (`vendor_id=2`) into production; product images optimized to WebP in `client/public/images/magunas/`.
+- All 99 imported products approved through the admin UI (`GET /api/csrf-token` + `x-csrf-token` header per approve PUT — the CSRF-protected approval flow). Production now has **133 products, 99 from vendor submissions**, with 0 pending.
+
+### Added — Admin & vendor UX
+- In-tab pagination for admin tables (fresh shop counts, inventory pagination).
+- Vendor category + subcategory dropdowns on product forms; admin category/subcategory dropdowns.
+
+### Security — E2E credentials no longer committed
+- `e2e/benchmark-checkout.spec.ts` removed hardcoded `vendor123`/`vendor@retailtrove.com` fallbacks; credentials are now resolved at runtime via `resolveCredentials(role, required)` reading stdin with `node:readline` (prompts on console, throws when stdin is not a TTY or blank). No shell scripts tracked in the repository.
+
+### Ops
+- Version reconciled at **0.9.2** (`package.json`, `package-lock.json`, `api/index.ts`, `server/index.ts`) — the v0.9.1 changelog entry (slider + lockfile guard) shipped without a version-string bump; 0.9.2 covers the post-0.9.1 work and aligns the health endpoint.
+- Documentation refreshed: `README.md` (v0.9.2, 148 tests, env-management reality), `docs/adr/README.md` (ADR-009 row), `AGENTS.md` session notes.
+
+### Verified
+- `tsc --noEmit`: 0 errors · `vitest run`: 148/148 (17 files) · `eslint`: 0 errors (pre-existing warnings only) · `prettier --check`: clean · `vite build`: success
+
 ## [v0.9.1] — P3 Slider + Vercel Build Fix + Package Guard (2026-08-04)
 
 ### P3 — Shop price slider (last planned P3 item)

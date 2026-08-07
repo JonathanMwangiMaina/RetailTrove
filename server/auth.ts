@@ -9,7 +9,7 @@ import crypto from "crypto";
 import zxcvbn from "zxcvbn";
 import { storage } from "./storage.js";
 import { insertUserSchema } from "../shared/schema.js";
-import { sendPasswordResetEmail } from "./email.js";
+import { sendPasswordResetEmail, sendVerificationEmail } from "./email.js";
 import { authLimiter } from "./middleware/rate-limiter.js";
 
 /* ============================================================================
@@ -21,6 +21,7 @@ declare module "express-session" {
     userId: number;
     authUserId?: string;
     role: string;
+    createdAt?: number;
   }
 }
 
@@ -72,7 +73,8 @@ export function setupAuth(app: Express) {
 
       const existingUser = await storage.getUserByEmail(parsedInput.email);
       if (existingUser) {
-        return res.status(400).json({ message: "An account with this email already exists" });
+        // Generic message — do not reveal whether the email is already registered.
+        return res.status(400).json({ message: "Unable to create account" });
       }
 
       if (!parsedInput.password) {
@@ -81,35 +83,145 @@ export function setupAuth(app: Express) {
 
       const strength = zxcvbn(parsedInput.password);
       if (strength.score < 2) {
-        return res
-          .status(400)
-          .json({
-            message: "Password is too weak. Please use a mix of letters, numbers, and symbols.",
-          });
+        return res.status(400).json({
+          message: "Password is too weak. Please use a mix of letters, numbers, and symbols.",
+        });
       }
 
       const passwordHash = await hashPassword(parsedInput.password);
 
-      const newUser = await storage.createUser({
+      // Email verification stage: the account is created UNVERIFIED and cannot
+      // be used until the confirmation link is clicked. This stops spoofed
+      // registrations on addresses the registrant doesn't control from becoming
+      // active (phantom-user accounts). A 24-hour token is emailed; the account
+      // stays dormant until verified.
+      const verificationToken = crypto.randomBytes(32).toString("hex");
+      const verificationTokenExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      await storage.createUser({
         email: parsedInput.email,
         name: parsedInput.name || "",
         passwordHash,
         role: "customer",
         authUserId: req.body.authUserId || crypto.randomUUID(),
+        emailVerified: false,
+        verificationToken,
+        verificationTokenExpiresAt,
       });
 
-      req.session.userId = newUser.id;
-      req.session.authUserId = newUser.authUserId || undefined;
-      req.session.role = newUser.role || "customer";
+      const baseUrl =
+        process.env.APP_URL ||
+        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:5000");
+      const verificationUrl = `${baseUrl}/verify-email?token=${verificationToken}`;
 
-      const { passwordHash: _, ...sanitizedUser } = newUser as Record<string, any>;
-      res.status(201).json(sanitizedUser);
+      await sendVerificationEmail(parsedInput.email, parsedInput.name || "", verificationUrl);
+
+      // Deliberately NO auto-login and NO session: the user must first prove
+      // control of the email address.
+      res.status(201).json({
+        message: "Account created! Check your inbox for the confirmation link.",
+        requiresVerification: true,
+      });
     } catch (error: any) {
       console.error("Error during registration:", error);
       if (error instanceof Error && error.message.includes("duplicate key")) {
-        return res.status(400).json({ message: "An account with this email already exists" });
+        return res.status(400).json({ message: "Unable to create account" });
       }
       res.status(400).json({ message: "Failed to register user" });
+    }
+  };
+
+  const handleVerifyEmail = async (req: Request, res: Response) => {
+    try {
+      const { token } = req.body;
+      if (!token || typeof token !== "string") {
+        return res.status(400).json({ message: "A verification token is required" });
+      }
+
+      const user = await storage.getUserByVerificationToken(token);
+      if (!user) {
+        return res.status(400).json({ message: "This confirmation link is invalid" });
+      }
+
+      if (user.emailVerified) {
+        // Already verified — idempotent success.
+        const { passwordHash: _, ...sanitizedUser } = user as Record<string, any>;
+        req.session.regenerate((err) => {
+          if (err) {
+            console.error("Session regeneration failed after verification:", err);
+          }
+          req.session.userId = user.id;
+          req.session.authUserId = user.authUserId || undefined;
+          req.session.role = user.role || "customer";
+          res.json(sanitizedUser);
+        });
+        return;
+      }
+
+      if (
+        user.verificationTokenExpiresAt &&
+        new Date() > new Date(user.verificationTokenExpiresAt)
+      ) {
+        return res.status(400).json({
+          message: "This confirmation link has expired. Please request a new one.",
+          code: "VERIFICATION_EXPIRED",
+        });
+      }
+
+      const verified = await storage.markEmailVerified(user.id);
+      if (!verified) {
+        return res.status(500).json({ message: "Failed to verify email" });
+      }
+
+      const { passwordHash: _ph, ...sanitizedUser } = verified as Record<string, any>;
+
+      // Verification is the final step of registration — log the user in now.
+      req.session.regenerate((err) => {
+        if (err) {
+          console.error("Session regeneration failed after verification:", err);
+        }
+        req.session.userId = verified.id;
+        req.session.authUserId = verified.authUserId || undefined;
+        req.session.role = verified.role || "customer";
+        res.json(sanitizedUser);
+      });
+    } catch (error) {
+      console.error("Error during email verification:", error);
+      res.status(500).json({ message: "Failed to verify email" });
+    }
+  };
+
+  const handleResendVerification = async (req: Request, res: Response) => {
+    try {
+      const { email } = req.body;
+      if (!email || typeof email !== "string") {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      const user = await storage.getUserByEmail(email.toLowerCase());
+
+      // Always return success — do not reveal whether the address is registered
+      // or already verified (anti-enumeration).
+      if (user && !user.emailVerified) {
+        const verificationToken = crypto.randomBytes(32).toString("hex");
+        const verificationTokenExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        await storage.updateUser(user.id, { verificationToken, verificationTokenExpiresAt });
+
+        const baseUrl =
+          process.env.APP_URL ||
+          (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:5000");
+        const verificationUrl = `${baseUrl}/verify-email?token=${verificationToken}`;
+        await sendVerificationEmail(email, user.name || "", verificationUrl);
+      }
+
+      res.json({
+        message: "If the account is unverified, a fresh confirmation link has been sent.",
+      });
+    } catch (error) {
+      console.error("Error resending verification:", error);
+      res.json({
+        message: "If the account is unverified, a fresh confirmation link has been sent.",
+      });
     }
   };
 
@@ -138,12 +250,30 @@ export function setupAuth(app: Express) {
         return res.status(401).json({ message: "Invalid credentials" });
       }
 
-      req.session.userId = user.id;
-      req.session.authUserId = user.authUserId || undefined;
-      req.session.role = user.role || "customer";
+      // Email verification gate: unverified accounts cannot sign in, so a
+      // spoofed registration on an address the attacker doesn't control can
+      // never be used (phantom-user protection). The confirmation link is the
+      // only way to activate the account.
+      if (user.emailVerified === false) {
+        return res.status(403).json({
+          code: "EMAIL_NOT_VERIFIED",
+          message:
+            "Please verify your email before signing in. Check your inbox for the confirmation link.",
+        });
+      }
 
       const { passwordHash: _, ...sanitizedUser } = user as Record<string, any>;
-      res.json(sanitizedUser);
+
+      // Regenerate the session id on privilege change to prevent session fixation.
+      req.session.regenerate((err) => {
+        if (err) {
+          console.error("Session regeneration failed after login:", err);
+        }
+        req.session.userId = user.id;
+        req.session.authUserId = user.authUserId || undefined;
+        req.session.role = user.role || "customer";
+        res.json(sanitizedUser);
+      });
     } catch (error) {
       console.error("Error during login:", error);
       res.status(500).json({ message: "Internal server error during login" });
@@ -209,9 +339,7 @@ export function setupAuth(app: Express) {
 
       const baseUrl =
         process.env.APP_URL ||
-        (process.env.VERCEL_URL
-          ? `https://${process.env.VERCEL_URL}`
-          : "http://localhost:5000");
+        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:5000");
       const resetUrl = `${baseUrl}/reset-password?token=${token}`;
 
       await sendPasswordResetEmail(email, resetUrl);
@@ -237,11 +365,9 @@ export function setupAuth(app: Express) {
 
       const strength = zxcvbn(password);
       if (strength.score < 2) {
-        return res
-          .status(400)
-          .json({
-            message: "Password is too weak. Please use a mix of letters, numbers, and symbols.",
-          });
+        return res.status(400).json({
+          message: "Password is too weak. Please use a mix of letters, numbers, and symbols.",
+        });
       }
 
       const resetToken = await storage.getResetToken(token);
@@ -271,6 +397,8 @@ export function setupAuth(app: Express) {
 
   router.post("/register", authLimiter, handleRegister);
   router.post("/login", authLimiter, handleLogin);
+  router.post("/verify-email", authLimiter, handleVerifyEmail);
+  router.post("/resend-verification", authLimiter, handleResendVerification);
   router.get("/me", handleGetCurrentUser);
   router.post("/logout", handleLogout);
   router.post("/forgot-password", authLimiter, handleForgotPassword);

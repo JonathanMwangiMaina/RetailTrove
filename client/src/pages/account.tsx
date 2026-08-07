@@ -3,6 +3,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import { Loader2 } from "lucide-react";
 import LoyaltyDashboard from "@/components/loyalty/loyalty-dashboard";
+import OrderHistory from "@/components/orders/order-history";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function AccountPage() {
   useEffect(() => {
@@ -27,7 +29,18 @@ export default function AccountPage() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-6">My Account</h1>
-      <LoyaltyDashboard />
+      <Tabs defaultValue="orders">
+        <TabsList>
+          <TabsTrigger value="orders">Order History</TabsTrigger>
+          <TabsTrigger value="loyalty">Loyalty Program</TabsTrigger>
+        </TabsList>
+        <TabsContent value="orders">
+          <OrderHistory />
+        </TabsContent>
+        <TabsContent value="loyalty">
+          <LoyaltyDashboard />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

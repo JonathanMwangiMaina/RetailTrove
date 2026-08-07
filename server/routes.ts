@@ -8,16 +8,51 @@ import {
   insertCartItemSchema,
   insertProductVariantSchema,
   insertProductImageSchema,
+  productWriteSchema,
+  productUpdateSchema,
+  clientOrderSchema,
+  type InsertOrder,
+  type InsertProduct,
 } from "../shared/schema.js";
 import { requireAuth, requireRole } from "./auth.js";
 import crypto from "crypto";
 import { z } from "zod";
-import { writeLimiter } from "./middleware/rate-limiter.js";
+import { writeLimiter, statusLimiter } from "./middleware/rate-limiter.js";
 import { logAudit } from "./middleware/audit.js";
-import { createLemonSqueezyCheckout, initiateMpesaStkPush } from "./payment-service.js";
+import { orderBreakdown, buildOrderReceiptHtml } from "./receipt.js";
+import {
+  createLemonSqueezyCheckout,
+  initiateMpesaStkPush,
+  normalizeKenyanPhone,
+} from "./payment-service.js";
+import { usdToKes } from "../shared/pricing.js";
 import { sendShippingStatusEmail } from "./email.js";
 
 type CsrfMiddleware = (req: Request, res: Response, next: NextFunction) => void;
+
+/**
+ * Absolute session lifetime enforcement (shared by dev + serverless entries).
+ * Runs after express-session. Idle expiry is handled by the rolling cookie
+ * maxAge; this middleware enforces the hard absolute cap (24 h by default) so a
+ * session can never live longer than `SESSION_ABSOLUTE_MS` even with activity.
+ * The session's creation time is persisted the first time a user authenticates.
+ */
+function enforceSessionAbsoluteTimeout(req: Request, res: Response, next: NextFunction): void {
+  const session = req.session;
+  if (session && (session.authUserId || session.userId)) {
+    const absoluteMs = Number(process.env.SESSION_ABSOLUTE_MS ?? 24 * 60 * 60 * 1000);
+    if (typeof session.createdAt !== "number") {
+      session.createdAt = Date.now();
+    } else if (Date.now() - session.createdAt > absoluteMs) {
+      session.destroy((err) => {
+        if (err) console.error("[Session] absolute timeout destroy failed:", err);
+      });
+      res.status(401).json({ message: "Session expired — please sign in again" });
+      return;
+    }
+  }
+  next();
+}
 
 export async function registerRoutes(app: Express, csrfProtection: CsrfMiddleware): Promise<void> {
   const router = express.Router();
@@ -38,6 +73,39 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
   const post = addCsrf("post") as typeof router.post;
   const put = addCsrf("put") as typeof router.put;
   const del = addCsrf("delete") as typeof router.delete;
+
+  // ── Authorization helpers ────────────────────────────────────────────────
+  // Product/catalog writes are restricted to admin + vendor roles. Vendors are
+  // additionally scoped to their own products (vendorId ownership) and forced
+  // through the pending-approval workflow.
+  function isProductWriteRole(req: Request): boolean {
+    const role = req.session?.role;
+    return role === "admin" || role === "vendor";
+  }
+
+  function isAdmin(req: Request): boolean {
+    return req.session?.role === "admin";
+  }
+
+  // Verifies the authenticated user may initiate payment for an order:
+  // admins may do so for any order; non-admins only for their own orders
+  // (legacy orders predating user binding remain accessible). Already-paid
+  // orders cannot be charged again.
+  function assertCheckoutAccess(
+    req: Request,
+    order: { userId?: string | null; paymentStatus?: string | null },
+    res: Response,
+  ): boolean {
+    if (!isAdmin(req) && order.userId && order.userId !== req.session.authUserId) {
+      res.status(403).json({ message: "You do not have access to this order" });
+      return false;
+    }
+    if (order.paymentStatus && order.paymentStatus !== "pending") {
+      res.status(409).json({ message: "This order can no longer be paid" });
+      return false;
+    }
+    return true;
+  }
 
   // ── Product Routes ──────────────────────────────────────────────────────────
 
@@ -163,15 +231,31 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     }
   });
 
-  post("/products", requireAuth, async (req: Request, res: Response) => {
+  post("/products", writeLimiter, requireAuth, async (req: Request, res: Response) => {
     try {
-      const validatedData = insertProductSchema.parse(req.body);
-      const role = req.session.role;
-      if (role === "vendor") {
-        validatedData.approvalStatus = "pending";
-        (validatedData as any).vendorId = req.session.userId;
+      if (!isProductWriteRole(req)) {
+        return res
+          .status(403)
+          .json({ message: "Only administrators and vendors can create products" });
       }
-      const newProduct = await storage.createProduct(validatedData);
+
+      // Whitelist client-writable fields — vendorId/approvalStatus are
+      // server-controlled and cannot be supplied by the client.
+      const validatedData = productWriteSchema.parse(req.body);
+
+      // approvalStatus / vendorId are server-controlled. Vendors' submissions
+      // always enter the queue as pending with promotion flags forced off.
+      const productForDb: InsertProduct = {
+        ...validatedData,
+        approvalStatus: isAdmin(req) ? "approved" : "pending",
+      };
+      if (!isAdmin(req)) {
+        productForDb.vendorId = req.session.userId;
+        productForDb.featured = false;
+        productForDb.newArrival = false;
+      }
+
+      const newProduct = await storage.createProduct(productForDb);
       logAudit(req, { action: "product_created", entityType: "product", entityId: newProduct.id });
       res.status(201).json(newProduct);
     } catch (error) {
@@ -183,8 +267,14 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     }
   });
 
-  put("/products/:id", requireAuth, async (req: Request, res: Response) => {
+  put("/products/:id", writeLimiter, requireAuth, async (req: Request, res: Response) => {
     try {
+      if (!isProductWriteRole(req)) {
+        return res
+          .status(403)
+          .json({ message: "Only administrators and vendors can modify products" });
+      }
+
       const id = parseInt(req.params.id, 10);
       if (isNaN(id)) {
         return res.status(400).json({ message: "Invalid product ID format" });
@@ -200,17 +290,34 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
         return res.status(403).json({ message: "You can only edit your own products" });
       }
 
-      const updated = await storage.updateProduct(id, req.body);
+      // Whitelist client-writable fields. Promo flags are admin-only; vendors
+      // always have them forced off. approvalStatus/vendorId are stripped.
+      const validated = productUpdateSchema.parse(req.body);
+      if (role === "vendor") {
+        validated.featured = false;
+        validated.newArrival = false;
+      }
+
+      const updated = await storage.updateProduct(id, validated);
       logAudit(req, { action: "product_updated", entityType: "product", entityId: id });
       res.json(updated);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
       console.error(`Error updating product ${req.params.id}:`, error);
       res.status(500).json({ message: "Failed to update product" });
     }
   });
 
-  del("/products/:id", requireAuth, async (req: Request, res: Response) => {
+  del("/products/:id", writeLimiter, requireAuth, async (req: Request, res: Response) => {
     try {
+      if (!isProductWriteRole(req)) {
+        return res
+          .status(403)
+          .json({ message: "Only administrators and vendors can delete products" });
+      }
+
       const id = parseInt(req.params.id, 10);
       if (isNaN(id)) {
         return res.status(400).json({ message: "Invalid product ID format" });
@@ -239,6 +346,11 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
 
   post("/products/:id/variants", writeLimiter, requireAuth, async (req: Request, res: Response) => {
     try {
+      if (!isProductWriteRole(req)) {
+        return res
+          .status(403)
+          .json({ message: "Only administrators and vendors can modify products" });
+      }
       const productId = parseInt(req.params.id, 10);
       if (isNaN(productId)) {
         return res.status(400).json({ message: "Invalid product ID format" });
@@ -270,6 +382,11 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     requireAuth,
     async (req: Request, res: Response) => {
       try {
+        if (!isProductWriteRole(req)) {
+          return res
+            .status(403)
+            .json({ message: "Only administrators and vendors can modify products" });
+        }
         const productId = parseInt(req.params.id, 10);
         const variantId = parseInt(req.params.variantId, 10);
         if (isNaN(productId) || isNaN(variantId)) {
@@ -307,6 +424,11 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     requireAuth,
     async (req: Request, res: Response) => {
       try {
+        if (!isProductWriteRole(req)) {
+          return res
+            .status(403)
+            .json({ message: "Only administrators and vendors can modify products" });
+        }
         const productId = parseInt(req.params.id, 10);
         const variantId = parseInt(req.params.variantId, 10);
         if (isNaN(productId) || isNaN(variantId)) {
@@ -335,6 +457,11 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
 
   post("/products/:id/images", writeLimiter, requireAuth, async (req: Request, res: Response) => {
     try {
+      if (!isProductWriteRole(req)) {
+        return res
+          .status(403)
+          .json({ message: "Only administrators and vendors can modify products" });
+      }
       const productId = parseInt(req.params.id, 10);
       if (isNaN(productId)) {
         return res.status(400).json({ message: "Invalid product ID format" });
@@ -366,6 +493,11 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     requireAuth,
     async (req: Request, res: Response) => {
       try {
+        if (!isProductWriteRole(req)) {
+          return res
+            .status(403)
+            .json({ message: "Only administrators and vendors can modify products" });
+        }
         const productId = parseInt(req.params.id, 10);
         const imageId = parseInt(req.params.imageId, 10);
         if (isNaN(productId) || isNaN(imageId)) {
@@ -395,6 +527,11 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     requireAuth,
     async (req: Request, res: Response) => {
       try {
+        if (!isProductWriteRole(req)) {
+          return res
+            .status(403)
+            .json({ message: "Only administrators and vendors can modify products" });
+        }
         const productId = parseInt(req.params.id, 10);
         const imageId = parseInt(req.params.imageId, 10);
         if (isNaN(productId) || isNaN(imageId)) {
@@ -409,6 +546,12 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
           return res.status(403).json({ message: "You can only edit your own products" });
         }
         await storage.setPrimaryProductImage(productId, imageId);
+        logAudit(req, {
+          action: "image_primary_set",
+          entityType: "product",
+          entityId: productId,
+          changes: { imageId },
+        });
         res.json({ message: "Primary image updated" });
       } catch (error) {
         console.error(`Error setting primary image ${req.params.imageId}:`, error);
@@ -427,6 +570,21 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     try {
       const cartId = req.params.cartId;
       const cart = await storage.getCart(cartId);
+
+      // Ownership: an authenticated user may only access a cart that is either
+      // unbound (guest cart) or already bound to them. Binds unbound carts to
+      // the session user so cross-session access is rejected from now on.
+      if (req.session?.authUserId) {
+        for (const item of cart) {
+          if (item.userId && item.userId !== req.session.authUserId) {
+            return res.status(403).json({ message: "You do not have access to this cart" });
+          }
+        }
+        if (cart.length > 0) {
+          await storage.adoptCart(cartId, req.session.authUserId);
+        }
+      }
+
       res.json(cart);
     } catch (error) {
       console.error(`Error fetching cart ${req.params.cartId}:`, error);
@@ -437,6 +595,15 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
   post("/cart", writeLimiter, async (req: Request, res: Response) => {
     try {
       const validated = insertCartItemSchema.parse(req.body);
+
+      // Bind the item (and any guest items sharing this cart) to the
+      // authenticated user so cross-session access is blocked server-side.
+      if (req.session?.authUserId) {
+        validated.userId = req.session.authUserId;
+        if (validated.cartId) {
+          await storage.adoptCart(validated.cartId, req.session.authUserId);
+        }
+      }
 
       if (validated.variantId !== undefined && validated.variantId !== null) {
         const variant = await storage.getProductVariantById(validated.variantId);
@@ -473,9 +640,9 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
         return res.status(404).json({ message: "Cart item not found" });
       }
       if (
-        req.session?.userId &&
+        req.session?.authUserId &&
         cartItem.userId &&
-        String(cartItem.userId) !== String(req.session.userId)
+        cartItem.userId !== req.session.authUserId
       ) {
         return res
           .status(403)
@@ -507,9 +674,9 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
         return res.status(404).json({ message: "Cart item not found" });
       }
       if (
-        req.session?.userId &&
+        req.session?.authUserId &&
         cartItem.userId &&
-        String(cartItem.userId) !== String(req.session.userId)
+        cartItem.userId !== req.session.authUserId
       ) {
         return res
           .status(403)
@@ -531,11 +698,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
       const cartItems = await storage.getCart(req.params.cartId);
       if (Array.isArray(cartItems)) {
         for (const item of cartItems) {
-          if (
-            req.session?.userId &&
-            item.userId &&
-            String(item.userId) !== String(req.session.userId)
-          ) {
+          if (req.session?.authUserId && item.userId && item.userId !== req.session.authUserId) {
             return res
               .status(403)
               .json({ message: "You do not have permission to clear this cart" });
@@ -600,7 +763,11 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     try {
       const { order: orderData, items: rawItems } = req.body;
 
-      const validatedOrder = insertOrderSchema.parse(orderData);
+      // Whitelist client-writable fields. paymentStatus / paymentProvider /
+      // mpesaReceiptNumber / shippingStatus / idempotencyKey / userId are
+      // server-controlled and stripped here — the client can never mark an
+      // order "paid" or forge receipts (prevents payment-status mass assignment).
+      const validatedOrder = clientOrderSchema.parse(orderData);
       const validatedItems = rawItems.map((item: any) => insertOrderItemSchema.parse(item));
 
       // ── Server-side total verification ──────────────────────────────────
@@ -629,6 +796,18 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
 
         const qty = item.quantity ?? 1;
         expectedSubtotal += unitPrice * qty;
+
+        // Stock availability: reject orders that would oversell (the DB
+        // transaction re-checks atomically, but a clean 400 here beats a 500).
+        const available =
+          item.variantId !== undefined && item.variantId !== null
+            ? ((await storage.getProductVariantById(item.variantId))?.stockQuantity ?? 0)
+            : (product.stockQuantity ?? 0);
+        if (available < qty) {
+          return res.status(400).json({
+            message: `Insufficient stock for "${item.variantName ?? product.name}" — only ${Math.max(available, 0)} available`,
+          });
+        }
       }
       const expectedTotal = expectedSubtotal * 1.1; // 10 % tax
       const clientTotal = Number(validatedOrder.total ?? 0);
@@ -641,15 +820,20 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
         });
       }
 
-      // Use the server-calculated total
-      validatedOrder.total = expectedTotal.toFixed(2);
-
-      // Link order to Supabase auth user UUID if logged in
+      // Payment/shipping state is server-controlled: always starts at pending
+      // and is advanced only by provider callbacks / the fulfilment workflow.
+      // userId is bound to the authenticated session (never client-supplied).
+      const orderForDb: InsertOrder = {
+        ...validatedOrder,
+        paymentStatus: "pending",
+        shippingStatus: "pending",
+        total: expectedTotal.toFixed(2),
+      };
       if (req.session?.authUserId) {
-        validatedOrder.userId = req.session.authUserId;
+        orderForDb.userId = req.session.authUserId;
       }
 
-      const newOrder = await storage.createOrder(validatedOrder, validatedItems);
+      const newOrder = await storage.createOrder(orderForDb, validatedItems);
 
       logAudit(req, { action: "order_created", entityType: "order", entityId: newOrder.id });
 
@@ -667,35 +851,109 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     }
   });
 
+  // Customer order history: paginated, owned orders enriched with their line
+  // items and a transparent value breakdown (subtotal / tax / total) so users
+  // can see exactly what they paid for and what was deducted.
   router.get("/orders", requireAuth, async (req: Request, res: Response) => {
     try {
+      const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+      const pageSize = Math.min(20, Math.max(1, parseInt(req.query.pageSize as string, 10) || 5));
+
       const orders = await storage.getOrdersByUserId(req.session.authUserId ?? "");
-      res.json(orders);
+      orders.sort(
+        (a, b) =>
+          new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime() ||
+          (b.id ?? 0) - (a.id ?? 0),
+      );
+
+      const total = orders.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      const start = (page - 1) * pageSize;
+      const pageOrders = orders.slice(start, start + pageSize);
+
+      const enriched = await Promise.all(
+        pageOrders.map(async (order) => {
+          const items = await storage.getOrderItems(order.id);
+          const { lineItems, subtotal, tax, total, pointsEarned } = orderBreakdown(order, items);
+          return { ...order, lineItems, subtotal, tax, total, pointsEarned };
+        }),
+      );
+
+      res.json({ orders: enriched, total, page, pageSize, totalPages });
     } catch (error) {
       console.error("Error fetching orders:", error);
-      res.json([]);
+      res.json({ orders: [], total: 0, page: 1, pageSize: 5, totalPages: 1 });
     }
   });
 
-  // Public payment-status lookup — minimal, non-PII fields so the order-confirmation
-  // page can poll for the real payment result (replaces a hardcoded redirect delay).
-  router.get("/orders/:id/status", async (req: Request, res: Response) => {
-    try {
-      const orderId = parseInt(req.params.id, 10);
-      if (isNaN(orderId)) return res.status(400).json({ message: "Invalid order ID" });
-      const order = await storage.getOrderById(orderId);
-      if (!order) return res.status(404).json({ message: "Order not found" });
-      res.json({
-        id: order.id,
-        paymentStatus: order.paymentStatus,
-        paymentProvider: order.paymentProvider,
-        mpesaReceiptNumber: order.mpesaReceiptNumber ?? null,
-      });
-    } catch (error) {
-      console.error("Error fetching order status:", error);
-      res.status(500).json({ message: "Failed to fetch order status" });
-    }
-  });
+  // Payment-status lookup for the order-confirmation page. Requires
+  // authentication and (for user-bound orders) ownership — prevents the
+  // unauthenticated sequential-ID enumeration of customer payment data.
+  router.get(
+    "/orders/:id/status",
+    statusLimiter,
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const orderId = parseInt(req.params.id, 10);
+        if (isNaN(orderId)) return res.status(400).json({ message: "Invalid order ID" });
+        const order = await storage.getOrderById(orderId);
+        if (!order) return res.status(404).json({ message: "Order not found" });
+
+        // Ownership: admins may inspect any order; non-admins may only see
+        // their own (or legacy orders that predate user binding).
+        const isAdminUser = req.session.role === "admin";
+        if (!isAdminUser && order.userId && order.userId !== req.session.authUserId) {
+          return res.status(403).json({ message: "You do not have access to this order" });
+        }
+
+        res.json({
+          id: order.id,
+          paymentStatus: order.paymentStatus,
+          paymentProvider: order.paymentProvider,
+          mpesaReceiptNumber: order.mpesaReceiptNumber ?? null,
+        });
+      } catch (error) {
+        console.error("Error fetching order status:", error);
+        res.status(500).json({ message: "Failed to fetch order status" });
+      }
+    },
+  );
+
+  // Downloadable order receipt. Same ownership model as /orders/:id/status —
+  // admins any order, users only their own (legacy unbound orders remain
+  // accessible). Served as an HTML attachment the customer can print / save as PDF.
+  router.get(
+    "/orders/:id/receipt",
+    statusLimiter,
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const orderId = parseInt(req.params.id, 10);
+        if (isNaN(orderId)) return res.status(400).json({ message: "Invalid order ID" });
+        const order = await storage.getOrderById(orderId);
+        if (!order) return res.status(404).json({ message: "Order not found" });
+
+        const isAdminUser = req.session.role === "admin";
+        if (!isAdminUser && order.userId && order.userId !== req.session.authUserId) {
+          return res.status(403).json({ message: "You do not have access to this order" });
+        }
+
+        const items = await storage.getOrderItems(orderId);
+        const html = buildOrderReceiptHtml(order, items);
+
+        res
+          .status(200)
+          .set("Content-Type", "text/html; charset=utf-8")
+          .set("Content-Disposition", `attachment; filename="RetailTrove-Receipt-${orderId}.html"`)
+          .set("Cache-Control", "no-store")
+          .send(html);
+      } catch (error) {
+        console.error("Error generating receipt:", error);
+        res.status(500).json({ message: "Failed to generate receipt" });
+      }
+    },
+  );
 
   // ── Admin Order Routes ──────────────────────────────────────────────────────
 
@@ -786,6 +1044,15 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
 
       const order = await storage.getOrderById(Number(orderId));
       if (!order) return res.status(404).json({ message: "Order not found" });
+      if (!assertCheckoutAccess(req, order, res)) return;
+
+      // Prevent double-charge: only a pending order may spawn a checkout
+      // session. Paid/refunded/failed orders reject re-initiation.
+      if (order.paymentStatus !== "pending") {
+        return res.status(409).json({
+          message: `This order is already ${order.paymentStatus} — it cannot be paid for again`,
+        });
+      }
 
       const result = await createLemonSqueezyCheckout({
         orderId: order.id,
@@ -829,15 +1096,31 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
       if (!orderId || !phone) {
         return res.status(400).json({ message: "orderId and phone are required" });
       }
+      const normalizedPhone = normalizeKenyanPhone(String(phone));
+      if (!normalizedPhone) {
+        return res
+          .status(400)
+          .json({ message: "Please enter a valid Kenyan mobile number (e.g. 07XXXXXXXX)" });
+      }
 
       const order = await storage.getOrderById(Number(orderId));
       if (!order) return res.status(404).json({ message: "Order not found" });
+      if (!assertCheckoutAccess(req, order, res)) return;
 
-      const kesAmount = Math.round(Number(order.total ?? 0)); // total in USD ≈ KES for demo; real conversion needed in production
+      // Prevent double-charging: only a pending order may be pushed to M-Pesa.
+      // Paid/refunded/failed orders reject re-initiation.
+      if (order.paymentStatus !== "pending") {
+        return res.status(409).json({
+          message: `This order is already ${order.paymentStatus} — it cannot be charged again`,
+        });
+      }
+
+      // Catalog is priced in USD at Kenyan market value; M-Pesa charges whole KES.
+      const kesAmount = usdToKes(Number(order.total ?? 0));
       const accountRef = `RT${order.id}`.slice(0, 12);
 
       const result = await initiateMpesaStkPush({
-        phone,
+        phone: normalizedPhone,
         amount: kesAmount,
         orderId: order.id,
         accountRef,
@@ -856,7 +1139,10 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
         action: "checkout_initiated",
         entityType: "order",
         entityId: order.id,
-        changes: { provider: "mpesa", phone },
+        changes: {
+          provider: "mpesa",
+          phone: `${normalizedPhone.slice(0, 3)}****${normalizedPhone.slice(-3)}`,
+        },
       });
 
       res.json({
@@ -927,6 +1213,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
         role: role || "customer",
         isApproved: true,
         authUserId: crypto.randomUUID(),
+        emailVerified: true,
       });
 
       const { passwordHash: _, ...sanitized } = newUser as Record<string, any>;
@@ -1242,15 +1529,20 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     }
   });
 
-  router.get("/faqs/all", requireAuth, async (_req: Request, res: Response) => {
-    try {
-      const faqs = await storage.getAllFaqs();
-      res.json(faqs);
-    } catch (error) {
-      console.error("Error fetching all FAQs:", error);
-      res.json([]);
-    }
-  });
+  router.get(
+    "/faqs/all",
+    requireAuth,
+    requireRole("admin"),
+    async (_req: Request, res: Response) => {
+      try {
+        const faqs = await storage.getAllFaqs();
+        res.json(faqs);
+      } catch (error) {
+        console.error("Error fetching all FAQs:", error);
+        res.json([]);
+      }
+    },
+  );
 
   router.get("/faqs/mine", requireAuth, async (req: Request, res: Response) => {
     try {
@@ -1262,7 +1554,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     }
   });
 
-  post("/faqs", requireAuth, async (req: Request, res: Response) => {
+  post("/faqs", writeLimiter, requireAuth, async (req: Request, res: Response) => {
     try {
       const validated = insertFaqSchema.parse({
         ...req.body,
@@ -1280,7 +1572,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     }
   });
 
-  put("/faqs/:id", requireAuth, async (req: Request, res: Response) => {
+  put("/faqs/:id", requireAuth, requireRole("admin"), async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id, 10);
       if (isNaN(id)) {
@@ -1302,7 +1594,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     }
   });
 
-  del("/faqs/:id", requireAuth, async (req: Request, res: Response) => {
+  del("/faqs/:id", requireAuth, requireRole("admin"), async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id, 10);
       if (isNaN(id)) {
@@ -1407,10 +1699,21 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
   post("/visits", requireAuth, async (req: Request, res: Response) => {
     try {
       const { path } = req.body;
-      if (!path) {
+      if (typeof path !== "string" || !path) {
         return res.status(400).json({ message: "Path is required" });
       }
-      await storage.recordVisit(req.session.userId!, path);
+      // Sanitize: strip any HTML / control characters and cap the length so
+      // visit records can never be used to store raw markup.
+      const sanitizedPath = [...String(path)]
+        .filter((ch) => {
+          const code = ch.charCodeAt(0);
+          return code > 31 && code !== 127 && ch !== "<" && ch !== ">";
+        })
+        .join("");
+      if (!sanitizedPath || sanitizedPath.length > 2048) {
+        return res.status(400).json({ message: "Invalid path" });
+      }
+      await storage.recordVisit(req.session.userId!, sanitizedPath);
       res.json({ message: "Visit recorded" });
     } catch (error) {
       console.error("Error recording visit:", error);
@@ -1750,5 +2053,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
   );
 
   // ── Mount Sub-router to Express App ────────────────────────────────────────
+  // Absolute session timeout is enforced before any route handler runs.
+  app.use(enforceSessionAbsoluteTimeout);
   app.use("/api", router);
 }

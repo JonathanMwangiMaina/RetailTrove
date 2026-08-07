@@ -83,7 +83,7 @@ export default function Privacy() {
             </div>
           ) : (
             <div className="space-y-6">
-              <p className="text-sm text-gray-500">Last updated: January 1, 2026</p>
+              <p className="text-sm text-gray-500">Last updated: August 6, 2026</p>
 
               <div>
                 <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
@@ -91,8 +91,10 @@ export default function Privacy() {
                 </h2>
                 <p className="text-gray-700">
                   We collect information you provide directly to us, including your name, email
-                  address, shipping address, phone number, and payment information when you create
-                  an account, place an order, or subscribe to our newsletter.
+                  address, shipping address, phone number, and payment details when you create an
+                  account, place an order, or subscribe to our newsletter. We also collect limited
+                  technical information automatically, such as your IP address, browser type, and
+                  pages visited, to operate and improve our services.
                 </p>
               </div>
 
@@ -101,31 +103,36 @@ export default function Privacy() {
                   2. How We Use Your Information
                 </h2>
                 <p className="text-gray-700">
-                  We use the information we collect to process and fulfill orders, communicate with
-                  you about your orders and our services, send promotional emails (if you've
-                  subscribed), improve our products and services, and prevent fraud and abuse.
+                  We use your information to process and fulfil orders, generate and deliver order
+                  receipts, communicate about orders and shipping, operate the loyalty program,
+                  prevent fraud and abuse, and — only where you have subscribed — send promotional
+                  emails. We practice data minimization: we collect and retain only what is needed
+                  for these purposes.
                 </p>
               </div>
 
               <div>
                 <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
-                  3. Information Sharing
+                  3. Legal Bases and Consent
                 </h2>
                 <p className="text-gray-700">
-                  We do not sell, trade, or rent your personal information to third parties. We may
-                  share your information with trusted service providers who assist us in operating
-                  our website, conducting our business, or servicing you, as long as those parties
-                  agree to keep this information confidential.
+                  Where required by law (including the GDPR and UK GDPR), we process personal data
+                  on the bases of contract performance (fulfilling your orders), legitimate
+                  interests (security, fraud prevention, and service improvement), legal obligation,
+                  and consent (for marketing). You may withdraw consent at any time.
                 </p>
               </div>
 
               <div>
-                <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">4. Data Security</h2>
+                <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
+                  4. Information Sharing
+                </h2>
                 <p className="text-gray-700">
-                  We implement industry-standard security measures to protect your personal
-                  information from unauthorized access, disclosure, alteration, or destruction.
-                  However, no method of transmission over the internet or electronic storage is 100%
-                  secure.
+                  We do not sell, trade, or rent your personal information to third parties. We may
+                  share your information only with trusted service providers who assist us in
+                  operating our website, processing payments, delivering shipments, or servicing
+                  you, and only to the extent necessary — those parties are bound by confidentiality
+                  and data-protection obligations.
                 </p>
               </div>
 
@@ -134,46 +141,140 @@ export default function Privacy() {
                   5. Cookies and Tracking
                 </h2>
                 <p className="text-gray-700">
-                  We use cookies and similar tracking technologies to enhance your browsing
-                  experience, remember your preferences, analyze site traffic, and understand how
-                  our services are used. You can control cookies through your browser settings.
-                </p>
-              </div>
-
-              <div>
-                <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">6. Your Rights</h2>
-                <p className="text-gray-700">
-                  You have the right to access, update, or delete your personal information at any
-                  time. You can also unsubscribe from marketing emails using the unsubscribe link in
-                  any email we send you. If you have questions about your data or wish to exercise
-                  these rights, please contact us.
+                  We use cookies and similar technologies to enhance your browsing experience,
+                  remember preferences, keep you signed in securely, and analyse site traffic. You
+                  can control or delete cookies through your browser settings; some site features
+                  may not work without them.
                 </p>
               </div>
 
               <div>
                 <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
-                  7. Children's Privacy
+                  6. Data Security — Industry Best Practices
                 </h2>
                 <p className="text-gray-700">
-                  Our services are not intended for children under the age of 13. We do not
-                  knowingly collect personal information from children under 13. If we become aware
-                  that we have collected such information, we will take steps to delete it.
+                  We protect your data with industry-standard measures: encryption in transit
+                  (TLS/HTTPS), strong password requirements with strength validation, salted
+                  password hashing, rate limiting and lockout controls against abuse, secure session
+                  management with session regeneration on login, Cross-Site Request Forgery (CSRF)
+                  protection, input validation and sanitization, and hardened HTTP security headers
+                  including Content Security Policy (CSP) and HSTS. Access to production data is
+                  restricted, changes are audit-logged, and database rows are protected by row-level
+                  security policies. While no method of transmission or storage is 100% secure, we
+                  continuously monitor and improve our safeguards.
                 </p>
               </div>
 
               <div>
                 <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
-                  8. Changes to This Policy
+                  7. Payment Processing and PCI Compliance
                 </h2>
                 <p className="text-gray-700">
-                  We may update this Privacy Policy from time to time. We will notify you of any
-                  changes by posting the new Privacy Policy on this page and updating the "Last
-                  updated" date at the top.
+                  Payments are processed by our payment providers (Lemon Squeezy and M-Pesa
+                  Safaricom). We do not store full card numbers or mobile-money credentials on our
+                  servers; card and payment data is transmitted directly to our PCI-DSS-compliant
+                  payment providers over encrypted channels. Payment callbacks are verified and
+                  processed idempotently to prevent duplicate charges.
                 </p>
               </div>
 
               <div>
-                <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">9. Contact Us</h2>
+                <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
+                  8. Third-Party Service Providers
+                </h2>
+                <p className="text-gray-700">
+                  We work with a small number of specialist providers to run the store: hosting and
+                  content delivery (Vercel), database services (Supabase), email delivery (Brevo),
+                  caching (Upstash), and error monitoring (Sentry). Each provider receives only the
+                  data required for its function and is contractually required to protect it.
+                </p>
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
+                  9. Order Transparency and Records
+                </h2>
+                <p className="text-gray-700">
+                  We believe in transparent commerce. In your account you can view your order
+                  history with the full itemized value of each purchase, including line-item prices,
+                  quantity, and any deductions applied, and download a receipt for every order.
+                  Order confirmation and shipping-status emails provide the same transparency after
+                  checkout.
+                </p>
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
+                  10. Data Retention
+                </h2>
+                <p className="text-gray-700">
+                  We retain order and transaction records for as long as needed to fulfil our legal,
+                  tax, warranty, and customer-service obligations, and we delete or anonymize
+                  personal data no longer required. Account data is retained while your account is
+                  active; you may request deletion at any time.
+                </p>
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">11. Your Rights</h2>
+                <p className="text-gray-700">
+                  Depending on your location, you may have the right to access, correct, port, or
+                  delete your personal information, to object to or restrict certain processing, and
+                  to withdraw consent. You can also unsubscribe from marketing emails using the link
+                  in any email we send. To exercise any right, contact us using the details below;
+                  we will respond within applicable legal timeframes.
+                </p>
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
+                  12. International Data Transfers
+                </h2>
+                <p className="text-gray-700">
+                  Our service providers may process data in regions outside your country of
+                  residence. Where personal data is transferred internationally, we rely on
+                  appropriate safeguards such as standard contractual clauses and adequacy
+                  decisions, consistent with applicable data-protection law.
+                </p>
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
+                  13. Children's Privacy
+                </h2>
+                <p className="text-gray-700">
+                  Our services are not intended for children under the age of 13 (or the applicable
+                  minimum age in your jurisdiction). We do not knowingly collect personal
+                  information from children. If we become aware that we have collected such
+                  information, we will take steps to delete it promptly.
+                </p>
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
+                  14. Data Breach Notification
+                </h2>
+                <p className="text-gray-700">
+                  In the unlikely event of a data breach affecting your personal information, we
+                  will notify you and the relevant supervisory authority as required by applicable
+                  law, without undue delay, and take steps to mitigate harm.
+                </p>
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">
+                  15. Changes to This Policy
+                </h2>
+                <p className="text-gray-700">
+                  We may update this Privacy Policy from time to time to reflect changes in our
+                  practices or the law. We will post the new policy on this page and update the
+                  "Last updated" date. Material changes will be communicated where we have your
+                  contact details.
+                </p>
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-bold text-primary-900 mt-8 mb-4">16. Contact Us</h2>
                 <p className="text-gray-700">
                   If you have any questions about this Privacy Policy or our privacy practices,
                   please contact us at:

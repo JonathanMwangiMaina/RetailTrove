@@ -52,7 +52,9 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserByAuthUserId(authUserId: string): Promise<User | undefined>;
+  getUserByVerificationToken(token: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  markEmailVerified(userId: number): Promise<User | undefined>;
   getAllUsers(): Promise<User[]>;
   updateUser(id: number, data: Partial<InsertUser>): Promise<User | undefined>;
   deleteUser(id: number): Promise<boolean>;
@@ -108,6 +110,8 @@ export interface IStorage {
   updateCartItem(id: number, quantity: number): Promise<CartItem | undefined>;
   deleteCartItem(id: number): Promise<boolean>;
   clearCart(cartId: string): Promise<void>;
+  /** Bind an unowned (guest) cart to an authenticated user. */
+  adoptCart(cartId: string, authUserId: string): Promise<void>;
 
   // ── Wishlist Operations ────────────────────────────────────────────────────
 

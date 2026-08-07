@@ -83,10 +83,48 @@ export default async function handler(request: Request): Promise<Response> {
   const ua = request.headers.get("user-agent") || "";
   const isBot = BOT_UA.test(ua);
 
-  // Non-bots get the real SPA shell. The built index.html is served as a static
-  // file (Vercel resolves the filesystem before rewrites), so fetching it here
-  // cannot recurse into this edge function. A 307 to request.url would loop.
+  const { pathname } = new URL(request.url);
+
+  // ── SPA route allowlist ──────────────────────────────────────────────────
+  // Only genuine client-side routes (matching client/src/App.tsx) may be
+  // served. Everything else — asset probes like /.git/config, /.env,
+  // /server.js, /wp-admin, arbitrary 404 paths — gets a real 404 instead of a
+  // soft-200 shell so crawlers/scanners can't confuse it with a live page.
+  // Vercel already serves real static assets before this rewrite, so
+  // legitimate files never reach here.
+  const SPA_ROUTES = [
+    /^\/(?:shop\/[^/]+)?$/, // / , /shop, /shop/:category
+    /^\/product\/\d+$/,
+    /^\/checkout$/,
+    /^\/order-confirmation$/,
+    /^\/about$/,
+    /^\/contact$/,
+    /^\/faq$/,
+    /^\/privacy$/,
+    /^\/terms$/,
+    /^\/login$/,
+    /^\/forgot-password$/,
+    /^\/reset-password$/,
+    /^\/verify-email$/,
+    /^\/admin$/,
+    /^\/vendor$/,
+    /^\/account$/,
+    /^\/wishlist$/,
+  ];
+
+  const isSpaRoute = SPA_ROUTES.some((re) => re.test(pathname));
+
+  // Non-bots get the real SPA shell — but only for genuine SPA routes. The
+  // built index.html is served as a static file (Vercel resolves the
+  // filesystem before rewrites), so fetching it here cannot recurse into this
+  // edge function. A 307 to request.url would loop.
   if (!isBot) {
+    if (!isSpaRoute) {
+      return new Response("Not Found", {
+        status: 404,
+        headers: { "content-type": "text/plain" },
+      });
+    }
     const res = await fetch(`${SITE_URL}/index.html`);
     if (res.ok) {
       return new Response(await res.text(), {
@@ -94,12 +132,10 @@ export default async function handler(request: Request): Promise<Response> {
       });
     }
     // Last-resort fallback — at least provide the document shell.
-    return new Response(renderHTML("/", ROUTE_META["/"]), {
+    return new Response(renderHTML(pathname, ROUTE_META["/"]), {
       headers: { "content-type": "text/html; charset=utf-8" },
     });
   }
-
-  const { pathname } = new URL(request.url);
 
   // Exact static routes
   const meta = ROUTE_META[pathname];
@@ -139,8 +175,6 @@ export default async function handler(request: Request): Promise<Response> {
     );
   }
 
-  // Fallback: serve the base app shell for unknown routes (never self-redirect).
-  return new Response(renderHTML(pathname, ROUTE_META["/"]), {
-    headers: { "content-type": "text/html; charset=utf-8" },
-  });
+  // Unknown path — genuine 404, never a soft 200.
+  return new Response("Not Found", { status: 404, headers: { "content-type": "text/plain" } });
 }

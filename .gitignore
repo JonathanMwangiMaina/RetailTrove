@@ -10,3 +10,5 @@ commit_msg.txt
 test-results
 playwright-report
 e2e/results
+.tmp-security-*
+.tmp-pentest-*

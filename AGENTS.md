@@ -82,8 +82,8 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 |---|---------|--------|-----------|------------------------|
 | **P0** | **Analytics revenue mismatch** | ✅ Done (v0.8.0) | 1-2 hrs | `routes.ts:1057` `totalRevenue` summed ALL orders (pending+failed+paid = $453k); Orders tab correctly sums paid only ($57k). `totalRevenue` is now paid-only, `bookedRevenue` added for reference, `sales-trend` counts paid only. |
 | **P1** | **Checkout race conditions** | ✅ Done (v0.8.1) | 4-6 hrs | (1) Stock never restored when payment fails/refunds — added `releaseOrderStock` guarded by new `stock_released` column (migration 0007). (2) TOCTOU in callbacks — added atomic CAS `markOrderPaymentStatus` used from shared `server/payment-callbacks.ts`. (3) M-Pesa `ResultCode === "0"` now accepted. (4) Client polls real status via new `GET /api/orders/:id/status` instead of fixed 3 s. |
-| **P2** | **Customer notification pipeline (Brevo)** | ⏳ | 3-5 hrs | Email exists for success + 4 shipping statuses. Missing: payment-failed email, emails for `cancelled`/`processing` (gated by `paid && ≠pending` at `routes.ts:721`), recipient fallback to auth user email, optional Brevo Transactional API template IDs. |
-| **P3** | **Shop price slider $9.99–$4,000** | ⏳ | 1 hr | `shop.tsx:98-105` slider hardcodes `KES` + `min=0 max=1000`. Backend already accepts arbitrary `minPrice`/`maxPrice` (`routes.ts:51-52`) — client-only change to USD `$9.99–$4,000`. |
+| **P2** | **Customer notification pipeline (Brevo)** | ✅ Done (v0.9.0) | 3-5 hrs | Scenario copy map (`payment_success`, `payment_failed`, `processing`, `shipped`, `delivered`, `cancelled`; pending = no-op) in `server/email.ts`. Failure + refund emails on winning CAS transition only. Recipient fallback `resolveOrderEmail(order)` → checkout email → auth-user email by UUID. Admin shipping PUT emails on any real change (dropped `paid &&` gate). Optional Brevo Transactional API v3 sender (`BREVO_API_KEY` in dashboard only). 12 email tests. |
+| **P3** | **Shop price slider $9.99–$4,000** | ✅ Done (v0.9.1) | 1 hr | `shop.tsx` FilterSidebar: `MIN_PRICE`/`MAX_PRICE` constants, `step={1}`, default `[9.99, 4000]`, USD label, decimal-aware URL parsing + clamping + min/max ordering. Backend already accepted arbitrary `minPrice`/`maxPrice`. |
 | **P4** | **Admin "Journey" Sankey tab** | ⏳ | 3-5 hrs | recharts 2.15 already ships Sankey — no new dep. New `GET /api/admin/analytics/journey` + pure `buildJourneyGraph(visits, orders)` (session reconstruct by userEmail/order of `user_visits`). New `journey-tab.tsx` + admin.tsx tab. |
 
 ### Session details
@@ -117,7 +117,61 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 
 ---
 
-## Completed Work (this session)
+## Current Session (2026-08-07) — v0.10.0 Security Remediation + Customer Features
+
+### Git
+- Working tree held the full v0.10.0 batch (uncommitted on top of `c65e220`): pentest-finding fixes F1–F12, email verification, order history + receipts, legal rewrite, pricing helper, CI `security` job, `npm audit fix`, migrations 0010–0013, 209 tests. Version bumped 0.9.0 → 0.10.0 (`npm version 0.10.0 --no-git-tag-version`).
+
+### Migrations applied to prod (2026-08-07)
+- `0010` (unique newsletter email index) — **applied** (checked no duplicate emails first).
+- `0011` (legal policies → `site_content`) — **applied**.
+- `0012` (email verification columns + grandfather existing) — **applied**; all 5 existing users `email_verified = true`.
+- `0013` (RLS/PCI hardening) — **already live** in prod (all policy names present; verified via `pg_policies`). Do NOT re-apply blindly. Probe before applying: `probe_0010/0011/0012.sql` pattern in `e2e/results/` (gitignored).
+
+### Supabase CLI operational discovery (supersedes older AGENTS.md note)
+- The current CLI **executes multi-statement files** (verified: CREATE TEMP TABLE + INSERT + SELECT all ran on one connection) but **displays only the LAST result set**. So a file with 4 queries prints only the 4th table — split probes into separate files, or rely on side-effect checks, when you need each result.
+- Multi-statement migration files (0012/0013) applied cleanly in one go via `supabase db query --linked --file /mnt/wsl/RetailTrove/migrations/00XX.sql`.
+- CLI (Windows binary) cannot read `/mnt/c/...` paths — resolve as `\\wsl.localhost\Ubuntu-26.04\mnt\c\...` (broken). Use repo paths `/mnt/wsl/RetailTrove/...` or `e2e/results/`.
+- **PowerShell mangles WSL `for` loops + `(a|b)` grep patterns** — never inline them in `-c`; write probe `.sql`/`.mjs` files instead.
+
+### Security remediation batch (v0.10.0) — see CHANGELOG for full list
+- F1 product write auth, F2 payment-field mass assignment, F3 order/status auth (+ `/api/orders/:id/receipt`, faqs admin-only), F4 M-Pesa callback IP allowlist (`MPESA_CALLBACK_ALLOWED_IPS`), F5 cart ownership via `adoptCart`, F6 `crypto.randomUUID()` cart IDs, F9 rolling + absolute session expiry (`SESSION_IDLE_MS`/`SESSION_ABSOLUTE_MS` + `enforceSessionAbsoluteTimeout`), F11 stock availability checks, F12 prerender 404 allowlist.
+- Also: `normalizeKenyanPhone` + real `usdToKes` for M-Pesa, non-pending checkout rejection (409), sanitized `/visits` paths, uniform image-proxy errors, health endpoint no longer leaks version/uptime, `webhookLimiter`/`statusLimiter`.
+- `npm audit fix`: 4 advisories fixed (2 high) → `npm audit --omit=dev` = 0. 4 moderate dev-only remain (drizzle-kit bundled esbuild) — intentionally unfixed.
+
+### Env vars introduced
+- `MPESA_CALLBACK_ALLOWED_IPS` (comma-separated CIDR/exact IP; unset = accept for sandbox) · `SESSION_IDLE_MS` (default 30 min) · `SESSION_ABSOLUTE_MS` (default 24 h).
+
+### Verified
+- `tsc --noEmit`: 0 errors · `vitest run`: **209/209 (20 files)** · `eslint`: 0 errors (114 pre-existing warnings) · `prettier --check`: clean (wrote `login.tsx` + `verify-email.tsx`) · `vite build`: success.
+
+---
+
+## Prior Session (2026-08-05) — v0.9.2
+
+### Git
+- `c65e220 security(e2e): prompt for vendor/admin credentials...` pushed to `origin/main` — HEAD of main.
+- Earlier pushes this cycle: `7923f2d` (Magunas import + WebP images), `d156d41` (admin/vendor UX), `f355115` (EastMatt import).
+- Version bumped to **0.9.2** (`package.json`, `package-lock.json`, `api/index.ts`, `server/index.ts`) — reconciles the v0.9.1 changelog entry that never got a code bump (code still read 0.9.0).
+
+### Vendor Catalogue Data (prod)
+- Applied `migrations/0008_add_eastmatt_promo_products.sql` (48 products, vendor_id=20) and `migrations/0009_add_magunas_promo_products.sql` (51 products, vendor_id=2; images optimized to WebP in `client/public/images/magunas/`).
+- Approved all 99 pending vendor products via Playwright/Chromium on `retailtrove.vercel.app` — first attempt hit **403 CSRF** (mutating routes wrapped in `csrfSync`); fix: `GET /api/csrf-token` then send `x-csrf-token` header per approve PUT. Prod now **133 products, 0 pending**.
+
+### Security — E2E credential scrub
+- `e2e/benchmark-checkout.spec.ts` no longer hardcodes `vendor123`/`vendor@retailtrove.com`; credentials are resolved at runtime via `resolveCredentials(role, required)` reading stdin with `node:readline`. Vendor prompt required (throws when stdin is not a TTY or blank); admin prompt optional. No shell scripts are git-tracked (`git ls-files` = 0 `.sh`/`.bash`/`.ps1`).
+
+### Secret audit
+- `secret-scan.sh` over all tracked files: the only file holding live secrets is the git-tracked `.env` (intentional — see v0.4.7). `.env.example` and docs contain placeholders/references only. **Repo visibility: PUBLIC** — the tracked `.env` (working prod `DATABASE_URL`/`PGPASSWORD`, live Upstash token, M-Pesa sandbox keys, `SESSION_SECRET`, `SMTP_USER`) is publicly visible on GitHub. **User decision: keep `.env` tracked.** Do not re-raise unless asked. (If it is ever rotated, history still contains old values.)
+
+### Docs updated
+- `README.md` → v0.9.2 (status line, 148 tests/17 files with exact per-file counts from `--reporter=json`, new tables/columns, new API endpoints, migrations + build notes, changelog summary, footer). **User instruction: do NOT touch env-var content in README** (table + "Never commit `.env`" note left as-is).
+- `CHANGELOG.md` → new v0.9.2 entry.
+- `docs/adr/README.md` → ADR-009 row added.
+
+---
+
+## Prior Session (historical v0.4.x-era summary)
 
 ### Git
 - Commit `6b5fe2b` pushed to `origin/main` (131 files, +10,112/-4,768)
@@ -693,7 +747,7 @@ When `GIT_SSH_COMMAND='ssh -o BatchMode=yes'` is set, `git push origin main` pro
 When using `git commit -m "message"` inside `wsl -e bash -c` with single-quote wrapping, commit messages containing `:` (colon) get **truncated** to everything before the colon. Workaround: use `echo message > /tmp/msg && git commit -F /tmp/msg` or wrap the entire `wsl` command in double quotes instead of single quotes.
 
 ### Supabase CLI paths must be `/mnt/wsl/...` (not `/tmp/...` or relative)
-The `supabase` CLI is installed as a **Windows** binary (`/mnt/c/Users/USER/AppData/Roaming/npm/supabase`), so when invoked from WSL it resolves paths against the Windows filesystem. Any file argument (`--file`, etc.) must use a `/mnt/wsl/...` path — Linux-only paths like `/tmp/...` fail with `NotFound: FileSystem.readFile`. Also note `supabase db query --file` only executes **single statements**; multi-statement migration files (e.g. `migrations/rls-policies.sql`) must be split and run one statement at a time, or the command errors with `cannot insert multiple commands into a prepared statement`.
+The `supabase` CLI is installed as a **Windows** binary (`/mnt/c/Users/USER/AppData/Roaming/npm/supabase`), so when invoked from WSL it resolves paths against the Windows filesystem. Any file argument (`--file`, etc.) must use a `/mnt/wsl/...` path — Linux-only paths like `/tmp/...` fail with `NotFound: FileSystem.readFile`, and `/mnt/c/...` paths are mis-resolved to `\\wsl.localhost\...\mnt\c\...` (broken). Since v0.10.0, the CLI **executes multi-statement files but prints only the LAST result set** (see "Supabase CLI operational discovery" above) — earlier CLI versions errored with `cannot insert multiple commands into a prepared statement`, so multi-statement files had to be split one statement per run.
 
 ### Supabase CLI `.env` parsing (multi-line cert)
 The CLI's dotenv parser rejects multi-line unquoted values in `.env`, which previously broke every `supabase db` command in-project (`failed to parse environment file: .env`). `SUPABASE_CA_CERT` is now a single double-quoted line with `\n` escapes (e.g. `SUPABASE_CA_CERT="-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"`). dotenv (npm) and the CLI both decode it back to the identical PEM, so app TLS verification (`server/db.ts` `ca:` + `rejectUnauthorized: true`) is unchanged. If this file is ever regenerated from a multi-line PEM, re-apply the same quoting.

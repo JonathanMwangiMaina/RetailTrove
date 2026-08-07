@@ -134,25 +134,31 @@ async function fetchSource(url: URL, redirectsLeft: number): Promise<Buffer | nu
  *  - format (optional, default webp): webp | avif
  */
 export function imageProxyHandler() {
+  // Every failure mode returns the exact same generic response. Differentiating
+  // error messages/statuses would let an attacker probe which hosts are
+  // reachable / blocked (SSRF reachability oracle).
+  const reject = (res: Response) =>
+    res.status(400).json({ error: "Invalid image request" });
+
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
       const rawUrl = typeof req.query.url === "string" ? req.query.url : "";
       if (!rawUrl) {
-        return res.status(400).json({ error: "Missing 'url' query parameter" });
+        return reject(res);
       }
 
       let source: URL;
       try {
         source = new URL(rawUrl);
       } catch {
-        return res.status(400).json({ error: "Invalid 'url' query parameter" });
+        return reject(res);
       }
 
       if (source.protocol !== "https:" && source.protocol !== "http:") {
-        return res.status(400).json({ error: "Only http(s) image sources are allowed" });
+        return reject(res);
       }
       if (/\.svg(\?|#|$)/i.test(source.pathname)) {
-        return res.status(400).json({ error: "SVG sources are not proxied" });
+        return reject(res);
       }
 
       const width = Math.min(parsePositiveInt(req.query.w, MAX_DIMENSION), MAX_DIMENSION);
@@ -164,7 +170,7 @@ export function imageProxyHandler() {
 
       const body = await fetchSource(source, MAX_REDIRECTS);
       if (!body) {
-        return res.status(502).json({ error: "Failed to fetch source image" });
+        return reject(res);
       }
 
       let output: Buffer;
@@ -175,7 +181,7 @@ export function imageProxyHandler() {
           .toFormat(format, { quality })
           .toBuffer();
       } catch {
-        return res.status(502).json({ error: "Failed to process source image" });
+        return reject(res);
       }
 
       res.setHeader("Cache-Control", "public, max-age=31536000, immutable");

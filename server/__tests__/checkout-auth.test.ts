@@ -109,6 +109,9 @@ vi.mock("../payment-service.js", () => ({
     MerchantRequestID: "MERCHANT-1",
     CheckoutRequestID: "CHECKOUT-1",
   })),
+  normalizeKenyanPhone: vi.fn((phone: string) =>
+    phone.startsWith("0") ? "254" + phone.slice(1) : phone,
+  ),
 }));
 
 vi.mock("../email.js", () => ({
@@ -208,6 +211,7 @@ describe("Checkout requires authentication", () => {
     orders.set(1, {
       id: 1,
       total: "55.00",
+      paymentStatus: "pending",
       firstName: "Jane",
       lastName: "Doe",
       email: "jane@example.com",
@@ -221,7 +225,7 @@ describe("Checkout requires authentication", () => {
   });
 
   it("allows authenticated users to initiate M-Pesa checkout", async () => {
-    orders.set(1, { id: 1, total: "55.00" });
+    orders.set(1, { id: 1, total: "55.00", paymentStatus: "pending" });
     const session = { userId: 1, authUserId: "auth-uuid-1", role: "customer" };
     const res = await request(buildApp(session))
       .post("/api/checkout/mpesa")

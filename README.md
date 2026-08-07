@@ -1,6 +1,6 @@
 # RetailTrove — Full-Stack E-Commerce Platform
 
-> **Status:** Phases 1–4 complete. Latest: **v0.7.0** — self-hosted CDN image optimisation (sharp `/api/image` proxy serving cached WebP/AVIF, `OptimizedImage` responsive component with srcset/lazy-load/fallback across 10 render sites), plus the v0.6.0 line: Upstash Redis cache, product variants, DB-driven galleries, comma-formatted prices, CI test job, and the full v0.5.x line: production M-Pesa pipeline verified end-to-end live on https://retailtrove.vercel.app, email notifications, wishlists, RLS policies, payment idempotency, health checks, Sentry, CI/CD, and **121 passing tests**.
+> **Status:** Phases 1–4 complete. Latest: **v0.10.0** — security remediation from an external pentest (product write authorization, payment-field mass-assignment blocking, order/status ownership checks, M-Pesa callback IP allowlisting, rolling + absolute session expiry, cart ownership binding, stock-availability checks, SPA 404s, a CI `npm audit` gate, and a clean `npm audit --omit=dev` tree), plus email verification for new registrations, downloadable order receipts with transparent pricing breakdowns, GDPR-aligned legal policies, and a shared USD⇄KES pricing helper. Behind it: the v0.9.x line (vendor catalogue imports, customer notification emails, USD shop slider, lockfile package guard), v0.8.x (paid-only analytics revenue, checkout race-condition fixes), v0.7.0 self-hosted CDN image optimisation, the v0.6.0 line (Upstash Redis cache, product variants, DB-driven galleries), and the full v0.5.x line (production M-Pesa verified live, email notifications, wishlists, RLS policies, payment idempotency, health checks, Sentry, CI/CD). **209 passing tests.**
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19.1-61dafb)](https://react.dev/)
@@ -51,8 +51,13 @@ cp .env.example .env
 #   - DATABASE_URL (Supabase pooler connection string)
 #   - SESSION_SECRET (random 32-char string for cookie signing)
 
-# 4. Push database schema
+# 4. Apply database schema
+# From a normal Linux/macOS shell:
 npm run db:push
+# From WSL the Supabase pooler port is unreachable (ETIMEDOUT) — use the
+# versioned migrations in migrations/ instead:
+#   supabase db query --linked --file /mnt/wsl/.../migrations/0007_add_stock_released.sql
+# (or run them in the Supabase SQL Editor)
 
 # 5. Start development server (http://localhost:5000)
 npm run dev
@@ -159,7 +164,7 @@ retailtrove/
 │       │   ├── admin/
 │       │   │   ├── analytics-tab.tsx     # Analytics dashboard (recharts)
 │       │   │   ├── inventory-tab.tsx     # Inventory management with stock alerts
-│       │   │   └── ...                   # 13 other tab components
+│       │   │   └── ...                   # 13 other tab components (15 total)
 │       │   ├── vendor.tsx                # Vendor dashboard (protected)
 │       │   ├── faq.tsx                   # Public FAQ listing
 │       │   ├── about.tsx                 # About page
@@ -197,17 +202,21 @@ retailtrove/
 │
 ├── server/
 │   ├── index.ts                          # Express bootstrap + webhooks
-│   ├── routes.ts                         # All API endpoints (~60+)
+│   ├── routes.ts                         # All API endpoints (~70+)
 │   ├── db.ts                             # Database connection (Supabase pooler)
-│   ├── storage.ts                        # IStorage interface + MemStorage
-│   ├── database-storage.ts               # DatabaseStorage implementation
+│   ├── storage.ts                        # IStorage interface (all method signatures)
+│   ├── database-storage.ts               # DatabaseStorage implementation (Drizzle)
 │   ├── auth.ts                           # Auth middleware + bcrypt + zxcvbn password validation
-│   ├── email.ts                          # Email utility (Nodemailer + Brevo SMTP)
+│   ├── email.ts                          # Scenario-based transactional email (Brevo + SMTP fallback)
 │   ├── payment-service.ts                # Lemon Squeezy + M-Pesa services
+│   ├── payment-callbacks.ts              # Shared M-Pesa + LS webhook handlers (atomic CAS)
+│   ├── cache.ts                          # Upstash Redis read-through cache (opt-in)
+│   ├── image-proxy.ts                    # Self-hosted sharp /api/image proxy (SSRF-guarded)
+│   ├── loyalty-service.ts                # Loyalty points + tiers
 │   ├── seed-supabase.ts                  # Refactored product seeder
 │   ├── vite.ts                           # Vite dev middleware
 │   └── middleware/
-│       ├── rate-limiter.ts               # Global, auth, write rate limiters
+│       ├── rate-limiter.ts               # Global, auth, write, image rate limiters
 │       ├── csrf.ts                       # CSRF token setup
 │       ├── sanitize.ts                   # XSS input sanitisation
 │       └── audit.ts                      # Audit logging helper
@@ -218,7 +227,7 @@ retailtrove/
 │
 ├── Configuration Files
 │   ├── .env.example                      # Environment variable template
-│   ├── package.json                      # Dependencies & scripts (v0.4.0)
+│   ├── package.json                      # Dependencies & scripts (v0.9.2)
 │   ├── tsconfig.json                     # TypeScript config
 │   ├── vite.config.ts                    # Vite build config
 │   ├── vitest.config.ts                  # Vitest test runner config
@@ -343,6 +352,10 @@ export const db = drizzle(pool, { schema });
 | mpesaReceiptNumber | text | M-Pesa receipt (nullable) |
 | stripe_session_id | text | Lemon Squeezy checkout ID |
 | stripe_payment_intent_id | text | Deprecated (kept for schema compat) |
+| idempotencyKey | text | Payment idempotency key (`{provider}-{orderId}-{uuid}`) |
+| shippingStatus | text | `'pending'` (default), `'processing'`, `'shipped'`, `'delivered'`, `'cancelled'` |
+| shippedAt | timestamp | Set when status becomes `shipped` |
+| stockReleased | boolean | Guard against double stock restore (default `false`) |
 
 #### `order_items` — Line Items
 
@@ -354,6 +367,8 @@ export const db = drizzle(pool, { schema });
 | product_name | text | |
 | price | numeric | |
 | quantity | integer | Default `1` |
+| variant_id | integer | FK → `product_variants.id` (nullable) |
+| variant_name | text | Variant label snapshot (nullable) |
 
 **Foreign keys:**
 - `order_items.order_id` → `public.orders.id`
@@ -402,6 +417,41 @@ export const db = drizzle(pool, { schema });
 | value | text | Default `''` |
 | updated_at | timestamp without time zone | Nullable, default `now()` |
 
+#### `product_variants` — Variant options (size, color, etc.)
+
+| Column | Type | Notes |
+|---|---|---|
+| id | integer | PK |
+| product_id | integer | FK → `products.id` |
+| name | text | Variant label |
+| sku | text | Variant SKU |
+| price | numeric | Optional price override |
+| stock_quantity | integer | Variant-level stock |
+| is_default | boolean | Default variant |
+| is_active | boolean | Hidden from checkout when false |
+| image_url | text | Variant image (hero swap) |
+
+#### `product_images` — DB-driven product gallery
+
+| Column | Type | Notes |
+|---|---|---|
+| id | integer | PK |
+| product_id | integer | FK → `products.id` |
+| url | text | Image URL |
+| alt_text | text | Nullable |
+| sort_order | integer | Gallery order |
+| is_primary | boolean | Hero image flag |
+
+#### `wishlist_items` — Saved products per user
+
+| Column | Type | Notes |
+|---|---|---|
+| id | integer | PK |
+| user_id | uuid | Auth user UUID |
+| product_id | integer | FK → `products.id` |
+
+Unique composite on `(user_id, product_id)` — adds are idempotent.
+
 #### Other tables
 
 - `faqs` — FAQ entries with approval workflow
@@ -411,6 +461,10 @@ export const db = drizzle(pool, { schema });
 - `audit_logs` — Audit trail (userId, action, entityType, entityId, changes JSONB, ipAddress, userAgent)
 - `loyalty_accounts` — Loyalty points balance and tier per user
 - `loyalty_transactions` — Points earn/redeem history per user
+- `team_members` — About-page team roster (admin CRUD, public read)
+- `testimonials` — Customer reviews with approval workflow
+- `password_reset_tokens` — Password reset tokens (deny-all RLS)
+- `site_settings`/`site_content`/`banner_settings` — editable storefront content
 
 ### Type Safety & Validation
 
@@ -431,13 +485,17 @@ export type InsertProduct = z.infer<typeof insertProductSchema>;
 
 ### Migrations
 
-Push schema changes via Drizzle Kit:
+Schema changes are tracked as versioned SQL files in `migrations/` (`0000_famous_firebird.sql` through `0013_rls_pci_hardening.sql`, plus `add-idempotency-key.sql`, `rls-policies.sql`, `seed_testimonials.sql`). Each is idempotent where noted. v0.10.0 adds `0010` (unique newsletter email index), `0011` (legal policies → `site_content`), `0012` (email verification columns + grandfather), `0013` (RLS/PCI-DSS hardening — least-privilege grants, column-level credential revoke, deny-all server-only tables).
+
+Apply via Drizzle Kit (when the pooler is reachable) or via SQL Editor / Supabase CLI:
 
 ```bash
 npm run db:push        # Apply schema changes
 npm run db:push -- --force  # Force (if data loss warning)
 npm run db:studio      # Open Drizzle Studio (interactive browser)
 ```
+
+From WSL, `db:push` is unreachable (Supabase pooler port 6543 times out) — apply `migrations/*.sql` with the Supabase CLI or SQL Editor instead.
 
 ---
 
@@ -491,25 +549,42 @@ Two implementations:
 | GET | `/api/products/new-arrivals` | New arrival products |
 | GET | `/api/products/category/:category` | Products filtered by category |
 | GET | `/api/products/search?q=<term>` | ILIKE search (name, description, category) |
-| GET | `/api/products/:id` | Single product detail |
+| GET | `/api/products/:id` | Single product detail (includes `variants` + `images`) |
 | PUT | `/api/products/:id` | Update product (admin/vendor scoped) |
 | DELETE | `/api/products/:id` | Delete product (admin only) |
+| GET | `/api/products/:id/variants` | Product variants |
+| POST | `/api/products/:id/variants` | Create variant (admin/vendor) |
+| PUT | `/api/products/:id/variants/:variantId` | Update variant |
+| DELETE | `/api/products/:id/variants/:variantId` | Delete variant |
+| POST | `/api/products/:id/images` | Add gallery image |
+| DELETE | `/api/products/:id/images/:imageId` | Remove gallery image |
+| PUT | `/api/products/:id/images/:imageId/primary` | Set hero image |
 
 ### Cart
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/api/cart/:cartId` | Get all cart items for session |
-| POST | `/api/cart` | Add item to cart |
-| PUT | `/api/cart/:id` | Update item quantity |
-| DELETE | `/api/cart/:id` | Remove item from cart |
+| GET | `/api/cart/:cartId` | Get all cart items for session (variant-aware) |
+| POST | `/api/cart` | Add item to cart (validates variant) |
+| PUT | `/api/cart/:id` | Update item quantity (ownership-checked) |
+| DELETE | `/api/cart/:id` | Remove item from cart (ownership-checked) |
+| DELETE | `/api/cart/clear/:cartId` | Clear cart (ownership-checked) |
 
 ### Orders
 
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | `/api/orders` | Create new order (atomic transaction) |
+| POST | `/api/orders` | Create new order (atomic transaction, stock decrement inside tx) |
 | GET | `/api/orders` | All orders (admin only) |
+| GET | `/api/orders/:id/status` | Public payment status (non-PII: status, provider, receipt) |
+
+### Wishlist
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/wishlist` | Current user's saved products (auth) |
+| POST | `/api/wishlist/:productId` | Save a product (idempotent) |
+| DELETE | `/api/wishlist/:productId` | Remove a saved product |
 
 ### Authentication
 
@@ -540,6 +615,22 @@ Two implementations:
 | GET | `/api/admin/analytics/top-products` | Top 10 products by rating |
 | GET | `/api/admin/analytics/visits-trend` | Page visits by day (last 30 days) |
 | PUT | `/api/admin/settings` | Update site settings (incl. `site_currency`) |
+| GET | `/api/admin/orders` | All orders with payment + shipping status |
+| GET | `/api/admin/orders/:id/items` | Line items for an order |
+| PUT | `/api/admin/orders/:id/shipping` | Update shipping status (emails customer) |
+| GET/POST/PUT/DELETE | `/api/admin/team-members` | Team member CRUD (About page reads public list) |
+| GET | `/api/admin/faqs` | FAQ management |
+| GET | `/api/admin/testimonials` | Testimonials with approval workflow |
+
+### Public / Infrastructure
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/health` | Status, uptime, DB connectivity, version |
+| GET | `/api/image?url=&w=&q=&format=` | Self-hosted sharp image proxy (WebP/AVIF, SSRF-guarded, immutable cache) |
+| GET | `/api/team-members` | Published team members |
+| GET | `/api/categories` | Product categories |
+| GET | `/api/faqs`, `/api/testimonials` | Published FAQs / testimonials |
 
 ### Password Reset
 
@@ -697,12 +788,12 @@ Runs:
 ### Production Build
 
 ```bash
-npm run build
+npm run build:client
 ```
 
 Outputs:
 - `dist/` — Vite frontend build (React SPA)
-- Backend bundled via esbuild for Vercel serverless
+- The serverless function is compiled by `@vercel/node` at deploy time (`vercel-build` = `npm run build:client`)
 
 ### Deployment to Vercel
 
@@ -771,7 +862,7 @@ Copy `.env.example` to `.env` and populate:
 - ✅ Input sanitisation via recursive xss() on req.body/query/params
 - ✅ Structured JSON error handler with request IDs
 - ✅ Audit logging (auditLogs table, logAudit() helper, admin Audit Logs tab)
-- ✅ Vitest tests (121 tests: unit + payment/order/cart/wishlist/variant/cache/image integration)
+- ✅ Vitest tests (148 tests: unit + payment/order/cart/wishlist/variant/cache/image/analytics/email integration)
 - ✅ Cursor-based pagination on GET /api/products
 
 ### Phase 4 (Performance & Scale) — Complete ✅ (v0.7.0)
@@ -781,6 +872,9 @@ Copy `.env.example` to `.env` and populate:
 - ✅ Product variants (size/color, variant pricing + stock + images)
 - ✅ DB-driven product gallery images (mock Unsplash stubs removed)
 - ✅ CDN image optimisation (self-hosted sharp `/api/image` proxy → cached WebP/AVIF + `OptimizedImage` component, v0.7.0)
+- ✅ Paid-only analytics revenue + checkout race-condition fixes (v0.8.0/v0.8.1)
+- ✅ Customer notification email pipeline + USD shop slider + lockfile package guard (v0.9.0/v0.9.1)
+- ✅ Vendor catalogue data imports + E2E credential security (v0.9.2)
 
 ---
 
@@ -788,12 +882,12 @@ Copy `.env.example` to `.env` and populate:
 
 **Test Runner:** Vitest 4.1.10
 
-**Current Status:** 121 tests across 13 test files.
+**Current Status:** 148 tests across 17 test files.
 
 | Test File | Tests | Coverage |
 |---|---|---|
-| `server/__tests__/mpesa-callback.test.ts` | 6 | M-Pesa callback: success, failure, idempotency, malformed body, missing order |
-| `server/__tests__/lemonsqueezy-webhook.test.ts` | 4 | LS webhook: order_created, order_refunded, idempotency, missing order |
+| `server/__tests__/mpesa-callback.test.ts` | 9 | M-Pesa callback: success, failure, idempotency, malformed body, missing order, failure email |
+| `server/__tests__/lemonsqueezy-webhook.test.ts` | 6 | LS webhook: order_created, order_refunded, idempotency, missing order, refund email |
 | `server/__tests__/orders.test.ts` | 7 | Order creation: validation, stock atomicity, total mismatch |
 | `server/__tests__/cart.test.ts` | 7 | Cart ownership: PUT/DELETE own item, reject others, 404, invalid qty |
 | `server/__tests__/checkout-auth.test.ts` | 7 | Checkout/auth: 401 on anonymous orders/checkouts, stock untouched, authenticated flows |
@@ -801,6 +895,10 @@ Copy `.env.example` to `.env` and populate:
 | `server/__tests__/cache.test.ts` | 11 | Cache: keys, hit/miss, exact/prefix delete, disabled no-ops, error swallowing |
 | `server/__tests__/variants.test.ts` | 16 | Variants: product-detail response, cart validation, order variant pricing, zod schemas |
 | `server/__tests__/image-proxy.test.ts` | 12 | Image proxy: private-IP matrix, URL validation, SSRF block, WebP encode + cache headers, redirects, size caps |
+| `server/__tests__/analytics.test.ts` | 5 | Analytics: paid-only `totalRevenue`, `bookedRevenue`, sales-trend paid-only aggregation |
+| `server/__tests__/order-status.test.ts` | 4 | Order status: public non-PII endpoint, pending/failed/paid views |
+| `server/__tests__/email.test.ts` | 12 | Email: `resolveOrderEmail` precedence, per-scenario copy, no-op guards, legacy wrappers |
+| `server/__tests__/package-lock.test.ts` | 1 | Package guard: lockfile root specs match package.json, resolved tarballs encode versions |
 | `client/src/__tests__/image.test.ts` | 8 | Image helpers: isOptimizableImage matrix, proxy URL encoding, srcSet ladder |
 | `client/src/lib/__tests__/currencies.test.ts` | 17 | CURRENCY array, lookup, conversion, formatting |
 | `client/src/lib/__tests__/countries.test.ts` | 9 | COUNTRIES array, sorting, lookup |
@@ -906,7 +1004,7 @@ npm run test:watch  # Watch mode
 - [x] Idempotency keys on payments (prevents duplicate charges)
 - [x] TypeScript type safety sweep (59 errors across 15 files)
 - [x] Sentry middleware guard (prevents crash when SENTRY_DSN unset)
-- [x] Architecture Decision Records (8 ADRs in docs/adr/)
+- [x] Architecture Decision Records (9 ADRs in docs/adr/)
 - [x] Redis cache layer (Upstash read-through for products/site settings, v0.6.0)
 - [x] CDN image optimisation (self-hosted sharp `/api/image` proxy + `OptimizedImage`, v0.7.0)
 
@@ -933,6 +1031,30 @@ Each ADR follows the [MADR](https://adr.github.io/madr/) template: Context → D
 ## Changelog
 
 See `CHANGELOG.md` for complete version history.
+
+### v0.9.2 — Vendor Catalogue Imports + UX + E2E Credential Security (2026-08-05)
+
+- **Added:** 48 EastMatt + 51 Magunas promo products imported (`migrations/0008` + `0009`), Magunas images optimized to WebP; all 99 vendor submissions approved via the CSRF-protected admin flow — production now at 133 products, 0 pending.
+- **Added:** Admin in-tab pagination, inventory pagination, category/subcategory dropdowns for vendors and admins.
+- **Security:** E2E spec credentials now resolved via an interactive console prompt (`resolveCredentials`), never committed.
+- **All 148 tests pass.**
+
+### v0.9.1 — P3 Slider + Vercel Build Fix + Package Guard (2026-08-04)
+
+- **Added:** Shop price slider converted to USD `$9.99 – $4,000` (was `KES 0–1000`).
+- **Fixed:** Lockfile pinned unpublished `eslint@10.9.0` — regenerated; `scripts/check-packages.mjs` + vitest guard now prevent drift (never hand-edit `package-lock.json`).
+
+### v0.9.0 — Customer Notification Pipeline (P2) (2026-08-04)
+
+- **Added:** Scenario-based email pipeline (`payment_success`, `payment_failed`, `processing`, `shipped`, `delivered`, `cancelled`) with recipient fallback to the registered user's email; failure + refund emails fire on the winning CAS transition; admin shipping updates email on any real change.
+
+### v0.8.1 — Checkout Race Conditions (P1) (2026-08-04)
+
+- **Fixed:** TOCTOU in payment callbacks → atomic `markOrderPaymentStatus` CAS; stock now restored on failed/refunded payments (`releaseOrderStock` + `stock_released` guard, migration `0007`); M-Pesa accepts `ResultCode === "0"`; `order-confirmation.tsx` polls real status via `GET /api/orders/:id/status`.
+
+### v0.8.0 — Analytics Revenue Fix (P0) (2026-08-04)
+
+- **Fixed:** `totalRevenue` now sums only paid orders (was all orders incl. pending/failed); `bookedRevenue` added for reference; sales-trend counts paid only.
 
 ### v0.7.0 — CDN Image Optimisation (2026-08-04)
 
@@ -1034,6 +1156,6 @@ For issues, feature requests, or questions:
 
 ---
 
-**Last Updated:** 2026-08-03
-**Version:** 0.5.5
+**Last Updated:** 2026-08-05
+**Version:** 0.9.2
 **Maintainer:** Jonathan Maina

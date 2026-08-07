@@ -160,6 +160,26 @@ function eatTimestamp(date: Date): string {
 }
 
 /**
+ * Normalize and validate a Kenyan mobile phone number.
+ * Accepts `+254XXXXXXXXX`, `254XXXXXXXXX`, `0XXXXXXXXX` and
+ * `07XXXXXXXX`/`011XXXXXXX` local formats. Returns the E.164 form
+ * `254XXXXXXXXX` when valid, or `null` for any malformed input.
+ */
+export function normalizeKenyanPhone(input: string): string | null {
+  const digits = input.replace(/[^0-9]/g, "");
+  let normalized: string | null = null;
+  if (digits.startsWith("0") && digits.length === 10) {
+    normalized = `254${digits.slice(1)}`;
+  } else if (digits.startsWith("254") && digits.length === 12) {
+    normalized = digits;
+  } else if (digits.length === 9) {
+    normalized = `254${digits}`;
+  }
+  if (!normalized || !/^254[17]\d{8}$/.test(normalized)) return null;
+  return normalized;
+}
+
+/**
  * Initiate an M-Pesa STK Push (Lipa Na M-Pesa Online).
  *
  * Returns `{ MerchantRequestID, CheckoutRequestID }` on success
@@ -177,9 +197,10 @@ export async function initiateMpesaStkPush(params: {
   if (!MPESA_PASSKEY) return { error: "MPESA_PASSKEY is not configured" };
   if (!MPESA_CALLBACK_URL) return { error: "MPESA_CALLBACK_URL is not configured" };
 
-  // Normalize phone: strip +, leading 0 → 254 prefix
-  let phone = params.phone.replace(/[^0-9]/g, "");
-  if (phone.startsWith("0")) phone = "254" + phone.slice(1);
+  // Normalize phone to E.164 (254XXXXXXXXX); reject malformed numbers before
+  // hitting Daraja so bad input surfaces as a 400, not a failed STK push.
+  const phone = normalizeKenyanPhone(params.phone);
+  if (!phone) return { error: "Invalid M-Pesa phone number" };
 
   const timestamp = eatTimestamp(new Date());
   const password = Buffer.from(`${MPESA_SHORTCODE}${MPESA_PASSKEY}${timestamp}`).toString("base64");

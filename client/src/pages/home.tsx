@@ -71,10 +71,18 @@ export default function Home() {
   const categories = [
     "All Products",
     "New Arrivals",
-    "Clothing",
     "Accessories",
-    "Home & Living",
+    "Baby",
+    "Bags",
+    "Beauty & Personal Care",
+    "Clothing",
     "Electronics",
+    "Footwear",
+    "Grocery",
+    "Home & Kitchen",
+    "Home & Living",
+    "Jewelry",
+    "Sporting Goods",
   ];
 
   return (

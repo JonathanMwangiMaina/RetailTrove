@@ -34,12 +34,18 @@ interface FilterSidebarProps {
 const CATEGORIES = [
   "All Products",
   "New Arrivals",
-  "Clothing",
   "Accessories",
-  "Home & Living",
+  "Baby",
+  "Bags",
+  "Beauty & Personal Care",
+  "Clothing",
   "Electronics",
-  "Sporting Goods",
   "Footwear",
+  "Grocery",
+  "Home & Kitchen",
+  "Home & Living",
+  "Jewelry",
+  "Sporting Goods",
 ];
 
 const MIN_PRICE = 9.99;

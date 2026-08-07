@@ -27,11 +27,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
-  // Get a unique cart ID for this session
+  // Get a unique cart ID for this session. Uses crypto.randomUUID() — a
+  // cryptographically-strong, unguessable token (prevents cross-session cart
+  // access via predicted cart IDs). Falls back to a legacy timestamp+random
+  // token only when the browser lacks crypto.randomUUID.
   const getCartId = () => {
     let cartId = localStorage.getItem("cartId");
     if (!cartId) {
-      cartId = `cart_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+      cartId =
+        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `cart_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
       localStorage.setItem("cartId", cartId);
     }
     return cartId;

@@ -7,11 +7,15 @@ import { pool } from "../server/db.js";
 import { registerRoutes } from "../server/routes.js";
 import { setupAuth } from "../server/auth.js";
 import { storage } from "../server/storage.js";
-import { globalLimiter, imageLimiter } from "../server/middleware/rate-limiter.js";
+import { globalLimiter, imageLimiter, webhookLimiter } from "../server/middleware/rate-limiter.js";
 import { sanitizeInput } from "../server/middleware/sanitize.js";
 import { handleCsrfToken, csrfSynchronisedProtection } from "../server/middleware/csrf.js";
 import { verifyLemonSqueezyWebhook } from "../server/payment-service.js";
-import { processLemonSqueezyWebhook, processMpesaCallback } from "../server/payment-callbacks.js";
+import {
+  processLemonSqueezyWebhook,
+  processMpesaCallback,
+  isMpesaCallbackAllowedIp,
+} from "../server/payment-callbacks.js";
 import { imageProxyHandler } from "../server/image-proxy.js";
 import * as Sentry from "@sentry/node";
 
@@ -35,6 +39,7 @@ if (!SESSION_SECRET) {
 // ── Lemon Squeezy Webhook (must be before express.json for raw body) ────────
 app.post(
   "/api/webhooks/lemonsqueezy",
+  webhookLimiter,
   express.raw({ type: "application/json" }),
   async (req: Request, res: Response) => {
     try {
@@ -60,17 +65,30 @@ app.post(
 );
 
 // ── M-Pesa Callback ─────────────────────────────────────────────────────────
-app.post("/api/mpesa/callback", express.json(), async (req: Request, res: Response) => {
-  // Process the payment state change BEFORE acking — on serverless the function
-  // can be frozen right after the response, so post-ack work is unreliable.
-  try {
-    await processMpesaCallback(req.body);
-    return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
-  } catch (err: any) {
-    console.error("[M-Pesa] callback processing error:", err.message);
-    return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
-  }
-});
+app.post(
+  "/api/mpesa/callback",
+  webhookLimiter,
+  express.json(),
+  async (req: Request, res: Response) => {
+    // Origin allowlist: only Safaricom Daraja IPs may invoke this endpoint.
+    // Opt-in via MPESA_CALLBACK_ALLOWED_IPS; unset = accept (sandbox-friendly).
+    const callbackIp = req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() ?? req.ip;
+    if (!isMpesaCallbackAllowedIp(callbackIp)) {
+      console.warn(`[M-Pesa] Callback rejected from non-allowlisted IP ${callbackIp}`);
+      return res.status(403).json({ ResultCode: 1, ResultDesc: "Forbidden" });
+    }
+
+    // Process the payment state change BEFORE acking — on serverless the function
+    // can be frozen right after the response, so post-ack work is unreliable.
+    try {
+      await processMpesaCallback(req.body);
+      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
+    } catch (err: any) {
+      console.error("[M-Pesa] callback processing error:", err.message);
+      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
+    }
+  },
+);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
@@ -112,6 +130,12 @@ app.use(sanitizeInput);
 
 const PgSessionStore = connectPgSimple(session);
 
+// Idle timeout (sliding, renewed on activity) — the rolling cookie re-issues
+// the cookie on each request so the session dies after this many ms without
+// traffic. The hard absolute cap (24 h) is enforced by a middleware in
+// registerRoutes (server/routes.ts) so sessions cannot outlive it.
+const SESSION_IDLE_MS = Number(process.env.SESSION_IDLE_MS ?? 30 * 60 * 1000);
+
 app.use(
   session({
     store: new PgSessionStore({
@@ -122,8 +146,9 @@ app.use(
     secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
+    rolling: true,
     cookie: {
-      maxAge: 30 * 24 * 60 * 60 * 1000,
+      maxAge: SESSION_IDLE_MS,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
     },
@@ -135,21 +160,14 @@ app.use(globalLimiter);
 app.get("/api/csrf-token", handleCsrfToken);
 
 app.get("/api/health", async (_req: Request, res: Response) => {
-  const dbStatus = await pool
+  // Minimal, non-informative payload: no uptime / version / environment /
+  // db-status disclosure (internal detail leakage).
+  const ok = await pool
     .query("SELECT 1")
-    .then(() => "connected" as const)
-    .catch(() => "disconnected" as const);
+    .then(() => true)
+    .catch(() => false);
 
-  const status = dbStatus === "connected" ? ("ok" as const) : ("degraded" as const);
-
-  res.json({
-    status,
-    timestamp: new Date().toISOString(),
-    uptime: Math.floor(process.uptime()),
-    database: dbStatus,
-    environment: process.env.NODE_ENV ?? "development",
-    version: "0.9.0",
-  });
+  res.json({ ok });
 });
 
 let isInitialized = false;

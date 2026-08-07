@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { db } from "./db.js";
 import { cache, cacheKeys, CACHE_TTLS } from "./cache.js";
+import { PRIVACY_POLICY_CONTENT, TERMS_OF_SERVICE_CONTENT } from "./legal-content.js";
 import {
   products,
   users,
@@ -78,8 +79,26 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  async getUserByVerificationToken(token: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.verificationToken, token));
+    return user;
+  }
+
   async createUser(insertUser: InsertUser): Promise<User> {
     const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+
+  async markEmailVerified(userId: number): Promise<User | undefined> {
+    const [user] = await db
+      .update(users)
+      .set({
+        emailVerified: true,
+        verificationToken: null,
+        verificationTokenExpiresAt: null,
+      })
+      .where(eq(users.id, userId))
+      .returning();
     return user;
   }
 
@@ -558,6 +577,13 @@ export class DatabaseStorage implements IStorage {
     await db.delete(cartItems).where(eq(cartItems.cartId, cartId));
   }
 
+  async adoptCart(cartId: string, authUserId: string): Promise<void> {
+    await db
+      .update(cartItems)
+      .set({ userId: authUserId })
+      .where(and(eq(cartItems.cartId, cartId), isNull(cartItems.userId)));
+  }
+
   // ── Wishlist Operations ────────────────────────────────────────────────────
 
   async getWishlistProducts(authUserId: string): Promise<Product[]> {
@@ -630,6 +656,35 @@ export class DatabaseStorage implements IStorage {
           })),
         );
 
+        // Stock reservation: verify availability BEFORE decrementing so an order
+        // that oversells a product is rejected (rollback) instead of silently
+        // driving stock negative. Quantity limits (max 10/line) are enforced by
+        // the Zod schema upstream. Throwing here rolls back the whole order.
+        for (const item of items) {
+          const qty = item.quantity ?? 1;
+          if (item.variantId) {
+            const [variant] = await tx
+              .select({ id: productVariants.id, stockQuantity: productVariants.stockQuantity })
+              .from(productVariants)
+              .where(eq(productVariants.id, item.variantId))
+              .limit(1);
+            if (!variant || variant.stockQuantity < qty) {
+              throw new Error(
+                `Insufficient stock for ${item.variantName ?? "variant"} (${qty} needed)`,
+              );
+            }
+          } else {
+            const [product] = await tx
+              .select({ id: products.id, stockQuantity: products.stockQuantity })
+              .from(products)
+              .where(eq(products.id, item.productId!))
+              .limit(1);
+            if (!product || (product.stockQuantity ?? 0) < qty) {
+              throw new Error(`Insufficient stock for product ${item.productName} (${qty} needed)`);
+            }
+          }
+        }
+
         // Decrement stock for each ordered item — single decrement, variant-level when present
         for (const item of items) {
           const qty = item.quantity ?? 1;
@@ -637,14 +692,14 @@ export class DatabaseStorage implements IStorage {
             await tx
               .update(productVariants)
               .set({
-                stockQuantity: sql`GREATEST(${productVariants.stockQuantity} - ${qty}, 0)`,
+                stockQuantity: sql`${productVariants.stockQuantity} - ${qty}`,
               })
               .where(eq(productVariants.id, item.variantId));
           } else {
             await tx
               .update(products)
               .set({
-                stockQuantity: sql`GREATEST(${products.stockQuantity} - ${qty}, 0)`,
+                stockQuantity: sql`${products.stockQuantity} - ${qty}`,
                 inStock: sql`CASE WHEN ${products.stockQuantity} - ${qty} <= 0 THEN false ELSE ${products.inStock} END`,
               })
               .where(eq(products.id, item.productId!));
@@ -1082,6 +1137,7 @@ export class DatabaseStorage implements IStorage {
         status: "active",
         isApproved: true,
         authUserId: crypto.randomUUID(),
+        emailVerified: true,
       });
     }
   }
@@ -1091,8 +1147,8 @@ export class DatabaseStorage implements IStorage {
       about: "Welcome to RetailTrove — your trusted online store for quality products.",
       contact: "Get in touch with our support team.",
       footer_about: "RetailTrove is a modern e-commerce platform.",
-      tos: "These Terms of Service govern your use of RetailTrove.",
-      privacy: "Your privacy is important to us at RetailTrove.",
+      tos: TERMS_OF_SERVICE_CONTENT,
+      privacy: PRIVACY_POLICY_CONTENT,
     };
 
     for (const [type, content] of Object.entries(defaults)) {

@@ -244,3 +244,37 @@ describe("M-Pesa Callback (real handler)", () => {
     expect(mockStorage.markOrderPaymentStatus).not.toHaveBeenCalled();
   });
 });
+
+describe("M-Pesa callback origin allowlist (Finding #4)", () => {
+  const originalEnv = process.env.MPESA_CALLBACK_ALLOWED_IPS;
+  afterEach(() => {
+    if (originalEnv === undefined) {
+      delete process.env.MPESA_CALLBACK_ALLOWED_IPS;
+    } else {
+      process.env.MPESA_CALLBACK_ALLOWED_IPS = originalEnv;
+    }
+  });
+
+  it("accepts any origin when the allowlist is unset (sandbox-friendly)", async () => {
+    delete process.env.MPESA_CALLBACK_ALLOWED_IPS;
+    const { isMpesaCallbackAllowedIp } = await import("../payment-callbacks.js");
+    expect(isMpesaCallbackAllowedIp("203.0.113.9")).toBe(true);
+    expect(isMpesaCallbackAllowedIp(undefined)).toBe(true);
+  });
+
+  it("rejects non-allowlisted IPs when the allowlist is configured", async () => {
+    process.env.MPESA_CALLBACK_ALLOWED_IPS = "196.201.98.0/24,196.201.94.0/23";
+    const { isMpesaCallbackAllowedIp } = await import("../payment-callbacks.js");
+    expect(isMpesaCallbackAllowedIp("196.201.98.10")).toBe(true);
+    expect(isMpesaCallbackAllowedIp("196.201.94.15")).toBe(true);
+    expect(isMpesaCallbackAllowedIp("203.0.113.9")).toBe(false);
+    expect(isMpesaCallbackAllowedIp(undefined)).toBe(false);
+  });
+
+  it("supports exact-IP allowlist entries", async () => {
+    process.env.MPESA_CALLBACK_ALLOWED_IPS = "197.248.192.9";
+    const { isMpesaCallbackAllowedIp } = await import("../payment-callbacks.js");
+    expect(isMpesaCallbackAllowedIp("197.248.192.9")).toBe(true);
+    expect(isMpesaCallbackAllowedIp("197.248.192.10")).toBe(false);
+  });
+});

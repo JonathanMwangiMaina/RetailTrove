@@ -11,6 +11,9 @@ vi.mock("../payment-service.js", () => ({
     MerchantRequestID: "MERCHANT-1",
     CheckoutRequestID: "CHECKOUT-1",
   })),
+  normalizeKenyanPhone: vi.fn((phone: string) =>
+    phone.startsWith("0") ? "254" + phone.slice(1) : phone,
+  ),
 }));
 
 vi.mock("../email.js", () => ({

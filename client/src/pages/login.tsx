@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth, AuthError } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,18 +38,23 @@ export default function LoginPage() {
     document.title = "Login - RetailTrove";
   }, []);
   const [, navigate] = useLocation();
-  const { login, register } = useAuth();
+  const { login, register, resendVerification } = useAuth();
   const { toast } = useToast();
 
+  const [activeTab, setActiveTab] = useState("login");
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendSent, setResendSent] = useState(false);
 
   const [regEmail, setRegEmail] = useState("");
   const [regPassword, setRegPassword] = useState("");
   const [regName, setRegName] = useState("");
   const [regRole, setRegRole] = useState("customer");
   const [regLoading, setRegLoading] = useState(false);
+  const [regDone, setRegDone] = useState(false);
 
   const [passwordStrength, setPasswordStrength] = useState<{
     score: number;
@@ -81,14 +86,33 @@ export default function LoginPage() {
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoginLoading(true);
+    setNeedsVerification(false);
+    setResendSent(false);
     try {
       await login(loginEmail, loginPassword);
       toast({ title: "Welcome back!", description: "You have been signed in." });
       navigate("/");
     } catch (err: any) {
-      toast({ title: "Sign in failed", description: err.message, variant: "destructive" });
+      if (err instanceof AuthError && err.code === "EMAIL_NOT_VERIFIED") {
+        setNeedsVerification(true);
+      } else {
+        toast({ title: "Sign in failed", description: err.message, variant: "destructive" });
+      }
     } finally {
       setLoginLoading(false);
+    }
+  }
+
+  async function handleResend() {
+    setResending(true);
+    setResendSent(false);
+    try {
+      await resendVerification(loginEmail);
+      setResendSent(true);
+    } catch (err: any) {
+      toast({ title: "Could not resend", description: err.message, variant: "destructive" });
+    } finally {
+      setResending(false);
     }
   }
 
@@ -108,8 +132,7 @@ export default function LoginPage() {
     setRegLoading(true);
     try {
       await register(regEmail, regPassword, regName, regRole);
-      toast({ title: "Account created!", description: "Welcome to ModernRetail." });
-      navigate("/");
+      setRegDone(true);
     } catch (err: any) {
       toast({ title: "Registration failed", description: err.message, variant: "destructive" });
     } finally {
@@ -130,7 +153,7 @@ export default function LoginPage() {
           <p className="text-gray-500 mt-2 text-sm">Your account, your way</p>
         </div>
 
-        <Tabs defaultValue="login" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2 mb-6">
             <TabsTrigger value="login">Sign In</TabsTrigger>
             <TabsTrigger value="register">Create Account</TabsTrigger>
@@ -175,6 +198,38 @@ export default function LoginPage() {
                       </Link>
                     </div>
                   </div>
+
+                  {needsVerification && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                      <p className="font-medium">Your email hasn't been confirmed yet.</p>
+                      <p className="mt-1 text-amber-700">
+                        Check your inbox for the confirmation link we sent when you created the
+                        account.
+                      </p>
+                      {resendSent ? (
+                        <p className="mt-2 font-medium text-emerald-700">
+                          A fresh confirmation link has been sent — please check your inbox.
+                        </p>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="mt-2"
+                          disabled={resending}
+                          onClick={handleResend}
+                        >
+                          {resending ? (
+                            <>
+                              <Loader2 className="h-3 w-3 mr-1 animate-spin" /> Sending…
+                            </>
+                          ) : (
+                            "Resend confirmation email"
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
                 <CardFooter>
                   <Button type="submit" className="w-full" disabled={loginLoading}>
@@ -195,97 +250,129 @@ export default function LoginPage() {
 
           {/* ── Register ── */}
           <TabsContent value="register">
-            <Card>
-              <CardHeader>
-                <CardTitle>Create Account</CardTitle>
-                <CardDescription>Join ModernRetail to start shopping or selling.</CardDescription>
-              </CardHeader>
-              <form onSubmit={handleRegister}>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="reg-name">Full Name</Label>
-                    <Input
-                      id="reg-name"
-                      placeholder="Jane Doe"
-                      value={regName}
-                      onChange={(e) => setRegName(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="reg-email">Email</Label>
-                    <Input
-                      id="reg-email"
-                      type="email"
-                      placeholder="you@example.com"
-                      value={regEmail}
-                      onChange={(e) => setRegEmail(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="reg-password">Password</Label>
-                    <Input
-                      id="reg-password"
-                      type="password"
-                      placeholder="Minimum 6 characters"
-                      value={regPassword}
-                      onChange={(e) => setRegPassword(e.target.value)}
-                      required
-                      minLength={6}
-                    />
-                    {displayPasswordStrength && (
-                      <div className="space-y-1">
-                        <div className="flex gap-1">
-                          {Array.from({ length: 4 }).map((_, i) => (
-                            <div
-                              key={i}
-                              className={`h-1.5 flex-1 rounded-full transition-colors ${
-                                i < displayPasswordStrength.score
-                                  ? displayPasswordStrength.color
-                                  : "bg-gray-200"
-                              }`}
-                            />
-                          ))}
-                        </div>
-                        <p
-                          className={`text-xs font-medium ${
-                            displayPasswordStrength.score < 2 ? "text-red-600" : "text-gray-600"
-                          }`}
-                        >
-                          {displayPasswordStrength.label}
-                          {displayPasswordStrength.score < 2 &&
-                            " — please choose a stronger password"}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Account Type</Label>
-                    <Select value={regRole} onValueChange={setRegRole}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="customer">Customer — Shop &amp; buy</SelectItem>
-                        <SelectItem value="vendor">Vendor — Sell products</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+            {regDone ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Check your inbox</CardTitle>
+                  <CardDescription>
+                    We've sent a confirmation link to <strong>{regEmail}</strong>.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="text-sm text-gray-600 space-y-3">
+                  <p>
+                    Your account has been created but isn't active yet — click the link in the email
+                    to confirm your address and start shopping.
+                  </p>
+                  <p>
+                    Can't find it? Check your spam folder, or{" "}
+                    <button
+                      type="button"
+                      className="text-primary-600 hover:underline font-medium"
+                      onClick={() => {
+                        setLoginEmail(regEmail);
+                        setRegDone(false);
+                        setActiveTab("login");
+                      }}
+                    >
+                      sign in
+                    </button>{" "}
+                    and resend the confirmation.
+                  </p>
                 </CardContent>
-                <CardFooter>
-                  <Button type="submit" className="w-full" disabled={regLoading}>
-                    {regLoading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Creating account…
-                      </>
-                    ) : (
-                      "Create Account"
-                    )}
-                  </Button>
-                </CardFooter>
-              </form>
-            </Card>
+              </Card>
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Create Account</CardTitle>
+                  <CardDescription>Join ModernRetail to start shopping or selling.</CardDescription>
+                </CardHeader>
+                <form onSubmit={handleRegister}>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="reg-name">Full Name</Label>
+                      <Input
+                        id="reg-name"
+                        placeholder="Jane Doe"
+                        value={regName}
+                        onChange={(e) => setRegName(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="reg-email">Email</Label>
+                      <Input
+                        id="reg-email"
+                        type="email"
+                        placeholder="you@example.com"
+                        value={regEmail}
+                        onChange={(e) => setRegEmail(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="reg-password">Password</Label>
+                      <Input
+                        id="reg-password"
+                        type="password"
+                        placeholder="Minimum 6 characters"
+                        value={regPassword}
+                        onChange={(e) => setRegPassword(e.target.value)}
+                        required
+                        minLength={6}
+                      />
+                      {displayPasswordStrength && (
+                        <div className="space-y-1">
+                          <div className="flex gap-1">
+                            {Array.from({ length: 4 }).map((_, i) => (
+                              <div
+                                key={i}
+                                className={`h-1.5 flex-1 rounded-full transition-colors ${
+                                  i < displayPasswordStrength.score
+                                    ? displayPasswordStrength.color
+                                    : "bg-gray-200"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                          <p
+                            className={`text-xs font-medium ${
+                              displayPasswordStrength.score < 2 ? "text-red-600" : "text-gray-600"
+                            }`}
+                          >
+                            {displayPasswordStrength.label}
+                            {displayPasswordStrength.score < 2 &&
+                              " — please choose a stronger password"}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Account Type</Label>
+                      <Select value={regRole} onValueChange={setRegRole}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="customer">Customer — Shop &amp; buy</SelectItem>
+                          <SelectItem value="vendor">Vendor — Sell products</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </CardContent>
+                  <CardFooter>
+                    <Button type="submit" className="w-full" disabled={regLoading}>
+                      {regLoading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Creating account…
+                        </>
+                      ) : (
+                        "Create Account"
+                      )}
+                    </Button>
+                  </CardFooter>
+                </form>
+              </Card>
+            )}
           </TabsContent>
         </Tabs>
       </div>
