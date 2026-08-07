@@ -147,6 +147,24 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 
 ---
 
+## Current Session (2026-08-07) — v0.10.1 Product Images → Supabase Storage
+
+### Objective
+- Migrate `client/public/images/` (99 WebP: 48 eastmatt + 51 magunas) into the public `products` Supabase Storage bucket, update `image_url` in prod DB, delete the local folder.
+
+### What was done
+- **Uploaded** all 99 files via AWS SDK v3 (`@aws-sdk/client-s3` installed in `/tmp/s3tools` — temp, NOT in repo) to bucket `products` with keys `eastmatt/<file>` / `magunas/<file>`, `Content-Type: image/webp`. Endpoint `https://bdkvujsvyttdzbiwexks.storage.supabase.co/storage/v1/s3`, region `eu-west-1`, `forcePathStyle: true`. S3 keys read at runtime from `C:\Users\USER\Downloads\Mobile Devices\New Text Document.txt` (never committed).
+- **Key gotcha:** the first upload used `Key: "products/eastmatt/..."` → public URL `.../public/products/products/eastmatt/...` (doubled bucket prefix). Public REST object URLs must be `.../object/public/products/eastmatt/...` — i.e. the S3 key inside the bucket is just `eastmatt/...` (bucket name NOT repeated). Deleted the 99 mis-keyed objects and re-uploaded under the correct key.
+- **Public URL format:** `https://bdkvujsvyttdzbiwexks.supabase.co/storage/v1/object/public/products/<prefix>/<file>.webp` — verified 200 `image/webp`. The `.storage.supabase.co` host with `/object/public` returns "Invalid Storage request" — use the project-ref host.
+- **Migration `0015_migrate_product_images_to_storage.sql`** applied to prod: backs up `products` → `products_backup_20260807_images`, then `UPDATE products SET image_url = CASE id ...` (99 WHENs) `WHERE image_url LIKE '/images/%'` (idempotent).
+- **Verified:** prod `remaining_local = 0`, `storage_urls = 99`, total products 133. Remote `https://` image URLs pass through `/api/image` proxy (SSRF `isPublicHost` accepts the public Supabase host).
+- Deleted `client/public/images/` via `git rm`. Updated AGENTS.md + CHANGELOG.md (v0.10.1 entry + note on the 0009 line).
+
+### S3 upload tooling (temp, `/tmp/s3tools/`, gitignored by location)
+- `probe.mjs` (list+head), `upload.mjs` (--upload), `refix.mjs` (delete mis-keyed + re-upload), `verify.mjs`, `curl_check*.sh`. Creds read from the Downloads txt file. Reusable next time images need uploading.
+
+---
+
 ## Prior Session (2026-08-05) — v0.9.2
 
 ### Git
@@ -155,7 +173,7 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 - Version bumped to **0.9.2** (`package.json`, `package-lock.json`, `api/index.ts`, `server/index.ts`) — reconciles the v0.9.1 changelog entry that never got a code bump (code still read 0.9.0).
 
 ### Vendor Catalogue Data (prod)
-- Applied `migrations/0008_add_eastmatt_promo_products.sql` (48 products, vendor_id=20) and `migrations/0009_add_magunas_promo_products.sql` (51 products, vendor_id=2; images optimized to WebP in `client/public/images/magunas/`).
+- Applied `migrations/0008_add_eastmatt_promo_products.sql` (48 products, vendor_id=20) and `migrations/0009_add_magunas_promo_products.sql` (51 products, vendor_id=2; images optimized to WebP in `client/public/images/magunas/`). **Note (2026-08-07):** those 99 WebP files were since migrated out of `client/public/images/` into the public `products` Supabase Storage bucket (`eastmatt/` + `magunas/` prefixes) via `migrations/0015_migrate_product_images_to_storage.sql`; the local folder was deleted from the repo.
 - Approved all 99 pending vendor products via Playwright/Chromium on `retailtrove.vercel.app` — first attempt hit **403 CSRF** (mutating routes wrapped in `csrfSync`); fix: `GET /api/csrf-token` then send `x-csrf-token` header per approve PUT. Prod now **133 products, 0 pending**.
 
 ### Security — E2E credential scrub

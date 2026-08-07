@@ -7,6 +7,20 @@ This project does not currently use semantic versioning — entries are dated.
 
 ---
 
+## [v0.10.1] — Product Images Migrated to Supabase Storage (2026-08-07)
+
+### Product Images — local folder removed
+- Migrated the 99 local WebP files (`client/public/images/{eastmatt,magunas}/`) to the public `products` Supabase Storage bucket under `eastmatt/` (48) and `magunas/` (51) prefixes. Uploaded via the S3 API (`@aws-sdk/client-s3`, endpoint `https://bdkvujsvyttdzbiwexks.storage.supabase.co/storage/v1/s3`, region `eu-west-1`, `forcePathStyle`), `Content-Type: image/webp`.
+- `migrations/0015_migrate_product_images_to_storage.sql` rewrites `image_url` for products 44–142 from `/images/...` to the public object URLs `https://bdkvujsvyttdzbiwexks.supabase.co/storage/v1/object/public/products/<prefix>/<file>.webp`. Backs up `products` to `products_backup_20260807_images` first; idempotent (only touches rows still pointing at `/images/`).
+- Deleted `client/public/images/` from the repo. Remote `https://` image URLs continue to flow through the `/api/image` sharp proxy (SSRF-hardened); the Supabase storage host is public and passes `isOptimizableImage`.
+
+### Verification
+- S3 probe (AWS SDK): ListObjectsV2 + HeadObject on the `products` bucket return the 10 existing hash-named `.jpg` objects; 99 new objects verified present with correct sizes.
+- Public URLs return 200 `image/webp` (correct bytes) for both a `eastmatt/` and a `magunas/` object; the earlier mis-keyed (`products/...` prefix) objects were deleted and re-uploaded under the correct key.
+- Prod DB: 0 products remain on `/images/`, 99 on Storage URLs, 133 total.
+
+---
+
 ## [v0.10.0] — Security Remediation + Email Verification + Order Receipts (2026-08-07)
 
 ### Security — Findings-driven hardening (external pentest)
@@ -45,7 +59,7 @@ This project does not currently use semantic versioning — entries are dated.
 
 ### Added — Vendor product data imports
 - `migrations/0008_add_eastmatt_promo_products.sql` — imported **48 EastMatt promo products** (`vendor_id=20`, EastMatt vendor account) into production.
-- `migrations/0009_add_magunas_promo_products.sql` — imported **51 Magunas promo products** (`vendor_id=2`) into production; product images optimized to WebP in `client/public/images/magunas/`.
+- `migrations/0009_add_magunas_promo_products.sql` — imported **51 Magunas promo products** (`vendor_id=2`) into production; product images optimized to WebP in `client/public/images/magunas/`. **Note (2026-08-07):** these 99 WebP files (48 eastmatt + 51 magunas) were migrated to the public `products` Supabase Storage bucket via `migrations/0015_migrate_product_images_to_storage.sql`; the local folder was deleted.
 - All 99 imported products approved through the admin UI (`GET /api/csrf-token` + `x-csrf-token` header per approve PUT — the CSRF-protected approval flow). Production now has **133 products, 99 from vendor submissions**, with 0 pending.
 
 ### Added — Admin & vendor UX
