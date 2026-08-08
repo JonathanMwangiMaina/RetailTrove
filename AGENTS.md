@@ -847,3 +847,32 @@ wsl -d Ubuntu-26.04 -e bash -c 'cd /mnt/wsl/RetailTrove && git push origin main'
 - ✅ **Redis cache layer** (P3 — done v0.6.0, opt-in via Upstash)
 - ✅ **CDN image optimisation** (P3 — done v0.7.0, self-hosted sharp proxy + OptimizedImage)
 - ✅ **Product variants** (P3 — done v0.6.0)
+
+---
+
+## Live Compliance Audit — retailtrove.vercel.app (2026-08-07)
+
+**Overall compliance posture: INCOMPLETE for GDPR, CCPA, and Kenya-specific e-commerce regulations.** The site has foundational legal pages and strong technical security headers, but is missing mandatory consent mechanisms, jurisdiction-specific disclosures, and verified business registration details.
+
+### P0 — Legal/Regulatory (must fix before scaling)
+1. Replace placeholder contact info with real Kenyan business registration, KRA PIN, CAK license, and Nairobi address
+2. Add cookie consent banner (e.g., `react-cookie-consent`) before any tracking cookies fire
+3. Add Kenya Data Protection Act compliance statement to privacy policy
+4. Add CCPA section to privacy policy if serving California residents
+5. Update governing law to Kenyan law or add consumer-protection carve-out
+
+### P1 — Operational
+1. Implement data subject access request (DSAR) endpoint
+2. Add security.txt and vulnerability disclosure policy
+3. Add inline privacy notices at signup/checkout
+4. Create cookie policy page with category breakdown
+5. Add service provider list with DPA terms
+
+### P2 — Nice-to-have
+1. Add consent logging for marketing emails
+2. Add CAK license badge to footer
+3. Add Kenyan business registration badge
+4. Create DSAR self-service portal
+
+### Bottom line
+The site has strong technical security and basic legal pages, but is **not compliant** for a Kenyan e-commerce business because it lacks: (1) cookie consent, (2) Kenyan business registration/CAK licensing, (3) Data Protection Act 2019 compliance, and (4) real contact details. The US placeholder legal framework suggests this was built for a demo/portfolio context, not live Kenyan commerce.
