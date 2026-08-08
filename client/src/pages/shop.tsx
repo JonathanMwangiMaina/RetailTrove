@@ -48,7 +48,7 @@ const CATEGORIES = [
   "Sporting Goods",
 ];
 
-const MIN_PRICE = 9.99;
+const MIN_PRICE = 0.1;
 const MAX_PRICE = 4000;
 
 function FilterSidebar({

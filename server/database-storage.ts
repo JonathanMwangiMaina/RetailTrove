@@ -150,7 +150,11 @@ export class DatabaseStorage implements IStorage {
       conditions.push(gt(products.id, params.cursor));
     }
     if (params.category) {
-      conditions.push(eq(products.category, params.category));
+      if (params.category === "New Arrivals") {
+        conditions.push(eq(products.newArrival, true));
+      } else {
+        conditions.push(eq(products.category, params.category));
+      }
     }
     if (params.q) {
       const pattern = `%${params.q}%`;

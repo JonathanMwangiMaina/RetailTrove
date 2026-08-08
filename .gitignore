@@ -1,14 +1,97 @@
-node_modules
-dist
+# ─────────────────────────────────────────────────────────────
+# RetailTrove — .gitignore
+# Organized per common Node/Vite/React/Express + Playwright practice.
+# ─────────────────────────────────────────────────────────────
+
+# ── Dependencies ──────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+.pnp.cjs
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+.yarn/cache/
+.yarn/unplugged/
+
+# ── Build output ──────────────────────────────────────────────
+dist/
+dist/public/
+build/
+out/
+client/dist/
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+.rollup.cache/
+.rolldown-cache/
+
+# ── Env files ─────────────────────────────────────────────────
+# NOTE: `.env` is intentionally TRACKED and must NOT be ignored.
+#   - Vercel excludes anything in .gitignore from deploys → app 500s (see AGENTS.md v0.4.7).
+#   - `.env.example` is also tracked (documentation of required vars).
+# Only local/secret-spillover variants are ignored:
 .env.local
+.env.*.local
+.env.keys
+.env.*.keys
+
+# ── Logs ──────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ── Caches / coverage ─────────────────────────────────────────
+coverage/
+.nyc_output/
+.eslintcache
+.stylelintcache
+.vite/
+.cache/
+.turbo/
+.esbuildcache
+.vitest-cache/
+
+# ── Test / e2e artifacts ──────────────────────────────────────
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+e2e/results/
+
+# ── OS junk ───────────────────────────────────────────────────
 .DS_Store
-server/public
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+
+# ── IDE / editor ──────────────────────────────────────────────
+.idea/
+.project
+.classpath
+.settings/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# ── Vercel / deploy ───────────────────────────────────────────
+.vercel/
+
+# ── Project-specific ──────────────────────────────────────────
+server/public/
 vite.config.ts.*
 *.tar.gz
-*.swp
 commit_msg.txt
-test-results
-playwright-report
-e2e/results
 .tmp-security-*
 .tmp-pentest-*
+
+# ── Local tooling (opencode temp scripts, out-of-repo on this machine) ──
+C:/Users/user/AppData/Local/Temp/opencode/
