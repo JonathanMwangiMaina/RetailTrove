@@ -30,5 +30,5 @@ createRoot(rootElement).render(
       <App />
       <Analytics />
     </QueryClientProvider>
-  </StrictMode>
+  </StrictMode>,
 );

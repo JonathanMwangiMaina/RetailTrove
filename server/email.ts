@@ -247,7 +247,11 @@ export async function sendPasswordResetEmail(email: string, resetUrl: string): P
   }
 }
 
-export async function sendVerificationEmail(email: string, name: string, verificationUrl: string): Promise<void> {
+export async function sendVerificationEmail(
+  email: string,
+  name: string,
+  verificationUrl: string,
+): Promise<void> {
   try {
     await deliverEmail({
       to: email,

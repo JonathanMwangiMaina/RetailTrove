@@ -137,8 +137,7 @@ export function imageProxyHandler() {
   // Every failure mode returns the exact same generic response. Differentiating
   // error messages/statuses would let an attacker probe which hosts are
   // reachable / blocked (SSRF reachability oracle).
-  const reject = (res: Response) =>
-    res.status(400).json({ error: "Invalid image request" });
+  const reject = (res: Response) => res.status(400).json({ error: "Invalid image request" });
 
   return async (req: Request, res: Response, next: NextFunction) => {
     try {

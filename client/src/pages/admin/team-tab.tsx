@@ -37,7 +37,14 @@ interface Props {
   members: AdminTeamMember[];
 }
 
-const EMPTY_FORM = { name: "", title: "", bio: "", imageUrl: "", displayOrder: 0, isPublished: true };
+const EMPTY_FORM = {
+  name: "",
+  title: "",
+  bio: "",
+  imageUrl: "",
+  displayOrder: 0,
+  isPublished: true,
+};
 
 export default function TeamTab({ members }: Props) {
   const { toast } = useToast();
@@ -47,7 +54,8 @@ export default function TeamTab({ members }: Props) {
   const [form, setForm] = useState(EMPTY_FORM);
 
   const addMutation = useMutation({
-    mutationFn: (data: Record<string, unknown>) => apiRequest("POST", "/api/admin/team-members", data),
+    mutationFn: (data: Record<string, unknown>) =>
+      apiRequest("POST", "/api/admin/team-members", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/team-members"] });
       queryClient.invalidateQueries({ queryKey: ["/api/team-members"] });
@@ -115,7 +123,9 @@ export default function TeamTab({ members }: Props) {
             ) : (
               members.map((m) => (
                 <TableRow key={m.id}>
-                  <TableCell className="text-xs text-muted-foreground">{m.displayOrder ?? 0}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {m.displayOrder ?? 0}
+                  </TableCell>
                   <TableCell>
                     <OptimizedImage
                       src={m.imageUrl}
@@ -135,10 +145,7 @@ export default function TeamTab({ members }: Props) {
                     </p>
                   </TableCell>
                   <TableCell className="text-center">
-                    <Badge
-                      variant={m.isPublished ? "default" : "secondary"}
-                      className="text-xs"
-                    >
+                    <Badge variant={m.isPublished ? "default" : "secondary"} className="text-xs">
                       {m.isPublished ? "Published" : "Draft"}
                     </Badge>
                   </TableCell>
@@ -243,10 +250,7 @@ export default function TeamTab({ members }: Props) {
             <Button variant="outline" onClick={() => setIsAddOpen(false)}>
               Cancel
             </Button>
-            <Button
-              onClick={() => addMutation.mutate(form)}
-              disabled={addMutation.isPending}
-            >
+            <Button onClick={() => addMutation.mutate(form)} disabled={addMutation.isPending}>
               {addMutation.isPending ? "Adding…" : "Add Member"}
             </Button>
           </DialogFooter>
@@ -287,9 +291,7 @@ export default function TeamTab({ members }: Props) {
                 <Label>Image URL</Label>
                 <Input
                   value={editing.imageUrl}
-                  onChange={(e) =>
-                    setEditing((m) => (m ? { ...m, imageUrl: e.target.value } : m))
-                  }
+                  onChange={(e) => setEditing((m) => (m ? { ...m, imageUrl: e.target.value } : m))}
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">

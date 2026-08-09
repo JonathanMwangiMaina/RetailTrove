@@ -97,8 +97,7 @@ app.post(
   async (req: Request, res: Response) => {
     // Origin allowlist: only Safaricom Daraja IPs may invoke this endpoint.
     // Opt-in via MPESA_CALLBACK_ALLOWED_IPS; unset = accept (sandbox-friendly).
-    const callbackIp =
-      req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() ?? req.ip;
+    const callbackIp = req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() ?? req.ip;
     if (!isMpesaCallbackAllowedIp(callbackIp)) {
       console.warn(`[M-Pesa] Callback rejected from non-allowlisted IP ${callbackIp}`);
       return res.status(403).json({ ResultCode: 1, ResultDesc: "Forbidden" });

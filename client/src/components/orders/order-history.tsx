@@ -70,7 +70,7 @@ function formatDate(value: string | null) {
 }
 
 function badgeClass(map: Record<string, string>, status: string | null | undefined) {
-  return status ? map[status] ?? "bg-gray-100 text-gray-600" : "bg-gray-100 text-gray-600";
+  return status ? (map[status] ?? "bg-gray-100 text-gray-600") : "bg-gray-100 text-gray-600";
 }
 
 function statusLabel(status: string | null | undefined) {
