@@ -26,7 +26,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertOrderSchema } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
-import { COUNTRIES_BY_NAME } from "@/lib/countries";
+import { COUNTRIES_BY_NAME, getCurrencyForCountry } from "@/lib/countries";
+import { formatPrice as formatPriceIn } from "@/lib/currencies";
 import { z } from "zod";
 import { Link, useLocation } from "wouter";
 import { Loader2Icon } from "lucide-react";
@@ -46,7 +47,7 @@ export default function Checkout() {
   }, []);
   const { cart, subtotal, clearCart } = useCart();
   const { toast } = useToast();
-  const { formatPrice } = useCurrency();
+  const { formatPrice, currencyCode } = useCurrency();
   const { user, isLoading: authLoading } = useAuth();
   const [, navigate] = useLocation();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -75,6 +76,16 @@ export default function Checkout() {
       total: total.toString(),
     },
   });
+
+  // Country-currency approximation hint (display-only — the store charges in
+  // the configured site currency)
+  const selectedCountry = form.watch("country");
+  const countryCurrency = selectedCountry ? getCurrencyForCountry(selectedCountry) : undefined;
+  const showCountryApprox = !!countryCurrency && countryCurrency !== currencyCode;
+  const countryApprox =
+    showCountryApprox && Number.isFinite(total)
+      ? formatPriceIn(total, countryCurrency as string)
+      : "";
 
   const onSubmit = async (values: CheckoutFormValues) => {
     // Don't submit if cart is empty
@@ -545,6 +556,11 @@ export default function Checkout() {
                   <p className="text-primary-900">Total</p>
                   <p className="text-primary-900">{formatPrice(total)}</p>
                 </div>
+                {showCountryApprox && (
+                  <p className="text-xs text-gray-500 mt-1 text-right">
+                    ≈ {countryApprox} ({countryCurrency}) in your country&apos;s currency
+                  </p>
+                )}
               </div>
 
               {/* Desktop submit button */}

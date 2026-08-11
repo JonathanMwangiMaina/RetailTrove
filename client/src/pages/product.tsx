@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -7,12 +7,32 @@ import { OptimizedImage } from "@/components/ui/optimized-image";
 import { useCart } from "@/hooks/use-cart";
 import { useWishlist } from "@/hooks/use-wishlist";
 import { useCurrency } from "@/hooks/use-currency";
-import { Product as ProductType, ProductVariant, ProductImage } from "@shared/schema";
+import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import {
+  Product as ProductType,
+  ProductVariant,
+  ProductImage,
+  ProductReviewSummary,
+  ProductReview,
+} from "@shared/schema";
 import { StarIcon, CheckIcon, GlobeIcon, HeartIcon } from "lucide-react";
 
 interface ProductWithVariants extends ProductType {
   variants?: ProductVariant[];
   images?: ProductImage[];
+  reviewSummary?: ProductReviewSummary;
+}
+
+type ReviewWithAuthor = ProductReview & { userName?: string | null };
+
+interface MyReviewResponse {
+  hasPurchased: boolean;
+  review: ProductReview | null;
 }
 
 export default function ProductPage() {
@@ -20,8 +40,13 @@ export default function ProductPage() {
   const { addToCart } = useCart();
   const { isWishlisted, toggle } = useWishlist();
   const { formatPrice } = useCurrency();
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedVariantId, setSelectedVariantId] = useState<number | undefined>(undefined);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewTitle, setReviewTitle] = useState("");
+  const [reviewComment, setReviewComment] = useState("");
 
   // Fetch product data
   const {
@@ -32,8 +57,37 @@ export default function ProductPage() {
     queryKey: [`/api/products/${id}`],
   });
 
+  const { data: reviews = [] } = useQuery<ReviewWithAuthor[]>({
+    queryKey: [`/api/products/${id}/reviews`],
+    enabled: !!id,
+  });
+
+  const { data: myReview } = useQuery<MyReviewResponse>({
+    queryKey: [`/api/products/${id}/reviews/me`],
+    enabled: !!user,
+  });
+
+  const submitReviewMutation = useMutation({
+    mutationFn: (payload: { rating: number; title: string; comment: string }) =>
+      apiRequest("POST", `/api/products/${id}/reviews`, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/products/${id}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/products/${id}/reviews`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/products/${id}/reviews/me`] });
+      setReviewTitle("");
+      setReviewComment("");
+      setReviewRating(5);
+      toast({ title: "Review published", description: "Thanks for your feedback!" });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Failed to submit review", description: e.message, variant: "destructive" }),
+  });
+
   const variants = product?.variants ?? [];
   const galleryImages = product?.images ?? [];
+  const reviewSummary = product?.reviewSummary;
+  const averageRating = reviewSummary?.averageRating ?? 0;
+  const reviewCount = reviewSummary?.reviewCount ?? 0;
 
   // Effective selection: an explicit user choice wins, otherwise fall back to
   // the default in-stock option. Derived at render time (no effect, no
@@ -126,6 +180,15 @@ export default function ProductPage() {
       "@type": "Brand",
       name: "RetailTrove",
     },
+    ...(reviewCount > 0
+      ? {
+          aggregateRating: {
+            "@type": "AggregateRating",
+            ratingValue: averageRating,
+            reviewCount,
+          },
+        }
+      : {}),
   };
 
   return (
@@ -176,20 +239,26 @@ export default function ProductPage() {
           {/* Product Info */}
           <div className="mt-10 lg:mt-0 lg:max-w-lg lg:self-start">
             <div className="flex items-center">
-              <div className="flex items-center">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <StarIcon
-                    key={i}
-                    className={`h-5 w-5 ${
-                      i < Math.floor(Number(product.rating)) ? "text-yellow-400" : "text-gray-300"
-                    }`}
-                    fill="currentColor"
-                  />
-                ))}
-              </div>
-              <p className="ml-2 text-sm text-gray-500">
-                {Math.floor(Number(product.rating) * 8 + 4)} reviews
-              </p>
+              <a href="#reviews" className="flex items-center">
+                <div className="flex items-center">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <StarIcon
+                      key={i}
+                      className={`h-5 w-5 ${
+                        i < Math.round(averageRating) ? "text-yellow-400" : "text-gray-300"
+                      }`}
+                      fill="currentColor"
+                    />
+                  ))}
+                </div>
+                <p className="ml-2 text-sm text-gray-500 hover:text-gray-700">
+                  {reviewCount > 0
+                    ? `${averageRating.toFixed(1)} out of 5 · ${reviewCount} ${
+                        reviewCount === 1 ? "review" : "reviews"
+                      }`
+                    : "No reviews yet"}
+                </p>
+              </a>
             </div>
 
             <div className="mt-6">
@@ -301,6 +370,181 @@ export default function ProductPage() {
             </div>
           </div>
         </div>
+
+        {/* Reviews */}
+        <section id="reviews" aria-label="Product reviews" className="mt-16 max-w-3xl scroll-mt-24">
+          <h2 className="text-2xl font-bold text-primary-900">Customer Reviews</h2>
+
+          {reviewCount > 0 && (
+            <div className="mt-4 flex items-center gap-2">
+              <div className="flex items-center">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <StarIcon
+                    key={i}
+                    className={`h-5 w-5 ${
+                      i < Math.round(averageRating) ? "text-yellow-400" : "text-gray-300"
+                    }`}
+                    fill="currentColor"
+                  />
+                ))}
+              </div>
+              <p className="text-sm text-gray-500">
+                {averageRating.toFixed(1)} out of 5 ({reviewCount}{" "}
+                {reviewCount === 1 ? "review" : "reviews"})
+              </p>
+            </div>
+          )}
+
+          <ul role="list" className="mt-6 divide-y divide-gray-200">
+            {reviews.length === 0 ? (
+              <li className="py-4 text-sm text-gray-500">
+                No reviews yet. Be the first to review this product.
+              </li>
+            ) : (
+              reviews.map((review) => (
+                <li key={review.id} className="py-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-primary-900">
+                        {review.userName ?? "Anonymous"}
+                      </p>
+                      {review.isVerifiedPurchase && (
+                        <span className="inline-flex items-center rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+                          Verified purchase
+                        </span>
+                      )}
+                    </div>
+                    <div
+                      className="flex items-center"
+                      aria-label={`${review.rating} out of 5 stars`}
+                    >
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <StarIcon
+                          key={i}
+                          className={`h-4 w-4 ${
+                            i < review.rating ? "text-yellow-400" : "text-gray-300"
+                          }`}
+                          fill="currentColor"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  {review.title && (
+                    <p className="mt-2 text-sm font-semibold text-primary-900">{review.title}</p>
+                  )}
+                  <p className="mt-1 text-sm text-gray-500">{review.comment}</p>
+                  <p className="mt-2 text-xs text-gray-400">
+                    {review.createdAt
+                      ? new Date(review.createdAt).toLocaleDateString("en-US", {
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        })
+                      : ""}
+                  </p>
+                </li>
+              ))
+            )}
+          </ul>
+
+          <div className="mt-8 border-t border-gray-200 pt-8">
+            <h3 className="text-lg font-semibold text-primary-900">Write a Review</h3>
+            {!user ? (
+              <p className="mt-3 text-sm text-gray-500">
+                <Link
+                  href="/login"
+                  className="font-medium text-secondary-600 hover:text-secondary-500"
+                >
+                  Sign in
+                </Link>{" "}
+                to review this product.
+              </p>
+            ) : myReview && !myReview.hasPurchased ? (
+              <p className="mt-3 text-sm text-gray-500">
+                You can review this product after purchasing it.
+              </p>
+            ) : (
+              <form
+                className="mt-4 space-y-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (reviewComment.trim().length < 10) {
+                    toast({
+                      title: "Review too short",
+                      description: "Please write at least 10 characters.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  submitReviewMutation.mutate({
+                    rating: reviewRating,
+                    title: reviewTitle,
+                    comment: reviewComment,
+                  });
+                }}
+              >
+                <div>
+                  <Label>Rating</Label>
+                  <div className="mt-1 flex items-center gap-1">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => setReviewRating(i + 1)}
+                        aria-label={`${i + 1} star${i === 0 ? "" : "s"}`}
+                        className="p-0.5"
+                      >
+                        <StarIcon
+                          className={`h-6 w-6 ${
+                            i < reviewRating ? "text-yellow-400" : "text-gray-300"
+                          }`}
+                          fill="currentColor"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="review-title">Title (optional)</Label>
+                  <Input
+                    id="review-title"
+                    value={reviewTitle}
+                    onChange={(e) => setReviewTitle(e.target.value)}
+                    maxLength={120}
+                    placeholder="Summarize your experience"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="review-comment">Review</Label>
+                  <Textarea
+                    id="review-comment"
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    rows={4}
+                    maxLength={2000}
+                    placeholder="What did you like or dislike about this product?"
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  disabled={submitReviewMutation.isPending}
+                  className="w-full sm:w-auto"
+                >
+                  {submitReviewMutation.isPending
+                    ? "Publishing..."
+                    : myReview?.review
+                      ? "Update review"
+                      : "Publish review"}
+                </Button>
+                {myReview?.review && (
+                  <p className="text-xs text-gray-400">
+                    You have already reviewed this product — resubmitting updates it.
+                  </p>
+                )}
+              </form>
+            )}
+          </div>
+        </section>
       </div>
     </>
   );

@@ -147,6 +147,39 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 
 ---
 
+## Current Session (2026-08-11) — v0.11.0 Product Reviews + Server-Side Currency Wiring
+
+### Product Reviews (migration 0029 — `product_reviews`)
+- **Table:** rating 1–5, title (nullable, ≤120), comment (10–2000), `status` (default `approved`), `is_verified_purchase` (default true), unique `(product_id, user_id)` + FK cascade, 2 indexes.
+- **Verified-buyer gate:** `POST /api/products/:id/reviews` is `requireAuth` + `writeLimiter`; 403 unless `hasPurchasedProduct(userId, productId)` (raw `db.execute` join `order_items → orders` via `users.auth_user_id = orders.user_id`, `payment_status = 'paid'`). Repeat submits upsert (`onConflictDoUpdate`) and re-publish. Mass-assignment safe via `insertProductReviewSchema`.
+- **Public:** `GET /products/:id/reviews` (approved, author names via left join), `GET .../reviews/summary`, `GET .../reviews/me` → `{ hasPurchased, review | null }` (NOT 404). Product detail embeds `reviewSummary` (zeroed fallback).
+- **Admin:** `GET /api/admin/reviews`, `PUT /api/admin/reviews/:id/status` (`approved`/`rejected` via `updateProductReviewStatusSchema`), `DELETE /api/admin/reviews/:id` — all `requireRole("admin")`, audit actions `product_reviewed`/`review_moderated`/`review_deleted`. Reviews auto-publish; admin rejects/deletes (mirrors testimonials).
+- **Client:** product.tsx real aggregate rating + count + full Reviews section (verified badge, star/title/comment form, sign-in/purchase gate); `aggregateRating` JSON-LD only when `reviewCount > 0`. New `client/src/pages/admin/reviews-tab.tsx` + `AdminProductReview` DTO in admin/types.ts, registered in admin.tsx (`Star` icon, "Reviews" tab).
+- **Tests:** `server/__tests__/reviews.test.ts` (20 tests — analytics.test.ts mock pattern with `registerRoutes` + `vi.hoisted`). Suite now **241/241 (22 files)**.
+
+### Server-side Currency Wiring (migration 0028 — `orders.currency`)
+- `orders.currency` persisted at order creation; `updateOrderPayment(currency?)` stores payment currency; `server/receipt.ts` + `server/email.ts` render via `formatAmountCompact(valueUsd, currency)`.
+- LS checkout: site currency in **minor units** (`amount * 10^decimals`, 0 for JPY, 3 for BHD/KWD/OMR/TND) + `currency` attr; M-Pesa always KES (`usdToKes`). `server/payment-service.ts` imports `client/src/lib/currencies.js`.
+- `countries.ts`: `COUNTRY_CURRENCIES` (exactly 240, one per `COUNTRIES`) + `getCurrencyForCountry(code|name, fallback USD)`; checkout shows `≈ {total} in {country currency}` when it differs from site currency. Currency-tab copy updated.
+
+### Verification
+- `tsc --noEmit`: 0 errors · `vitest run`: 241/241 · `eslint`: 0 errors · prettier clean · `vite build`: success.
+
+### Setup required (Supabase SQL Editor)
+1. `migrations/0028_add_orders_currency.sql`
+2. `migrations/0029_add_product_reviews.sql`
+
+### Queue audit — completed 2026-08-11
+- **Stub/cosmetic audit:** No faux data or stubs found in production code. Test mocks and UI placeholders are expected.
+- **ADRs:** Added ADR-010 (Redis cache layer / Upstash), ADR-011 (shared client-server currency module), ADR-012 (verified-buyer review gate).
+- **LICENSE.md:** Created MIT license.
+- **Git hygiene:** Clean — no Downloads creds or credential files tracked. The S3 upload tooling lives in `/tmp/s3tools/` (gitignored by location); migration 0016 has a source-path comment only.
+- **Vendor creds redaction:** Clean — `e2e/benchmark-checkout.spec.ts` uses `resolveCredentials` (stdin prompt); no hardcoded vendor passwords in tracked code.
+- **Admin P&L audit:** No P&L/profit-margin feature exists. The analytics tab shows gross revenue + order counts + inventory + visits only. Adding cost-of-goods-sold (COGS) data would be required to compute net profit; out of scope for this session.
+- **Migrations applied:** `0028_add_orders_currency.sql` + `0029_add_product_reviews.sql` applied to prod via Supabase CLI (`supabase db query --linked --file`); verified columns/indexes present.
+
+---
+
 ## Current Session (2026-08-07) — v0.10.1 Product Images → Supabase Storage
 
 ### Objective

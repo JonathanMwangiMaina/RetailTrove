@@ -7,6 +7,39 @@ This project does not currently use semantic versioning — entries are dated.
 
 ---
 
+## [v0.11.0] — Product Reviews + Server-Side Currency Wiring (2026-08-11)
+
+### Added — Product reviews (migration 0029)
+- New `product_reviews` table (rating 1–5, title, comment, status, `is_verified_purchase`, unique `(product_id, user_id)` for one-review-per-user, FK cascade) + 2 indexes.
+- Verified-buyer submission: `POST /api/products/:id/reviews` is `requireAuth` + `writeLimiter` and 403s unless the user has a `paid` order for that product (`hasPurchasedProduct`); repeat submits upsert (`onConflictDoUpdate`) and re-publish. Reviews auto-publish (`status = 'approved'`); admin can reject/delete.
+- Public endpoints: `GET /api/products/:id/reviews` (approved list with author names), `GET .../reviews/summary` (aggregate `{ averageRating, reviewCount }`), `GET .../reviews/me` (own review + purchased flag). Product detail now embeds `reviewSummary` (real aggregate, zeroed fallback).
+- Admin moderation: `GET /api/admin/reviews`, `PUT /api/admin/reviews/:id/status`, `DELETE /api/admin/reviews/:id` — all `requireRole("admin")`, audit-logged (`product_reviewed` / `review_moderated` / `review_deleted`).
+- Product page: real aggregate rating + count (replaces fake count), Reviews section with author names, Verified Purchase badge, star/title/comment form gated on sign-in + purchase; JSON-LD `aggregateRating` only when reviews exist. New admin **Reviews** tab (approve / reject / delete).
+- 20 new route tests (`server/__tests__/reviews.test.ts`); suite now **241/241**.
+
+### Added — Server-side currency wiring (migration 0028)
+- `orders.currency` column persisted on order creation; `updateOrderPayment` stores the payment currency; receipts + transactional emails render amounts via `formatAmountCompact(valueUsd, currency)` from the canonical `client/src/lib/currencies.ts` (155 currencies, KES rate 129.38).
+- Lemon Squeezy checkout charges the site currency in minor units (0-decimal for JPY, 2 for most, 3 for BHD/KWD/OMR/TND) with the `currency` attribute; M-Pesa always charges KES via `usdToKes`.
+- `client/src/lib/countries.ts` gained `COUNTRY_CURRENCIES` (240 entries) + `getCurrencyForCountry`; checkout shows an `≈ {total} in {country currency}` approximation when the shipping country's currency differs from the site currency. Admin Currency tab copy updated.
+
+### Verification
+- `tsc --noEmit`: 0 errors · `vitest run`: **241/241 (22 files)** · `eslint`: 0 errors · `prettier --check`: clean · `vite build`: success.
+
+### Setup required (Supabase SQL Editor)
+1. `migrations/0028_add_orders_currency.sql` — `orders.currency`
+2. `migrations/0029_add_product_reviews.sql` — `product_reviews` table
+
+### Queue audit — completed 2026-08-11
+- **Stub/cosmetic audit:** No faux data or stubs found in production code. Test mocks and UI placeholders are expected.
+- **ADRs:** Added ADR-010 (Redis cache layer / Upstash), ADR-011 (shared client-server currency module), ADR-012 (verified-buyer review gate).
+- **LICENSE.md:** Created MIT license.
+- **Git hygiene:** Clean — no Downloads creds or credential files tracked. The S3 upload tooling lives in `/tmp/s3tools/` (gitignored by location); migration 0016 has a source-path comment only.
+- **Vendor creds redaction:** Clean — `e2e/benchmark-checkout.spec.ts` uses `resolveCredentials` (stdin prompt); no hardcoded vendor passwords in tracked code.
+- **Admin P&L audit:** No P&L/profit-margin feature exists. The analytics tab shows gross revenue + order counts + inventory + visits only. Adding cost-of-goods-sold (COGS) data would be required to compute net profit; out of scope for this session.
+- **Migrations applied:** `0028_add_orders_currency.sql` + `0029_add_product_reviews.sql` applied to prod via Supabase CLI (`supabase db query --linked --file`); verified columns/indexes present.
+
+---
+
 ## [v0.10.1] — Product Images Migrated to Supabase Storage (2026-08-07)
 
 ### Product Images — local folder removed
@@ -553,15 +586,15 @@ This project does not currently use semantic versioning — entries are dated.
 - `GET /api/products` now returns `{ data: Product[], nextCursor: number | null }` with optional `cursor`, `limit`, `category`, and `q` query parameters
 
 #### Multi-Currency System
-- 170 fiat currencies with ISO 4217 codes, symbols, decimal places, and approximate USD exchange rates in `client/src/lib/currencies.ts`
+- 155 fiat currencies with ISO 4217 codes, symbols, decimal places, and approximate USD exchange rates in `client/src/lib/currencies.ts`
 - `formatPrice(amountUsd, currencyCode)` and `convertCurrency(amountUsd, toCurrency)` utility functions
 - `useCurrency()` React hook reads `site_currency` from site settings and provides `formatPrice()` globally
 - All 23 price display locations across 10 frontend files updated to use `formatPrice()`
-- Admin Currency tab with dropdown for all 170 currencies, saves to `site_settings`
+- Admin Currency tab with dropdown for all 155 currencies, saves to `site_settings`
 
 #### Internationalisation
-- 250 countries with ISO 3166-1 alpha-2 codes in `client/src/lib/countries.ts` (replacing 8 hardcoded countries in checkout)
-- Checkout country dropdown now shows all 250 countries sorted alphabetically
+- 240 countries with ISO 3166-1 alpha-2 codes in `client/src/lib/countries.ts` (replacing 8 hardcoded countries in checkout)
+- Checkout country dropdown now shows all 240 countries sorted alphabetically
 
 #### Frontend
 - **Audit Logs** admin tab: shows recent audit log entries with timestamp, action badge, entity type, entity ID, and IP address

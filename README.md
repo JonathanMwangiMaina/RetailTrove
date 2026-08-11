@@ -80,7 +80,7 @@ RetailTrove is a production-ready, full-stack e-commerce platform enabling:
 - Admin dashboard for product, user, content, and audit log management
 - Vendor portal for vendor-submitted product management and approval workflow
 - Role-based access control (Admin, Vendor, Customer)
-- Multi-currency system (170 currencies) with live conversion
+- Multi-currency system (155 currencies) with live conversion
 - Loyalty points system with tiered rewards
 - Security hardening: helmet, CSRF, rate limiting, input sanitisation, audit logging
 - Responsive design built on Tailwind CSS and Radix UI
@@ -191,7 +191,7 @@ retailtrove/
 │       │
 │       └── lib/
 │           ├── queryClient.ts            # TanStack Query + CSRF token
-│           ├── currencies.ts             # 170 currencies + formatPrice
+│           ├── currencies.ts             # 155 currencies + formatPrice
 │           ├── countries.ts              # 240 countries (ISO 3166-1)
 │           ├── utils.ts                  # Utility functions
 │           └── __tests__/                # Unit tests (currencies, countries)
@@ -977,7 +977,7 @@ npm run test:watch  # Watch mode
 - [x] M-Pesa STK Push (Safaricom Daraja API)
 - [x] Payment webhook handlers (HMAC-SHA256 verification)
 - [x] Server-side order total verification
-- [x] Multi-currency system (170 currencies)
+- [x] Multi-currency system (155 currencies)
 - [x] Loyalty points system
 - [x] Password reset flow
 
@@ -1133,7 +1133,7 @@ See `CHANGELOG.md` for complete version history.
 - **Added:** Lemon Squeezy hosted checkout + M-Pesa STK Push payments
 - **Added:** Security hardening: helmet, CSRF, rate limiting, input sanitisation, audit logging
 - **Added:** Vitest test suite (35 tests)
-- **Added:** Multi-currency system (170 currencies), loyalty points, 240 countries
+- **Added:** Multi-currency system (155 currencies), loyalty points, 240 countries
 - **Added:** Password reset flow, structured error handler, cursor-based pagination
 - **Changed:** `GET /api/products` returns `{ data, nextCursor }` paginated response
 - **Removed:** PayPal simulation, stale markdown docs, unused esbuild config

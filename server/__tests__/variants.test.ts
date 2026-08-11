@@ -18,6 +18,7 @@ const mockStorage = {
   getProductImages: vi.fn((productId: number) =>
     [...images.values()].filter((i) => i.productId === productId),
   ),
+  getProductReviewSummary: vi.fn(async () => undefined),
   createProductVariant: vi.fn(),
   updateProductVariant: vi.fn(),
   deleteProductVariant: vi.fn(),

@@ -7,6 +7,7 @@
  */
 
 import crypto from "node:crypto";
+import { getCurrency } from "../client/src/lib/currencies.js";
 
 /* ============================================================================
  *  LEMON SQUEEZY
@@ -26,11 +27,18 @@ const lsHeaders: Record<string, string> = {
 
 /**
  * Create a Lemon Squeezy hosted-checkout session.
+ *
+ * `amount` is the order total already converted into `currency` (the site's
+ * configured currency — USD when none is set). Lemon Squeezy requires
+ * `custom_price` as an integer of the currency's minor units, so the amount is
+ * scaled by `10 ^ decimalPlaces` for the charged currency.
+ *
  * Returns `{ url }` on success or `{ error }` on failure.
  */
 export async function createLemonSqueezyCheckout(params: {
   orderId: number;
-  amountUsd: number;
+  amount: number;
+  currency?: string;
   email?: string;
   customerName?: string;
 }): Promise<{ url?: string; error?: string }> {
@@ -38,13 +46,20 @@ export async function createLemonSqueezyCheckout(params: {
   if (!LS_STORE_ID) return { error: "LEMON_SQUEEZY_STORE_ID is not configured" };
   if (!LS_VARIANT_ID) return { error: "LEMON_SQUEEZY_VARIANT_ID is not configured" };
 
-  const amountCents = Math.round(params.amountUsd * 100);
+  const currency = params.currency ?? "USD";
+  const decimalPlaces = getCurrency(currency)?.decimalPlaces ?? 2;
+  const customPrice = Math.round(params.amount * 10 ** decimalPlaces);
+
+  // LS treats USD as its default — omitting the attribute avoids "price is
+  // already in USD" conflicts. Any other currency must be declared explicitly.
+  const currencyAttribute: Record<string, string> = currency !== "USD" ? { currency } : {};
 
   const body = {
     data: {
       type: "checkouts",
       attributes: {
-        custom_price: amountCents,
+        custom_price: customPrice,
+        ...currencyAttribute,
         product_options: {
           name: `RetailTrove Order #${params.orderId}`,
           redirect_url: `${process.env.APP_URL ?? "http://localhost:5000"}/order-confirmation?id=${params.orderId}&payment=lemonsqueezy`,

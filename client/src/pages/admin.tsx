@@ -19,6 +19,7 @@ import {
   Shield,
   DollarSign,
   Users2,
+  Star,
 } from "lucide-react";
 
 import InventoryTab from "./admin/inventory-tab";
@@ -36,6 +37,7 @@ import CurrencyTab from "./admin/currency-tab";
 import AuditTab from "./admin/audit-tab";
 import AnalyticsTab from "./admin/analytics-tab";
 import TeamTab from "./admin/team-tab";
+import ReviewsTab from "./admin/reviews-tab";
 
 import type {
   AdminProduct,
@@ -207,6 +209,10 @@ export default function AdminPage() {
                 <Users2 className="h-3.5 w-3.5" />
                 Team
               </TabsTrigger>
+              <TabsTrigger value="reviews" className="text-xs gap-1">
+                <Star className="h-3.5 w-3.5" />
+                Reviews
+              </TabsTrigger>
               <TabsTrigger value="users" className="text-xs gap-1">
                 <User className="h-3.5 w-3.5" />
                 Users
@@ -281,6 +287,10 @@ export default function AdminPage() {
 
             <TabsContent value="team">
               <TeamTab members={teamMembers} />
+            </TabsContent>
+
+            <TabsContent value="reviews">
+              <ReviewsTab />
             </TabsContent>
 
             <TabsContent value="users">

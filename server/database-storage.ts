@@ -23,6 +23,7 @@ import {
   auditLogs,
   testimonials,
   teamMembers,
+  productReviews,
   type Product,
   type InsertProduct,
   type ProductVariant,
@@ -55,9 +56,11 @@ import {
   type InsertTestimonial,
   type TeamMember,
   type InsertTeamMember,
+  type ProductReview,
+  type ProductReviewSummary,
 } from "../shared/schema.js";
 import { eq, and, or, sql, gt, gte, lte, ilike, desc, isNull, count, type SQL } from "drizzle-orm";
-import { IStorage } from "./storage.js";
+import { IStorage, type AdminProductReview, type ProductReviewWithAuthor } from "./storage.js";
 
 export class DatabaseStorage implements IStorage {
   // ── User Operations ────────────────────────────────────────────────────────
@@ -771,6 +774,7 @@ export class DatabaseStorage implements IStorage {
     data: {
       paymentStatus?: string;
       paymentProvider?: string;
+      currency?: string;
       stripeSessionId?: string;
       stripePaymentIntentId?: string;
       mpesaReceiptNumber?: string;
@@ -780,6 +784,7 @@ export class DatabaseStorage implements IStorage {
     const updates: Record<string, any> = {};
     if (data.paymentStatus !== undefined) updates.paymentStatus = data.paymentStatus;
     if (data.paymentProvider !== undefined) updates.paymentProvider = data.paymentProvider;
+    if (data.currency !== undefined) updates.currency = data.currency;
     if (data.stripeSessionId !== undefined) updates.stripeSessionId = data.stripeSessionId;
     if (data.stripePaymentIntentId !== undefined)
       updates.stripePaymentIntentId = data.stripePaymentIntentId;
@@ -1078,6 +1083,139 @@ export class DatabaseStorage implements IStorage {
     return (result.rowCount ?? 0) > 0;
   }
 
+  // ── Product Review Operations ────────────────────────────────────────────
+
+  async getProductReviews(productId: number): Promise<ProductReviewWithAuthor[]> {
+    return await db
+      .select({
+        id: productReviews.id,
+        productId: productReviews.productId,
+        userId: productReviews.userId,
+        rating: productReviews.rating,
+        title: productReviews.title,
+        comment: productReviews.comment,
+        status: productReviews.status,
+        isVerifiedPurchase: productReviews.isVerifiedPurchase,
+        createdAt: productReviews.createdAt,
+        userName: users.name,
+      })
+      .from(productReviews)
+      .leftJoin(users, eq(users.id, productReviews.userId))
+      .where(and(eq(productReviews.productId, productId), eq(productReviews.status, "approved")))
+      .orderBy(desc(productReviews.createdAt));
+  }
+
+  async getProductReviewSummary(productId: number): Promise<ProductReviewSummary | undefined> {
+    const [row] = await db
+      .select({
+        averageRating: sql<number>`avg(${productReviews.rating})`,
+        reviewCount: count(),
+      })
+      .from(productReviews)
+      .where(and(eq(productReviews.productId, productId), eq(productReviews.status, "approved")));
+    const reviewCount = Number(row?.reviewCount ?? 0);
+    if (reviewCount === 0) return undefined;
+    return {
+      productId,
+      averageRating: Math.round(Number(row?.averageRating ?? 0) * 10) / 10,
+      reviewCount,
+    };
+  }
+
+  async getUserProductReview(
+    userId: number,
+    productId: number,
+  ): Promise<ProductReview | undefined> {
+    const [review] = await db
+      .select()
+      .from(productReviews)
+      .where(and(eq(productReviews.userId, userId), eq(productReviews.productId, productId)));
+    return review;
+  }
+
+  async createProductReview(review: {
+    productId: number;
+    userId: number;
+    rating: number;
+    title?: string | null;
+    comment: string;
+  }): Promise<ProductReview> {
+    const [created] = await db
+      .insert(productReviews)
+      .values({
+        productId: review.productId,
+        userId: review.userId,
+        rating: review.rating,
+        title: review.title ?? null,
+        comment: review.comment,
+        status: "approved",
+        isVerifiedPurchase: true,
+      })
+      .onConflictDoUpdate({
+        target: [productReviews.productId, productReviews.userId],
+        set: {
+          rating: review.rating,
+          title: review.title ?? null,
+          comment: review.comment,
+          status: "approved",
+        },
+      })
+      .returning();
+    return created;
+  }
+
+  async getAllProductReviews(): Promise<AdminProductReview[]> {
+    return await db
+      .select({
+        id: productReviews.id,
+        productId: productReviews.productId,
+        userId: productReviews.userId,
+        rating: productReviews.rating,
+        title: productReviews.title,
+        comment: productReviews.comment,
+        status: productReviews.status,
+        isVerifiedPurchase: productReviews.isVerifiedPurchase,
+        createdAt: productReviews.createdAt,
+        productName: products.name,
+        userName: users.name,
+      })
+      .from(productReviews)
+      .leftJoin(products, eq(products.id, productReviews.productId))
+      .leftJoin(users, eq(users.id, productReviews.userId))
+      .orderBy(desc(productReviews.createdAt));
+  }
+
+  async updateProductReviewStatus(
+    id: number,
+    status: "approved" | "rejected",
+  ): Promise<ProductReview | undefined> {
+    const [updated] = await db
+      .update(productReviews)
+      .set({ status })
+      .where(eq(productReviews.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteProductReview(id: number): Promise<boolean> {
+    const result = await db.delete(productReviews).where(eq(productReviews.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async hasPurchasedProduct(userId: number, productId: number): Promise<boolean> {
+    const rows = await db.execute<{ found: boolean }>(sql`
+      select exists(
+        select 1 from order_items oi
+        join orders o on o.id = oi.order_id
+        join users u on u.auth_user_id = o.user_id
+        where u.id = ${userId}
+          and oi.product_id = ${productId}
+          and o.payment_status = 'paid'
+      ) as found
+    `);
+    return rows.rows[0]?.found === true;
+  }
+
   // ── Team Member Operations ───────────────────────────────────────────────
 
   async getPublicTeamMembers(): Promise<TeamMember[]> {
@@ -1165,6 +1303,7 @@ export class DatabaseStorage implements IStorage {
 
   async ensureSiteSettings(): Promise<void> {
     const defaults: Record<string, string> = {
+      site_currency: "USD",
       facebook_url: "",
       twitter_url: "",
       instagram_url: "",

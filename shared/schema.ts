@@ -131,6 +131,7 @@ export const orders = pgTable("orders", {
   userId: uuid("user_id"),
   paymentStatus: text("payment_status").default("pending"),
   paymentProvider: text("payment_provider"), // "lemonsqueezy" | "mpesa" | null
+  currency: text("currency").default("USD"), // ISO 4217 — currency the order was actually charged in (site currency at checkout; M-Pesa always KES)
   stripeSessionId: text("stripe_session_id"), // Lemon Squeezy checkout ID / M-Pesa CheckoutRequestID
   stripePaymentIntentId: text("stripe_payment_intent_id"), // Lemon Squeezy order ID / M-Pesa MerchantRequestID
   mpesaReceiptNumber: text("mpesa_receipt_number"), // M-Pesa receipt (e.g. "QHJ7A1BCDE")
@@ -270,6 +271,30 @@ export const testimonials = pgTable("testimonials", {
   status: text("status").default("pending"),
   productId: integer("product_id"),
   submittedBy: integer("submitted_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+/**
+ * Product Reviews Table (`product_reviews`)
+ * Real, user-submitted star ratings + reviews. One review per user per product
+ * (`(product_id, user_id)` is unique). Reviews auto-publish (status `approved`)
+ * for logged-in buyers; admins can soft-reject or hard-delete. The aggregate
+ * rating shown on shop cards/product pages derives from approved rows —
+ * `products.rating` is a legacy seed value.
+ */
+export const productReviews = pgTable("product_reviews", {
+  id: serial("id").primaryKey(),
+  productId: integer("product_id")
+    .references(() => products.id, { onDelete: "cascade" })
+    .notNull(),
+  userId: integer("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
+  rating: integer("rating").notNull(),
+  title: text("title"),
+  comment: text("comment").notNull(),
+  status: text("status").default("approved").notNull(),
+  isVerifiedPurchase: boolean("is_verified_purchase").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -512,6 +537,7 @@ export const clientOrderSchema = insertOrderSchema.omit({
   userId: true,
   paymentStatus: true,
   paymentProvider: true,
+  currency: true,
   stripeSessionId: true,
   stripePaymentIntentId: true,
   mpesaReceiptNumber: true,
@@ -606,6 +632,32 @@ export const insertTestimonialSchema = createInsertSchema(testimonials, {
   createdAt: true,
 });
 export const selectTestimonialSchema = createSelectSchema(testimonials);
+
+// ── Product Reviews Schemas ────────────────────────────────────────────────
+
+/**
+ * Client submit shape — deliberately omits server-controlled fields
+ * (productId, userId, status, isVerifiedPurchase) to block mass assignment.
+ */
+export const insertProductReviewSchema = createInsertSchema(productReviews, {
+  rating: z.number().int().min(1).max(5),
+  title: z.string().max(120).optional(),
+  comment: z.string().min(10, "Review must be at least 10 characters").max(2000),
+}).omit({
+  id: true,
+  productId: true,
+  userId: true,
+  status: true,
+  isVerifiedPurchase: true,
+  createdAt: true,
+});
+
+export const selectProductReviewSchema = createSelectSchema(productReviews);
+
+/** Admin moderation payload — approve or reject an existing review. */
+export const updateProductReviewStatusSchema = z.object({
+  status: z.enum(["approved", "rejected"]),
+});
 
 // ── Team Members Schemas ──────────────────────────────────────────────────
 
@@ -731,6 +783,17 @@ export type InsertNewsletterSubscriber = z.infer<typeof insertNewsletterSubscrib
 /** Testimonial entity types */
 export type Testimonial = z.infer<typeof selectTestimonialSchema>;
 export type InsertTestimonial = z.infer<typeof insertTestimonialSchema>;
+
+/** Product review entity types */
+export type ProductReview = z.infer<typeof selectProductReviewSchema>;
+export type InsertProductReview = z.infer<typeof insertProductReviewSchema>;
+
+/** Aggregated rating for a product (approved reviews only). */
+export type ProductReviewSummary = {
+  productId: number;
+  averageRating: number;
+  reviewCount: number;
+};
 
 /** Team member entity types */
 export type TeamMember = z.infer<typeof selectTeamMemberSchema>;

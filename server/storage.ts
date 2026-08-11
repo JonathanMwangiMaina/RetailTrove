@@ -39,8 +39,24 @@ import type {
   InsertTestimonial,
   TeamMember,
   InsertTeamMember,
+  ProductReview,
+  ProductReviewSummary,
 } from "../shared/schema.js";
 import { databaseStorage } from "./database-storage.js";
+
+/**
+ * Admin-list shape for a product review: the review row plus the names needed
+ * to render moderation UI without extra lookups.
+ */
+export type AdminProductReview = ProductReview & {
+  productName: string | null;
+  userName: string | null;
+};
+
+/** Public product-review shape: the review row plus the author's display name. */
+export type ProductReviewWithAuthor = ProductReview & {
+  userName: string | null;
+};
 
 /* ============================================================================
  * 1. STORAGE REPOSITORY INTERFACE CONTRACT
@@ -137,6 +153,7 @@ export interface IStorage {
     data: {
       paymentStatus?: string;
       paymentProvider?: string;
+      currency?: string;
       stripeSessionId?: string;
       stripePaymentIntentId?: string;
       mpesaReceiptNumber?: string;
@@ -202,6 +219,35 @@ export interface IStorage {
   createTestimonial(testimonial: InsertTestimonial): Promise<Testimonial>;
   updateTestimonial(id: number, data: Partial<InsertTestimonial>): Promise<Testimonial | undefined>;
   deleteTestimonial(id: number): Promise<boolean>;
+
+  // ── Product Review Operations ────────────────────────────────────────────
+
+  /** Approved reviews for a product, newest first (public). */
+  getProductReviews(productId: number): Promise<ProductReviewWithAuthor[]>;
+  /** Aggregate rating + count over approved reviews; undefined when none. */
+  getProductReviewSummary(productId: number): Promise<ProductReviewSummary | undefined>;
+  /** A single user's review of a product, if any. */
+  getUserProductReview(userId: number, productId: number): Promise<ProductReview | undefined>;
+  /**
+   * Submit (or resubmit) a review. Because a user may review a product only
+   * once, a repeat submit updates the existing row and re-publishes it.
+   */
+  createProductReview(review: {
+    productId: number;
+    userId: number;
+    rating: number;
+    title?: string | null;
+    comment: string;
+  }): Promise<ProductReview>;
+  /** All reviews with product + author names for admin moderation. */
+  getAllProductReviews(): Promise<AdminProductReview[]>;
+  updateProductReviewStatus(
+    id: number,
+    status: "approved" | "rejected",
+  ): Promise<ProductReview | undefined>;
+  deleteProductReview(id: number): Promise<boolean>;
+  /** True when the user has at least one paid order containing the product. */
+  hasPurchasedProduct(userId: number, productId: number): Promise<boolean>;
 
   // ── Team Member Operations ─────────────────────────────────────────────────
 

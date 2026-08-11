@@ -1,4 +1,5 @@
 import type { Order, OrderItem } from "../shared/schema.js";
+import { convertCurrency, formatAmountCompact } from "../client/src/lib/currencies.js";
 
 export const TAX_RATE = 0.1;
 
@@ -67,11 +68,14 @@ export function escapeHtml(value: unknown): string {
   });
 }
 
-function formatMoney(value: number): string {
-  return `$${(Math.round(value * 100) / 100).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+/**
+ * Format a USD-sourced amount in the order's charge currency. Uses the compact
+ * formatter (no gap between symbol and amount) so historical receipts keep the
+ * `$100.00` format; the USD total is converted into the order currency when it
+ * differs (e.g. KES for M-Pesa orders).
+ */
+function formatOrderMoney(valueUsd: number, currency: string): string {
+  return formatAmountCompact(convertCurrency(valueUsd, currency), currency);
 }
 
 function formatDate(value: Date | string | null | undefined): string {
@@ -111,6 +115,7 @@ function statusLabel(status: string | null | undefined): string {
  */
 export function buildOrderReceiptHtml(order: Order, items: OrderItem[]): string {
   const breakdown = orderBreakdown(order, items);
+  const currency = order.currency ?? "USD";
   const customerName = [order.firstName, order.lastName].filter(Boolean).join(" ") || "Customer";
   const addressLines = [
     order.address,
@@ -128,8 +133,8 @@ export function buildOrderReceiptHtml(order: Order, items: OrderItem[]): string 
             ${line.variantName ? `<div style="color:#6b7280;font-size:12px">${escapeHtml(line.variantName)}</div>` : ""}
           </td>
           <td class="r">${line.quantity}</td>
-          <td class="r">${formatMoney(line.unitPrice)}</td>
-          <td class="r">${formatMoney(line.lineTotal)}</td>
+          <td class="r">${formatOrderMoney(line.unitPrice, currency)}</td>
+          <td class="r">${formatOrderMoney(line.lineTotal, currency)}</td>
         </tr>`,
     )
     .join("");
@@ -203,9 +208,9 @@ export function buildOrderReceiptHtml(order: Order, items: OrderItem[]): string 
       </table>
 
       <div class="totals">
-        <div><span>Subtotal</span><span>${formatMoney(breakdown.subtotal)}</span></div>
-        <div><span>Tax (${Math.round(TAX_RATE * 100)}%)</span><span>${formatMoney(breakdown.tax)}</span></div>
-        <div class="grand"><span>Total</span><span>${formatMoney(breakdown.total)}</span></div>
+        <div><span>Subtotal</span><span>${formatOrderMoney(breakdown.subtotal, currency)}</span></div>
+        <div><span>Tax (${Math.round(TAX_RATE * 100)}%)</span><span>${formatOrderMoney(breakdown.tax, currency)}</span></div>
+        <div class="grand"><span>Total</span><span>${formatOrderMoney(breakdown.total, currency)}</span></div>
       </div>
 
       ${

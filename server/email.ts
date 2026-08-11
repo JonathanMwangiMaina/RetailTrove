@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 import type { Order, OrderItem } from "../shared/schema.js";
 import { storage } from "./storage.js";
+import { convertCurrency, formatAmountCompact } from "../client/src/lib/currencies.js";
 
 let transporter: nodemailer.Transporter | null = null;
 
@@ -341,14 +342,23 @@ function emailShell(title: string, bodyHtml: string): string {
   `;
 }
 
-function orderItemsTable(items: OrderItem[]): string {
+/**
+ * Format a USD-sourced order amount in the order's charge currency (compact,
+ * no symbol gap) — keeps the historical `$100.00` format for USD orders and
+ * renders converted totals for non-USD orders (e.g. KES for M-Pesa).
+ */
+function formatOrderMoney(valueUsd: number, currency: string): string {
+  return formatAmountCompact(convertCurrency(valueUsd, currency), currency);
+}
+
+function orderItemsTable(items: OrderItem[], currency: string): string {
   const rows = items
     .map(
       (item) => `
         <tr>
           <td style="padding: 10px 0; border-bottom: 1px solid #e5e7eb; color: #374151; font-size: 14px;">${item.productName ?? `Product #${item.productId}`}</td>
           <td style="padding: 10px 0; border-bottom: 1px solid #e5e7eb; color: #6b7280; font-size: 14px; text-align: center;">${item.quantity ?? 1}</td>
-          <td style="padding: 10px 0; border-bottom: 1px solid #e5e7eb; color: #374151; font-size: 14px; text-align: right;">$${Number(item.price ?? 0).toFixed(2)}</td>
+          <td style="padding: 10px 0; border-bottom: 1px solid #e5e7eb; color: #374151; font-size: 14px; text-align: right;">${formatOrderMoney(Number(item.price ?? 0), currency)}</td>
         </tr>
       `,
     )
@@ -486,6 +496,7 @@ export async function sendOrderStatusEmail(
   }
 
   const copy = SCENARIO_COPY[scenario];
+  const currency = order.currency ?? "USD";
   const orderIdLabel = `#RT${String(order.id).padStart(4, "0")}`;
   const orderUrl = `${process.env.APP_URL ?? "https://retailtrove.vercel.app"}/order-confirmation?id=${order.id}`;
   const placedOn = order.createdAt
@@ -532,11 +543,11 @@ export async function sendOrderStatusEmail(
             Placed on ${placedOn}
           </p>
           ${shippingBlock}
-          ${orderItemsTable(items)}
+          ${orderItemsTable(items, currency)}
           <table width="100%" cellpadding="0" cellspacing="0" style="margin: 8px 0 0 0;">
             <tr>
               <td style="padding: 8px 0; color: #374151; font-size: 14px; font-weight: 600;">Total (incl. tax)</td>
-              <td style="padding: 8px 0; color: #059669; font-size: 16px; font-weight: 700; text-align: right;">$${Number(order.total ?? 0).toFixed(2)}</td>
+              <td style="padding: 8px 0; color: #059669; font-size: 16px; font-weight: 700; text-align: right;">${formatOrderMoney(Number(order.total ?? 0), currency)}</td>
             </tr>
           </table>
           ${

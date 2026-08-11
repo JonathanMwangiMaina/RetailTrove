@@ -171,35 +171,38 @@ export function getCurrency(code: string): Currency | undefined {
   return CURRENCIES_BY_CODE[code];
 }
 
-export function formatPrice(amountUsd: number, currencyCode: string): string {
-  const currency = getCurrency(currencyCode);
-  const fractionDigits = currency?.decimalPlaces ?? 2;
-  if (!currency) {
-    return `$${amountUsd.toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
-  }
-
-  const converted = convertCurrency(amountUsd, currencyCode);
-  // toLocaleString inserts comma thousands separators automatically, so prices
-  // in the thousands and above stay legible (e.g. $1,299.00, KSh 12,500).
-  const formatted = converted.toLocaleString("en-US", {
-    minimumFractionDigits: fractionDigits,
-    maximumFractionDigits: fractionDigits,
-  });
-  const needsSpace = /^[$€£¥₹₽₩₳₴₸₮₼₲฿]/.test(currency.symbol);
-  return needsSpace ? `${currency.symbol} ${formatted}` : `${currency.symbol}${formatted}`;
-}
-
 export function convertCurrency(amountUsd: number, toCurrency: string): number {
-  if (toCurrency === "USD") return amountUsd;
-  const rate = EXCHANGE_RATES[toCurrency];
-  if (!rate) return amountUsd;
-  return amountUsd * rate;
+  return amountUsd * getRate(toCurrency);
 }
 
-const EXCHANGE_RATES: Record<string, number> = {
+/**
+ * Convert an amount expressed in `fromCurrency` back into USD.
+ * Unknown/unsupported codes convert 1:1 (matching `getRate`'s USD fallback).
+ */
+export function convertToUsd(amount: number, fromCurrency: string): number {
+  return amount / getRate(fromCurrency);
+}
+
+/**
+ * Whole-KES value of a USD amount — used for M-Pesa STK Push charges, which
+ * Daraja only accepts as whole shillings.
+ */
+export function usdToKes(amountUsd: number): number {
+  return Math.round(convertCurrency(amountUsd, "KES"));
+}
+
+/** USD value of a whole-KES amount (inverse of `usdToKes`). */
+export function kesToUsd(amountKes: number): number {
+  return convertToUsd(amountKes, "KES");
+}
+
+/**
+ * Exchange-rate table: units of each foreign currency per 1 USD.
+ * Rates are the stable annual-average USD crosses (KES per the CBK FY2025/26
+ * annual average of 129.38 — see docs/changelog); they are approximations used
+ * for display and payment conversion, not live market quotes.
+ */
+export const EXCHANGE_RATES: Record<string, number> = {
   AED: 3.6725,
   AFN: 71.5,
   ALL: 92.5,
@@ -267,7 +270,7 @@ const EXCHANGE_RATES: Record<string, number> = {
   JMD: 156,
   JOD: 0.709,
   JPY: 149,
-  KES: 153,
+  KES: 129.38,
   KGS: 89,
   KHR: 4080,
   KMF: 448,
@@ -356,3 +359,58 @@ const EXCHANGE_RATES: Record<string, number> = {
   ZMW: 25,
   ZWL: 322,
 };
+
+/**
+ * Units of `code` per 1 USD. Returns 1 for USD itself and for any
+ * unlisted/unknown code (no crash, sensible 1:1 fallback).
+ */
+export function getRate(code: string): number {
+  return EXCHANGE_RATES[code] ?? 1;
+}
+
+function formatCurrencyAmount(amount: number, currencyCode: string, withSpace: boolean): string {
+  const currency = getCurrency(currencyCode);
+  const fractionDigits = currency?.decimalPlaces ?? 2;
+  if (!currency) {
+    return `$${amount.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  }
+
+  const formatted = amount.toLocaleString("en-US", {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  });
+  // toLocaleString inserts comma thousands separators automatically, so prices
+  // in the thousands and above stay legible (e.g. $1,299.00, KSh 12,500).
+  const needsSpace = /^[$€£¥₹₽₩₳₴₸₮₼₲฿]/.test(currency.symbol);
+  return withSpace && needsSpace
+    ? `${currency.symbol} ${formatted}`
+    : `${currency.symbol}${formatted}`;
+}
+
+/**
+ * Format a numeric amount already expressed in `currencyCode`.
+ * `formatPrice` (below) is the preferred entry point for USD-sourced prices —
+ * this is for amounts already converted (e.g. stored order totals).
+ */
+export function formatAmount(amount: number, currencyCode: string): string {
+  return formatCurrencyAmount(amount, currencyCode, true);
+}
+
+/**
+ * Compact variant with no gap between symbol and amount — preserves historical
+ * formats such as `$100.00` in receipts and order emails.
+ */
+export function formatAmountCompact(amount: number, currencyCode: string): string {
+  return formatCurrencyAmount(amount, currencyCode, false);
+}
+
+/**
+ * Format a USD-sourced price in the given currency (converting via
+ * `EXCHANGE_RATES`). This is what the storefront uses to display prices.
+ */
+export function formatPrice(amountUsd: number, currencyCode: string): string {
+  return formatAmount(convertCurrency(amountUsd, currencyCode), currencyCode);
+}

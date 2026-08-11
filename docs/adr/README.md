@@ -25,3 +25,6 @@ Each ADR follows the [MADR](https://adr.github.io/madr/) template:
 | 007 | [Sentry Guard Pattern](ADR-007-sentry-guard-pattern.md) | ✅ Accepted |
 | 008 | [Server-Side Order Total Verification](ADR-008-server-side-total-verification.md) | ✅ Accepted |
 | 009 | [Self-Hosted Image Optimization Proxy](ADR-009-self-hosted-image-optimization-proxy.md) | ✅ Accepted |
+| 010 | [Redis Cache Layer (Upstash)](ADR-010-redis-cache-layer.md) | ✅ Accepted |
+| 011 | [Shared Client-Server Currency Module](ADR-011-shared-currency-module.md) | ✅ Accepted |
+| 012 | [Verified-Buyer Review Gate](ADR-012-verified-buyer-review-gate.md) | ✅ Accepted |

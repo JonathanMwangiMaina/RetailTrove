@@ -84,6 +84,20 @@ export interface AdminTeamMember {
   createdAt: string;
 }
 
+export interface AdminProductReview {
+  id: number;
+  productId: number;
+  userId: number;
+  rating: number;
+  title?: string | null;
+  comment: string;
+  status: string;
+  isVerifiedPurchase: boolean;
+  createdAt: string;
+  productName?: string | null;
+  userName?: string | null;
+}
+
 export interface SiteSetting {
   key: string;
   value: string;

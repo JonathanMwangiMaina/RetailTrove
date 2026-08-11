@@ -15,7 +15,7 @@
 import { storage } from "./storage.js";
 import { sendOrderConfirmationEmail, sendOrderStatusEmail } from "./email.js";
 import { awardLoyaltyPointsForOrder } from "./loyalty-service.js";
-import { usdToKes } from "../shared/pricing.js";
+import { usdToKes } from "../client/src/lib/currencies.js";
 
 /**
  * Verify that the request originated from an allowlisted Daraja callback IP.

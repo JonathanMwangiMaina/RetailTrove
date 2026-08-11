@@ -38,8 +38,9 @@ export default function CurrencyTab({ siteSettings }: Props) {
       </CardHeader>
       <CardContent>
         <p className="text-sm text-muted-foreground mb-4">
-          Select the currency used to display product prices across the store. All prices are stored
-          in USD internally and converted on display.
+          Select the currency used to display prices and charge card payments (Lemon Squeezy) across
+          the store. All prices are stored in USD internally and converted on display and at
+          checkout. M-Pesa payments are always charged in Kenyan Shillings (KES).
         </p>
         <div className="max-w-md">
           <Label>Display Currency</Label>

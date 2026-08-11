@@ -25,7 +25,7 @@ import {
   initiateMpesaStkPush,
   normalizeKenyanPhone,
 } from "./payment-service.js";
-import { usdToKes } from "../shared/pricing.js";
+import { usdToKes, convertCurrency, getCurrency } from "../client/src/lib/currencies.js";
 import { sendShippingStatusEmail } from "./email.js";
 
 type CsrfMiddleware = (req: Request, res: Response, next: NextFunction) => void;
@@ -52,6 +52,23 @@ function enforceSessionAbsoluteTimeout(req: Request, res: Response, next: NextFu
     }
   }
   next();
+}
+
+/**
+ * Resolve the store's configured currency (admin `site_currency` setting),
+ * falling back to USD when unset or not a known ISO 4217 code. This is the
+ * currency orders are charged in — Lemon Squeezy converts the USD order total
+ * into it, and it is recorded on each order at checkout time.
+ */
+async function getSiteCurrency(): Promise<string> {
+  try {
+    const settings = await storage.getSiteSettings();
+    const code = settings.find((s) => s.key === "site_currency")?.value;
+    if (code && getCurrency(code)) return code;
+  } catch (error) {
+    console.error("[Currency] failed to read site_currency, defaulting to USD:", error);
+  }
+  return "USD";
 }
 
 export async function registerRoutes(app: Express, csrfProtection: CsrfMiddleware): Promise<void> {
@@ -220,16 +237,169 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
       if (!product) {
         return res.status(404).json({ message: "Product not found" });
       }
-      const [variants, images] = await Promise.all([
+      const [variants, images, reviewSummary] = await Promise.all([
         storage.getProductVariants(id),
         storage.getProductImages(id),
+        storage.getProductReviewSummary(id),
       ]);
-      res.json({ ...product, variants, images });
+      res.json({
+        ...product,
+        variants,
+        images,
+        reviewSummary: reviewSummary ?? { productId: id, averageRating: 0, reviewCount: 0 },
+      });
     } catch (error) {
       console.error(`Error fetching product ${req.params.id}:`, error);
       res.status(500).json({ message: "Failed to fetch product" });
     }
   });
+
+  // ── Product Review Routes ─────────────────────────────────────────────────
+
+  router.get("/products/:id/reviews", async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) {
+      return res.status(400).json({ message: "Invalid product ID format" });
+    }
+    try {
+      const reviews = await storage.getProductReviews(id);
+      res.json(reviews);
+    } catch (error) {
+      console.error(`Error fetching reviews for product ${req.params.id}:`, error);
+      res.status(500).json({ message: "Failed to fetch reviews" });
+    }
+  });
+
+  router.get("/products/:id/reviews/summary", async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) {
+      return res.status(400).json({ message: "Invalid product ID format" });
+    }
+    try {
+      const summary = await storage.getProductReviewSummary(id);
+      res.json(summary ?? { productId: id, averageRating: 0, reviewCount: 0 });
+    } catch (error) {
+      console.error(`Error fetching review summary for product ${req.params.id}:`, error);
+      res.status(500).json({ message: "Failed to fetch review summary" });
+    }
+  });
+
+  router.get("/products/:id/reviews/me", requireAuth, async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) {
+      return res.status(400).json({ message: "Invalid product ID format" });
+    }
+    try {
+      const [hasPurchased, review] = await Promise.all([
+        storage.hasPurchasedProduct(req.session.userId!, id),
+        storage.getUserProductReview(req.session.userId!, id),
+      ]);
+      res.json({ hasPurchased, review: review ?? null });
+    } catch (error) {
+      console.error(`Error fetching own review for product ${req.params.id}:`, error);
+      res.status(500).json({ message: "Failed to fetch review" });
+    }
+  });
+
+  post("/products/:id/reviews", writeLimiter, requireAuth, async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) {
+      return res.status(400).json({ message: "Invalid product ID format" });
+    }
+    try {
+      const product = await storage.getProductById(id);
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+      const hasPurchased = await storage.hasPurchasedProduct(req.session.userId!, id);
+      if (!hasPurchased) {
+        return res
+          .status(403)
+          .json({ message: "Only customers who have purchased this product can review it" });
+      }
+      const { insertProductReviewSchema } = await import("../shared/schema.js");
+      const validated = insertProductReviewSchema.parse(req.body);
+      const review = await storage.createProductReview({
+        productId: id,
+        userId: req.session.userId!,
+        ...validated,
+      });
+      logAudit(req, { action: "product_reviewed", entityType: "product", entityId: id });
+      res.status(201).json(review);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error(`Error submitting review for product ${req.params.id}:`, error);
+      res.status(500).json({ message: "Failed to submit review" });
+    }
+  });
+
+  router.get(
+    "/admin/reviews",
+    requireAuth,
+    requireRole("admin"),
+    async (_req: Request, res: Response) => {
+      try {
+        const reviews = await storage.getAllProductReviews();
+        res.json(reviews);
+      } catch (error) {
+        console.error("Error fetching all product reviews:", error);
+        res.json([]);
+      }
+    },
+  );
+
+  put(
+    "/admin/reviews/:id/status",
+    requireAuth,
+    requireRole("admin"),
+    async (req: Request, res: Response) => {
+      try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) {
+          return res.status(400).json({ message: "Invalid review ID" });
+        }
+        const { updateProductReviewStatusSchema } = await import("../shared/schema.js");
+        const { status } = updateProductReviewStatusSchema.parse(req.body);
+        const updated = await storage.updateProductReviewStatus(id, status);
+        if (!updated) {
+          return res.status(404).json({ message: "Review not found" });
+        }
+        logAudit(req, { action: "review_moderated", entityType: "product_review", entityId: id });
+        res.json(updated);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return res.status(400).json({ message: "Validation error", errors: error.errors });
+        }
+        console.error(`Error moderating review ${req.params.id}:`, error);
+        res.status(500).json({ message: "Failed to moderate review" });
+      }
+    },
+  );
+
+  del(
+    "/admin/reviews/:id",
+    requireAuth,
+    requireRole("admin"),
+    async (req: Request, res: Response) => {
+      try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) {
+          return res.status(400).json({ message: "Invalid review ID" });
+        }
+        const deleted = await storage.deleteProductReview(id);
+        if (!deleted) {
+          return res.status(404).json({ message: "Review not found" });
+        }
+        logAudit(req, { action: "review_deleted", entityType: "product_review", entityId: id });
+        res.json({ message: "Review deleted" });
+      } catch (error) {
+        console.error(`Error deleting review ${req.params.id}:`, error);
+        res.status(500).json({ message: "Failed to delete review" });
+      }
+    },
+  );
 
   post("/products", writeLimiter, requireAuth, async (req: Request, res: Response) => {
     try {
@@ -823,10 +993,13 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
       // Payment/shipping state is server-controlled: always starts at pending
       // and is advanced only by provider callbacks / the fulfilment workflow.
       // userId is bound to the authenticated session (never client-supplied).
+      // currency records the charge currency (site_currency at checkout time).
+      const currency = await getSiteCurrency();
       const orderForDb: InsertOrder = {
         ...validatedOrder,
         paymentStatus: "pending",
         shippingStatus: "pending",
+        currency,
         total: expectedTotal.toFixed(2),
       };
       if (req.session?.authUserId) {
@@ -1054,9 +1227,16 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
         });
       }
 
+      // Charge in the order's recorded currency (site_currency at checkout
+      // time): the USD order total is converted, and Lemon Squeezy is told the
+      // charged currency so custom_price is interpreted in its minor units.
+      const currency = order.currency ?? (await getSiteCurrency());
+      const convertedTotal = convertCurrency(Number(order.total ?? 0), currency);
+
       const result = await createLemonSqueezyCheckout({
         orderId: order.id,
-        amountUsd: Number(order.total ?? 0),
+        amount: convertedTotal,
+        currency,
         email: order.email ?? undefined,
         customerName: order.firstName
           ? `${order.firstName} ${order.lastName ?? ""}`.trim()
@@ -1067,6 +1247,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
 
       await storage.updateOrderPayment(order.id, {
         paymentProvider: "lemonsqueezy",
+        currency,
         stripeSessionId: result.url, // store checkout URL as reference
         idempotencyKey: `lemonsqueezy-${order.id}-${crypto.randomUUID()}`,
       });
@@ -1130,6 +1311,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
 
       await storage.updateOrderPayment(order.id, {
         paymentProvider: "mpesa",
+        currency: "KES", // M-Pesa always charges whole Kenyan Shillings
         stripeSessionId: result.CheckoutRequestID,
         stripePaymentIntentId: result.MerchantRequestID,
         idempotencyKey: `mpesa-${order.id}-${crypto.randomUUID()}`,
