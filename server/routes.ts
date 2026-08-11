@@ -482,6 +482,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
 
   del("/products/:id", writeLimiter, requireAuth, async (req: Request, res: Response) => {
     try {
+      console.log("[DEBUG] DELETE /products/:id params:", req.params, "query:", req.query);
       if (!isProductWriteRole(req)) {
         return res
           .status(403)
