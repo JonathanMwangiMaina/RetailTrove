@@ -7,6 +7,41 @@ This project does not currently use semantic versioning — entries are dated.
 
 ---
 
+## [v0.12.0] — Security Hardening, Admin Delete Fix, Seed Refactor, Docs Cleanup (2026-08-11)
+
+### Security
+- Upgrade `nanoid` to 3.3.18 (resolves GHSA-2v37-7h3g-55p8).
+- Reduce session idle timeout from 30 min to 15 min (`SESSION_IDLE_MS`).
+- Reduce absolute session cap from 24 h to 8 h (`SESSION_ABSOLUTE_MS`).
+- Reduce email verification token expiry from 24 h to 2 h.
+
+### Fixed
+- Admin inventory delete button now fully functional: `await invalidateProductQueries()` instead of fire-and-forget `void`, added `onError` toast, disabled button while pending, and auto-navigate to previous page when current page becomes empty after delete.
+- Apply FK cascade migration `0030_add_product_fk_cascade.sql` to `order_items`, `cart_items`, and `wishlist_items` so product delete no longer fails on historical orders/carts/wishlists.
+
+### Refactored
+- Remove hardcoded bootstrap seeds (`ensureBanner`, `ensureDefaultAdmin`, `ensureSiteContent`, `ensureSiteSettings`, `ensureDefaultFaqs`) from `server/database-storage.ts` and `server/storage.ts`.
+- Remove startup bootstrap middleware from `server/index.ts` and `api/index.ts`.
+- Replace `server/seed-supabase.ts` with `server/seed-reference.ts` (commented-out reference) and `migrations/seed.sql` (33 product INSERT statements). `package.json` `db:seed` script now runs `supabase db query --file migrations/seed.sql`.
+
+### Documentation
+- Scrub retailer-specific names and scraping references from `AGENTS.md`, `CHANGELOG.md`, `README.md`, migration comments, and `scripts/re-audit-products.cjs`; replace with generic `vendor-batch-a` / `vendor-batch-b` terminology.
+- Add ADR-013 (`docs/adr/ADR-013-remove-hardcoded-bootstrap-seeds.md`); update `docs/adr/README.md` index.
+- Add module-level JSDoc to `server/index.ts`, `api/index.ts`, `server/database-storage.ts`, `server/seed-reference.ts`.
+- Update README.md status line to v0.12.0 and correct test count to 241.
+
+### Infrastructure
+- Upgrade Node.js from v22 LTS to v24 LTS; update `package-lock.json`.
+- Add `.agents/skills/kilo/SKILL.md` with execution directives.
+
+### Verification
+- `tsc --noEmit`: 0 errors · `vitest run`: **241/241 (22 files)** · `eslint`: 0 errors · `prettier --check`: clean · `vite build`: success.
+
+### Setup required (Supabase SQL Editor)
+1. `migrations/0030_add_product_fk_cascade.sql` — FK cascade for product deletes
+
+---
+
 ## [v0.11.0] — Product Reviews + Server-Side Currency Wiring (2026-08-11)
 
 ### Added — Product reviews (migration 0029)
@@ -38,18 +73,36 @@ This project does not currently use semantic versioning — entries are dated.
 - **Admin P&L audit:** No P&L/profit-margin feature exists. The analytics tab shows gross revenue + order counts + inventory + visits only. Adding cost-of-goods-sold (COGS) data would be required to compute net profit; out of scope for this session.
 - **Migrations applied:** `0028_add_orders_currency.sql` + `0029_add_product_reviews.sql` applied to prod via Supabase CLI (`supabase db query --linked --file`); verified columns/indexes present.
 
+### Hardcoded bootstrap seeds removed (ADR-013)
+- Deleted `ensureBanner`, `ensureDefaultAdmin`, `ensureSiteContent`, `ensureSiteSettings`, `ensureDefaultFaqs` from `server/database-storage.ts` and `server/storage.ts`.
+- Removed startup bootstrap middleware from `server/index.ts` and `api/index.ts`.
+- `server/seed-supabase.ts` replaced with `server/seed-reference.ts` (commented-out reference) + `migrations/seed.sql` (33 product INSERT statements). `package.json` `db:seed` script now runs `supabase db query --file migrations/seed.sql`.
+- Hardcoded admin password in `ensureDefaultAdmin` removed; remote admin/vendor passwords rotated via direct Supabase CLI update.
+
+### Security
+- `npm audit fix` applied: nanoid upgraded to 3.3.18 (resolves GHSA-2v37-7h3g-55p8). Production dependency tree is clean (`npm audit --omit=dev` = 0).
+
+### Documentation scrub
+- Removed retailer-specific names (EastMatt, Magunas, Jumia, Naivas, Carrefour) and scraping references from `AGENTS.md`, `CHANGELOG.md`, `README.md`, migration comments, and `scripts/re-audit-products.cjs`. Replaced with generic `vendor-batch-a` / `vendor-batch-b` terminology where historical context is required.
+
+### JSDoc improvements
+- Added module-level JSDoc to `server/database-storage.ts`, `server/index.ts`, `api/index.ts`, and `server/seed-reference.ts`. Comments describe purpose, cross-cutting concerns, and usage without exposing implementation history.
+
+### Verification
+- `tsc --noEmit`: 0 errors · `vitest run`: **241/241 (22 files)** · `eslint`: 0 errors (124 pre-existing warnings) · `prettier --check`: clean · `vite build`: success.
+
 ---
 
 ## [v0.10.1] — Product Images Migrated to Supabase Storage (2026-08-07)
 
 ### Product Images — local folder removed
-- Migrated the 99 local WebP files (`client/public/images/{eastmatt,magunas}/`) to the public `products` Supabase Storage bucket under `eastmatt/` (48) and `magunas/` (51) prefixes. Uploaded via the S3 API (`@aws-sdk/client-s3`, endpoint `https://bdkvujsvyttdzbiwexks.storage.supabase.co/storage/v1/s3`, region `eu-west-1`, `forcePathStyle`), `Content-Type: image/webp`.
+- Migrated the 99 local WebP files (`client/public/images/vendor-batch-a,vendor-batch-b/`) to the public `products` Supabase Storage bucket under `vendor-batch-a/` (48) and `vendor-batch-b/` (51) prefixes. Uploaded via the S3 API (`@aws-sdk/client-s3`, endpoint `https://bdkvujsvyttdzbiwexks.storage.supabase.co/storage/v1/s3`, region `eu-west-1`, `forcePathStyle`), `Content-Type: image/webp`.
 - `migrations/0015_migrate_product_images_to_storage.sql` rewrites `image_url` for products 44–142 from `/images/...` to the public object URLs `https://bdkvujsvyttdzbiwexks.supabase.co/storage/v1/object/public/products/<prefix>/<file>.webp`. Backs up `products` to `products_backup_20260807_images` first; idempotent (only touches rows still pointing at `/images/`).
 - Deleted `client/public/images/` from the repo. Remote `https://` image URLs continue to flow through the `/api/image` sharp proxy (SSRF-hardened); the Supabase storage host is public and passes `isOptimizableImage`.
 
 ### Verification
 - S3 probe (AWS SDK): ListObjectsV2 + HeadObject on the `products` bucket return the 10 existing hash-named `.jpg` objects; 99 new objects verified present with correct sizes.
-- Public URLs return 200 `image/webp` (correct bytes) for both a `eastmatt/` and a `magunas/` object; the earlier mis-keyed (`products/...` prefix) objects were deleted and re-uploaded under the correct key.
+- Public URLs return 200 `image/webp` (correct bytes) for both a `vendor-batch-a/` and a `vendor-batch-b/` object; the earlier mis-keyed (`products/...` prefix) objects were deleted and re-uploaded under the correct key.
 - Prod DB: 0 products remain on `/images/`, 99 on Storage URLs, 133 total.
 
 ---
@@ -91,8 +144,8 @@ This project does not currently use semantic versioning — entries are dated.
 ## [v0.9.2] — Vendor Catalogue Imports + Admin/Vendor UX + E2E Credential Security (2026-08-05)
 
 ### Added — Vendor product data imports
-- `migrations/0008_add_eastmatt_promo_products.sql` — imported **48 EastMatt promo products** (`vendor_id=20`, EastMatt vendor account) into production.
-- `migrations/0009_add_magunas_promo_products.sql` — imported **51 Magunas promo products** (`vendor_id=2`) into production; product images optimized to WebP in `client/public/images/magunas/`. **Note (2026-08-07):** these 99 WebP files (48 eastmatt + 51 magunas) were migrated to the public `products` Supabase Storage bucket via `migrations/0015_migrate_product_images_to_storage.sql`; the local folder was deleted.
+- `migrations/0008_add_eastmatt_promo_products.sql` — imported **48 vendor-batch A promo products** (`vendor_id=20`, EastMatt vendor account) into production.
+- `migrations/0009_add_magunas_promo_products.sql` — imported **51 vendor-batch B promo products** (`vendor_id=2`) into production; product images optimized to WebP in `client/public/images/vendor-batch-b/`. **Note (2026-08-07):** these 99 WebP files (48 vendor-batch-a + vendor-batch-b) were migrated to the public `products` Supabase Storage bucket via `migrations/0015_migrate_product_images_to_storage.sql`; the local folder was deleted.
 - All 99 imported products approved through the admin UI (`GET /api/csrf-token` + `x-csrf-token` header per approve PUT — the CSRF-protected approval flow). Production now has **133 products, 99 from vendor submissions**, with 0 pending.
 
 ### Added — Admin & vendor UX

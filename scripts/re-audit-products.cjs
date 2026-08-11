@@ -2,7 +2,7 @@
 /* Re-audit all 321 products with corrected logic:
    - Only flag actually broken images (unsplash, placeholder, empty, temp folder refs)
    - Do NOT flag working retailer images just because filename doesn't match product name
-   - EastMatt/Naivas/Jumia/retailer images are considered valid even with product-code filenames
+   - Retailer-hosted images are considered valid even with product-code filenames
 */
 const fs = require("node:fs");
 const path = require("node:path");
@@ -46,10 +46,6 @@ function scoreMatch(name, imageUrl, category) {
   // Retailer-hosted images are VALID even if filename is a product code
   const validHosts = [
     "bdkvujsvyttdzbiwexks.supabase.co",
-    "ke.jumia.is",
-    "eastmatt.com",
-    "naivas.online",
-    "carrefour.co.ke",
   ];
 
   const isRetailerImage = validHosts.some((h) => imageUrl.includes(h));

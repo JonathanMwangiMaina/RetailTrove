@@ -1,4 +1,4 @@
--- Migration: EastMatt promo products (48 items scraped from https://eastmatt.com/promo.php)
+-- Migration: Vendor promo products batch A (48 items)
 -- Generated: 2026-08-05T06:52:17.112Z | Vendor: vendor@retailtrove.com (users.id = 2)
 -- Pricing: USD anchored so the cheapest promo item = $1.99 (existing convention);
 --          proportions preserved from the original KSh promo prices.

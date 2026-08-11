@@ -1,4 +1,4 @@
--- Migration: category audit - replace names, descriptions, images with Jumia retailer data
+-- Migration: category audit - replace names, descriptions, images with retailer data
 -- Generated: 2026-08-09
 -- Categories: Accessories, Bags, Clothing, Footwear, Home & Kitchen
 -- 45 products matched, 5 no-match, 1 error

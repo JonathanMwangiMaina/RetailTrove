@@ -1,6 +1,6 @@
 # RetailTrove — Full-Stack E-Commerce Platform
 
-> **Status:** Phases 1–4 complete. Latest: **v0.10.0** — security remediation from an external pentest (product write authorization, payment-field mass-assignment blocking, order/status ownership checks, M-Pesa callback IP allowlisting, rolling + absolute session expiry, cart ownership binding, stock-availability checks, SPA 404s, a CI `npm audit` gate, and a clean `npm audit --omit=dev` tree), plus email verification for new registrations, downloadable order receipts with transparent pricing breakdowns, GDPR-aligned legal policies, and a shared USD⇄KES pricing helper. Behind it: the v0.9.x line (vendor catalogue imports, customer notification emails, USD shop slider, lockfile package guard), v0.8.x (paid-only analytics revenue, checkout race-condition fixes), v0.7.0 self-hosted CDN image optimisation, the v0.6.0 line (Upstash Redis cache, product variants, DB-driven galleries), and the full v0.5.x line (production M-Pesa verified live, email notifications, wishlists, RLS policies, payment idempotency, health checks, Sentry, CI/CD). **209 passing tests.**
+> **Status:** Phases 1–4 complete. Latest: **v0.12.0** — security hardening, admin inventory delete fix, seed refactor, and documentation cleanup. Behind it: v0.11.0 (product reviews + server-side currency wiring), v0.10.1 (product images migrated to Supabase Storage), v0.10.0 (security remediation from an external pentest (product write authorization, payment-field mass-assignment blocking, order/status ownership checks, M-Pesa callback IP allowlisting, rolling + absolute session expiry, cart ownership binding, stock-availability checks, SPA 404s, a CI `npm audit` gate, and a clean `npm audit --omit=dev` tree), plus email verification for new registrations, downloadable order receipts with transparent pricing breakdowns, GDPR-aligned legal policies, and a shared USD⇄KES pricing helper). **241 passing tests.**
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19.1-61dafb)](https://react.dev/)
@@ -1034,7 +1034,7 @@ See `CHANGELOG.md` for complete version history.
 
 ### v0.9.2 — Vendor Catalogue Imports + UX + E2E Credential Security (2026-08-05)
 
-- **Added:** 48 EastMatt + 51 Magunas promo products imported (`migrations/0008` + `0009`), Magunas images optimized to WebP; all 99 vendor submissions approved via the CSRF-protected admin flow — production now at 133 products, 0 pending.
+- **Added:** 48 vendor-batch A + 51 vendor-batch B promo products imported (`migrations/0008` + `0009`), Magunas images optimized to WebP; all 99 vendor submissions approved via the CSRF-protected admin flow — production now at 133 products, 0 pending.
 - **Added:** Admin in-tab pagination, inventory pagination, category/subcategory dropdowns for vendors and admins.
 - **Security:** E2E spec credentials now resolved via an interactive console prompt (`resolveCredentials`), never committed.
 - **All 148 tests pass.**

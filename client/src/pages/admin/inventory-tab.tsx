@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/use-currency";
@@ -60,6 +60,12 @@ export default function InventoryTab({ products, productsLoading }: Props) {
 
   const { page, pageCount, pageItems, setPage } = useInTabPagination(filtered, 10);
 
+  useEffect(() => {
+    if (page >= pageCount && pageCount > 0) {
+      setPage(pageCount - 1);
+    }
+  }, [filtered.length, page, pageCount, setPage]);
+
   const totalStock = products.reduce((sum, p) => sum + (p.stockQuantity ?? 0), 0);
   const outOfStockCount = products.filter((p) => !p.inStock || (p.stockQuantity ?? 0) === 0).length;
 
@@ -101,10 +107,12 @@ export default function InventoryTab({ products, productsLoading }: Props) {
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/products/${id}`, {}),
-    onSuccess: () => {
-      void invalidateProductQueries();
+    onSuccess: async () => {
+      await invalidateProductQueries();
       toast({ title: "Product Deleted" });
     },
+    onError: (e: Error) =>
+      toast({ title: "Delete Failed", description: e.message, variant: "destructive" }),
   });
 
   return (
@@ -258,6 +266,7 @@ export default function InventoryTab({ products, productsLoading }: Props) {
                       <Button
                         variant="ghost"
                         size="icon"
+                        disabled={deleteMutation.isPending}
                         onClick={() => {
                           if (window.confirm(`Delete "${p.name}"?`)) deleteMutation.mutate(p.id);
                         }}

@@ -40,7 +40,7 @@ type CsrfMiddleware = (req: Request, res: Response, next: NextFunction) => void;
 function enforceSessionAbsoluteTimeout(req: Request, res: Response, next: NextFunction): void {
   const session = req.session;
   if (session && (session.authUserId || session.userId)) {
-    const absoluteMs = Number(process.env.SESSION_ABSOLUTE_MS ?? 24 * 60 * 60 * 1000);
+    const absoluteMs = Number(process.env.SESSION_ABSOLUTE_MS ?? 8 * 60 * 60 * 1000);
     if (typeof session.createdAt !== "number") {
       session.createdAt = Date.now();
     } else if (Date.now() - session.createdAt > absoluteMs) {

@@ -1,8 +1,9 @@
 -- 0015_migrate_product_images_to_storage.sql
 -- Moves product image URLs for products 44-142 from the local `/images/` folder
--- (client/public/images/{eastmatt,magunas}/*.webp — served by the Vite dev
--- server / static client build) into the public `products` Supabase Storage
--- bucket under the `eastmatt/` and `magunas/` prefixes.
+-- (client/public/images/vendor-batch-a/*.webp and vendor-batch-b/*.webp — served
+-- by the Vite dev server / static client build) into the public `products`
+-- Supabase Storage bucket under the `vendor-batch-a/` and `vendor-batch-b/`
+-- prefixes.
 --
 -- The 99 WebP files were uploaded to Storage directly (S3 API) before this
 -- migration; this script only rewrites the DB `image_url` values to the public

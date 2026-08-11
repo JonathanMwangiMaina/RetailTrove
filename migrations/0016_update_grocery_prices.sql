@@ -1,5 +1,5 @@
 -- Migration: update grocery product prices from reviewed pricing sheet
--- Source: /mnt/c/Users/user/Downloads/Mobile Devices/product, name,category,price.txt
+-- Source: operator-provided pricing reference
 -- Date: 2026-08-07
 
 UPDATE public.products

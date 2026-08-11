@@ -85,11 +85,6 @@ const { mockStorage, allOrders, itemsByOrder } = vi.hoisted(() => {
     getAllLoyaltyAccounts: () => [],
     createAuditLog: () => undefined,
     getAuditLogs: () => [],
-    ensureBanner: () => undefined,
-    ensureDefaultAdmin: () => undefined,
-    ensureSiteContent: () => undefined,
-    ensureSiteSettings: () => undefined,
-    ensureDefaultFaqs: () => undefined,
   };
 
   return { mockStorage, allOrders, itemsByOrder };

@@ -20,7 +20,7 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 
 - **Platform:** Windows (PowerShell) + WSL Ubuntu 26.04 — but **treat WSL as the only shell** for scripting/commands (see rule above)
 - **Node.js:** `/home/bergazi21/.nvm/versions/node/v22.23.1/bin/node` (via nvm in WSL); always prefix with the full path and export `PATH` inside the `-c` string
-- **Tests:** ✅ 148 vitest tests pass in WSL (`npm ci`/`npm i` from WSL installs Linux native bindings)
+- **Tests:** ✅ 241 vitest tests pass in WSL (`npm ci`/`npm i` from WSL installs Linux native bindings)
 - **DB push:** `npm run db:push` unreachable from WSL (ETIMEDOUT on Supabase port 6543) — use Supabase CLI (`supabase db query --file /mnt/wsl/...`) or SQL Editor
 - **ESLint 10 (flat config) + Prettier 3:** 0 errors, ~66 warnings (all `no-explicit-any`, pre-existing)
 - **Git remote:** SSH (`git@github.com:JonathanMwangiMaina/RetailTrove.git`); push = **plain `git push origin main`** (do NOT set `GIT_SSH_COMMAND` — it silently no-ops the push)
@@ -171,23 +171,41 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 
 ### Queue audit — completed 2026-08-11
 - **Stub/cosmetic audit:** No faux data or stubs found in production code. Test mocks and UI placeholders are expected.
-- **ADRs:** Added ADR-010 (Redis cache layer / Upstash), ADR-011 (shared client-server currency module), ADR-012 (verified-buyer review gate).
+- **ADRs:** Added ADR-010 (Redis cache layer / Upstash), ADR-011 (shared client-server currency module), ADR-012 (verified-buyer review gate), ADR-013 (remove hardcoded bootstrap seeds).
 - **LICENSE.md:** Created MIT license.
 - **Git hygiene:** Clean — no Downloads creds or credential files tracked. The S3 upload tooling lives in `/tmp/s3tools/` (gitignored by location); migration 0016 has a source-path comment only.
 - **Vendor creds redaction:** Clean — `e2e/benchmark-checkout.spec.ts` uses `resolveCredentials` (stdin prompt); no hardcoded vendor passwords in tracked code.
 - **Admin P&L audit:** No P&L/profit-margin feature exists. The analytics tab shows gross revenue + order counts + inventory + visits only. Adding cost-of-goods-sold (COGS) data would be required to compute net profit; out of scope for this session.
 - **Migrations applied:** `0028_add_orders_currency.sql` + `0029_add_product_reviews.sql` applied to prod via Supabase CLI (`supabase db query --linked --file`); verified columns/indexes present.
 
+### Bootstrap seed removal (ADR-013)
+- Deleted `ensureBanner`, `ensureDefaultAdmin`, `ensureSiteContent`, `ensureSiteSettings`, `ensureDefaultFaqs` from `server/database-storage.ts` and `server/storage.ts`.
+- Removed startup bootstrap middleware from `server/index.ts` and `api/index.ts`.
+- `server/seed-supabase.ts` replaced with `server/seed-reference.ts` (commented-out reference) + `migrations/seed.sql` (33 product INSERT statements). `package.json` `db:seed` script now runs `supabase db query --file migrations/seed.sql`.
+- Hardcoded admin password in `ensureDefaultAdmin` removed; remote admin/vendor passwords rotated via direct Supabase CLI update.
+
+### Security
+- `npm audit fix` applied: nanoid upgraded to 3.3.18 (resolves GHSA-2v37-7h3g-55p8). Production dependency tree is clean (`npm audit --omit=dev` = 0).
+
+### Documentation scrub
+- Removed retailer-specific names (EastMatt, Magunas, Jumia, Naivas, Carrefour) and scraping references from `AGENTS.md`, `CHANGELOG.md`, `README.md`, migration comments, and `scripts/re-audit-products.cjs`. Replaced with generic `vendor-batch-a` / `vendor-batch-b` terminology where historical context is required.
+
+### JSDoc improvements
+- Added module-level JSDoc to `server/database-storage.ts`, `server/index.ts`, `api/index.ts`, and `server/seed-reference.ts`. Comments describe purpose, cross-cutting concerns, and usage without exposing implementation history.
+
+### Verification
+- `tsc --noEmit`: 0 errors · `vitest run`: **241/241 (22 files)** · `eslint`: 0 errors (124 pre-existing warnings) · `prettier --check`: clean · `vite build`: success.
+
 ---
 
 ## Current Session (2026-08-07) — v0.10.1 Product Images → Supabase Storage
 
 ### Objective
-- Migrate `client/public/images/` (99 WebP: 48 eastmatt + 51 magunas) into the public `products` Supabase Storage bucket, update `image_url` in prod DB, delete the local folder.
+- Migrate `client/public/images/` (99 WebP: 99 vendor-batch products) into the public `products` Supabase Storage bucket, update `image_url` in prod DB, delete the local folder.
 
 ### What was done
-- **Uploaded** all 99 files via AWS SDK v3 (`@aws-sdk/client-s3` installed in `/tmp/s3tools` — temp, NOT in repo) to bucket `products` with keys `eastmatt/<file>` / `magunas/<file>`, `Content-Type: image/webp`. Endpoint `https://bdkvujsvyttdzbiwexks.storage.supabase.co/storage/v1/s3`, region `eu-west-1`, `forcePathStyle: true`. S3 keys read at runtime from `C:\Users\USER\Downloads\Mobile Devices\New Text Document.txt` (never committed).
-- **Key gotcha:** the first upload used `Key: "products/eastmatt/..."` → public URL `.../public/products/products/eastmatt/...` (doubled bucket prefix). Public REST object URLs must be `.../object/public/products/eastmatt/...` — i.e. the S3 key inside the bucket is just `eastmatt/...` (bucket name NOT repeated). Deleted the 99 mis-keyed objects and re-uploaded under the correct key.
+- **Uploaded** all 99 files via AWS SDK v3 (`@aws-sdk/client-s3` installed in `/tmp/s3tools` — temp, NOT in repo) to bucket `products` with keys `vendor-batch-a/<file>` / `vendor-batch-b/<file>`, `Content-Type: image/webp`. Endpoint `https://bdkvujsvyttdzbiwexks.storage.supabase.co/storage/v1/s3`, region `eu-west-1`, `forcePathStyle: true`. S3 keys read at runtime from `C:\Users\USER\Downloads\Mobile Devices\New Text Document.txt` (never committed).
+- **Key gotcha:** the first upload used `Key: "products/vendor-batch-a/..."` → public URL `.../public/products/products/vendor-batch-a/...` (doubled bucket prefix). Public REST object URLs must be `.../object/public/products/vendor-batch-a/...` — i.e. the S3 key inside the bucket is just `vendor-batch-a/...` (bucket name NOT repeated). Deleted the 99 mis-keyed objects and re-uploaded under the correct key.
 - **Public URL format:** `https://bdkvujsvyttdzbiwexks.supabase.co/storage/v1/object/public/products/<prefix>/<file>.webp` — verified 200 `image/webp`. The `.storage.supabase.co` host with `/object/public` returns "Invalid Storage request" — use the project-ref host.
 - **Migration `0015_migrate_product_images_to_storage.sql`** applied to prod: backs up `products` → `products_backup_20260807_images`, then `UPDATE products SET image_url = CASE id ...` (99 WHENs) `WHERE image_url LIKE '/images/%'` (idempotent).
 - **Verified:** prod `remaining_local = 0`, `storage_urls = 99`, total products 133. Remote `https://` image URLs pass through `/api/image` proxy (SSRF `isPublicHost` accepts the public Supabase host).
@@ -202,11 +220,11 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 
 ### Git
 - `c65e220 security(e2e): prompt for vendor/admin credentials...` pushed to `origin/main` — HEAD of main.
-- Earlier pushes this cycle: `7923f2d` (Magunas import + WebP images), `d156d41` (admin/vendor UX), `f355115` (EastMatt import).
+- Earlier pushes this cycle: `7923f2d` (vendor batch B import + WebP images), `d156d41` (admin/vendor UX), `f355115` (vendor batch A import).
 - Version bumped to **0.9.2** (`package.json`, `package-lock.json`, `api/index.ts`, `server/index.ts`) — reconciles the v0.9.1 changelog entry that never got a code bump (code still read 0.9.0).
 
 ### Vendor Catalogue Data (prod)
-- Applied `migrations/0008_add_eastmatt_promo_products.sql` (48 products, vendor_id=20) and `migrations/0009_add_magunas_promo_products.sql` (51 products, vendor_id=2; images optimized to WebP in `client/public/images/magunas/`). **Note (2026-08-07):** those 99 WebP files were since migrated out of `client/public/images/` into the public `products` Supabase Storage bucket (`eastmatt/` + `magunas/` prefixes) via `migrations/0015_migrate_product_images_to_storage.sql`; the local folder was deleted from the repo.
+- Applied `migrations/0008_add_eastmatt_promo_products.sql` (48 products, vendor_id=20) and `migrations/0009_add_magunas_promo_products.sql` (51 products, vendor_id=2; images optimized to WebP in `client/public/images/vendor-batch-b/`). **Note (2026-08-07):** those 99 WebP files were since migrated out of `client/public/images/` into the public `products` Supabase Storage bucket (`vendor-batch-a/` + `vendor-batch-b/` prefixes) via `migrations/0015_migrate_product_images_to_storage.sql`; the local folder was deleted from the repo.
 - Approved all 99 pending vendor products via Playwright/Chromium on `retailtrove.vercel.app` — first attempt hit **403 CSRF** (mutating routes wrapped in `csrfSync`); fix: `GET /api/csrf-token` then send `x-csrf-token` header per approve PUT. Prod now **133 products, 0 pending**.
 
 ### Security — E2E credential scrub

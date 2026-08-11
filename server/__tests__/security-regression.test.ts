@@ -104,11 +104,6 @@ const { mockStorage, orders, createdProducts, createdOrders } = vi.hoisted(() =>
     getAllLoyaltyAccounts: () => [],
     createAuditLog: vi.fn(),
     getAuditLogs: () => [],
-    ensureBanner: () => undefined,
-    ensureDefaultAdmin: () => undefined,
-    ensureSiteContent: () => undefined,
-    ensureSiteSettings: () => undefined,
-    ensureDefaultFaqs: () => undefined,
   };
 
   return { mockStorage, orders, createdProducts, createdOrders };
@@ -589,7 +584,7 @@ describe("LOW #12 — visits payload sanitization", () => {
   });
 });
 
-/* ── Finding #9: absolute session timeout (24 h hard cap) ────────────────── */
+/* ── Finding #9: absolute session timeout (8 h hard cap) ────────────────── */
 
 describe("Finding #9 — absolute session timeout", () => {
   const originalEnv = process.env.SESSION_ABSOLUTE_MS;

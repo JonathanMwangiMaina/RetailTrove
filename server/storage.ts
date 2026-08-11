@@ -290,14 +290,6 @@ export interface IStorage {
     limit?: number;
     offset?: number;
   }): Promise<AuditLog[]>;
-
-  // ── Bootstrap & Seed Handlers ──────────────────────────────────────────────
-
-  ensureBanner(): Promise<void>;
-  ensureDefaultAdmin(): Promise<void>;
-  ensureSiteContent(): Promise<void>;
-  ensureSiteSettings(): Promise<void>;
-  ensureDefaultFaqs(): Promise<void>;
 }
 
 /* ============================================================================

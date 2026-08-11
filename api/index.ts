@@ -1,3 +1,18 @@
+/**
+ * @file api/index.ts
+ * @description Vercel serverless entry point for RetailTrove.
+ *
+ * Mirrors the security and middleware stack of the dev server (`server/index.ts`):
+ * Helmet with strict CSP, session management, rate limiting, CSRF protection,
+ * input sanitization, and the image optimization proxy. Payment webhooks are
+ * registered before generic JSON parsing to preserve raw-body verification.
+ *
+ * All runtime configuration is sourced from environment variables; no secrets
+ * or credentials are hardcoded.
+ *
+ * @module Server/ServerlessEntry
+ */
+
 import express, { type Request, type Response, type NextFunction } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
@@ -6,7 +21,6 @@ import crypto from "crypto";
 import { pool } from "../server/db.js";
 import { registerRoutes } from "../server/routes.js";
 import { setupAuth } from "../server/auth.js";
-import { storage } from "../server/storage.js";
 import { globalLimiter, imageLimiter, webhookLimiter } from "../server/middleware/rate-limiter.js";
 import { sanitizeInput } from "../server/middleware/sanitize.js";
 import { handleCsrfToken, csrfSynchronisedProtection } from "../server/middleware/csrf.js";
@@ -134,7 +148,7 @@ const PgSessionStore = connectPgSimple(session);
 // the cookie on each request so the session dies after this many ms without
 // traffic. The hard absolute cap (24 h) is enforced by a middleware in
 // registerRoutes (server/routes.ts) so sessions cannot outlive it.
-const SESSION_IDLE_MS = Number(process.env.SESSION_IDLE_MS ?? 30 * 60 * 1000);
+const SESSION_IDLE_MS = Number(process.env.SESSION_IDLE_MS ?? 15 * 60 * 1000);
 
 app.use(
   session({
@@ -168,25 +182,6 @@ app.get("/api/health", async (_req: Request, res: Response) => {
     .catch(() => false);
 
   res.json({ ok });
-});
-
-let isInitialized = false;
-app.use(async (_req: Request, _res: Response, next: NextFunction) => {
-  if (!isInitialized) {
-    try {
-      await Promise.all([
-        storage.ensureBanner(),
-        storage.ensureDefaultAdmin(),
-        storage.ensureSiteContent(),
-        storage.ensureSiteSettings(),
-        storage.ensureDefaultFaqs(),
-      ]);
-      isInitialized = true;
-    } catch (error) {
-      console.error("Failed during serverless initialization:", error);
-    }
-  }
-  next();
 });
 
 let routesInitFailed = false;

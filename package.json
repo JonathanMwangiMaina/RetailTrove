@@ -1,6 +1,6 @@
 {
   "name": "retail-trove",
-  "version": "0.10.2",
+  "version": "0.12.0",
   "type": "module",
   "license": "MIT",
   "scripts": {
@@ -18,7 +18,7 @@
     "format": "prettier --write \"client/src/**/*.{ts,tsx,css}\" \"server/**/*.ts\" \"api/**/*.ts\" \"shared/**/*.ts\"",
     "format:check": "prettier --check \"client/src/**/*.{ts,tsx,css}\" \"server/**/*.ts\" \"api/**/*.ts\" \"shared/**/*.ts\"",
     "db:push": "drizzle-kit push",
-    "db:seed": "tsx server/seed-supabase.ts",
+    "db:seed": "supabase db query --file migrations/seed.sql",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test"

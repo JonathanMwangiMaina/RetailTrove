@@ -204,7 +204,7 @@ export function setupAuth(app: Express) {
       // or already verified (anti-enumeration).
       if (user && !user.emailVerified) {
         const verificationToken = crypto.randomBytes(32).toString("hex");
-        const verificationTokenExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        const verificationTokenExpiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
         await storage.updateUser(user.id, { verificationToken, verificationTokenExpiresAt });
 
         const baseUrl =

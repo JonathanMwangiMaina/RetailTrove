@@ -1,3 +1,20 @@
+/**
+ * @file server/index.ts
+ * @description Development-mode Express application bootstrap for RetailTrove.
+ *
+ * Configures the middleware stack: Helmet security headers with strict CSP in
+ * production, express-session with PostgreSQL store, rate limiting (global,
+ * auth, write, webhook, image), CSRF protection via csrf-sync, XSS sanitization,
+ * and the self-hosted sharp image proxy. Payment webhooks (Lemon Squeezy,
+ * M-Pesa) are registered here because they require raw-body or IP-allowlist
+ * checks before JSON parsing.
+ *
+ * Route handlers are delegated to `registerRoutes()`; this file owns only
+ * cross-cutting concerns and server lifecycle.
+ *
+ * @module Server/DevEntry
+ */
+
 import express, { type Request, type Response, type NextFunction } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
@@ -6,7 +23,6 @@ import crypto from "crypto";
 import { pool } from "./db.js";
 import { registerRoutes } from "./routes.js";
 import { setupAuth } from "./auth.js";
-import { storage } from "./storage.js";
 import { globalLimiter, imageLimiter, webhookLimiter } from "./middleware/rate-limiter.js";
 import { sanitizeInput } from "./middleware/sanitize.js";
 import { handleCsrfToken, csrfSynchronisedProtection } from "./middleware/csrf.js";
@@ -135,7 +151,7 @@ const PgSessionStore = connectPgSimple(session);
 // the cookie on each request so the session dies after this many ms without
 // traffic. The hard absolute cap (24 h) is enforced by a middleware in
 // registerRoutes (server/routes.ts) so sessions cannot outlive it.
-const SESSION_IDLE_MS = Number(process.env.SESSION_IDLE_MS ?? 30 * 60 * 1000);
+const SESSION_IDLE_MS = Number(process.env.SESSION_IDLE_MS ?? 15 * 60 * 1000);
 
 app.use(
   session({
@@ -169,23 +185,6 @@ app.get("/api/health", async (_req: Request, res: Response) => {
     .catch(() => false);
 
   res.json({ ok });
-});
-
-let isBootstrapped = false;
-app.use(async (_req: Request, _res: Response, next: NextFunction) => {
-  if (!isBootstrapped) {
-    try {
-      await storage.ensureBanner();
-      await storage.ensureDefaultAdmin();
-      await storage.ensureSiteContent();
-      await storage.ensureSiteSettings();
-      await storage.ensureDefaultFaqs();
-      isBootstrapped = true;
-    } catch (error) {
-      console.error("Failed to execute storage bootstrap methods:", error);
-    }
-  }
-  next();
 });
 
 let routesInitFailed = false;

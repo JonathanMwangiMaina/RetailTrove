@@ -1,7 +1,19 @@
-import crypto from "crypto";
+/**
+ * @file server/database-storage.ts
+ * @description Drizzle ORM-backed implementation of the IStorage repository contract.
+ * Provides concrete data-access methods for all domain entities: users, products,
+ * orders, carts, wishlists, variants, images, FAQs, testimonials, team members,
+ * reviews, loyalty, audit logs, and site settings.
+ *
+ * Every database mutation in the application flows through this class. Queries use
+ * parameterized Drizzle operators; joins and raw SQL are confined to explicitly
+ * typed helpers. Cache invalidation is triggered inline after write operations.
+ *
+ * @module Server/DatabaseStorage
+ */
+
 import { db } from "./db.js";
 import { cache, cacheKeys, CACHE_TTLS } from "./cache.js";
-import { PRIVACY_POLICY_CONTENT, TERMS_OF_SERVICE_CONTENT } from "./legal-content.js";
 import {
   products,
   users,
@@ -1255,96 +1267,6 @@ export class DatabaseStorage implements IStorage {
   async deleteTeamMember(id: number): Promise<boolean> {
     const result = await db.delete(teamMembers).where(eq(teamMembers.id, id));
     return (result.rowCount ?? 0) > 0;
-  }
-
-  // ── Bootstrap & Seed Handlers ──────────────────────────────────────────────
-
-  async ensureBanner(): Promise<void> {
-    const existing = await this.getBanner();
-    if (!existing) {
-      await db.insert(bannerSettings).values({});
-    }
-  }
-
-  async ensureDefaultAdmin(): Promise<void> {
-    const admin = await this.getUserByEmail("admin@retailtrove.com");
-    if (!admin) {
-      const bcrypt = await import("bcryptjs");
-      const hash = await bcrypt.hash("ChronicleBookKasuku26%", 10);
-      await this.createUser({
-        email: "admin@retailtrove.com",
-        passwordHash: hash,
-        name: "Admin",
-        role: "admin",
-        status: "active",
-        isApproved: true,
-        authUserId: crypto.randomUUID(),
-        emailVerified: true,
-      });
-    }
-  }
-
-  async ensureSiteContent(): Promise<void> {
-    const defaults: Record<string, string> = {
-      about: "Welcome to RetailTrove — your trusted online store for quality products.",
-      contact: "Get in touch with our support team.",
-      footer_about: "RetailTrove is a modern e-commerce platform.",
-      tos: TERMS_OF_SERVICE_CONTENT,
-      privacy: PRIVACY_POLICY_CONTENT,
-    };
-
-    for (const [type, content] of Object.entries(defaults)) {
-      const existing = await this.getSiteContent(type);
-      if (!existing) {
-        await db.insert(siteContent).values({ type, content });
-      }
-    }
-  }
-
-  async ensureSiteSettings(): Promise<void> {
-    const defaults: Record<string, string> = {
-      site_currency: "USD",
-      facebook_url: "",
-      twitter_url: "",
-      instagram_url: "",
-      linkedin_url: "",
-      youtube_url: "",
-    };
-
-    for (const [key, value] of Object.entries(defaults)) {
-      const existing = await db.select().from(siteSettings).where(eq(siteSettings.key, key));
-      if (existing.length === 0) {
-        await db.insert(siteSettings).values({ key, value });
-      }
-    }
-  }
-
-  async ensureDefaultFaqs(): Promise<void> {
-    const existing = await this.getAllFaqs();
-    if (existing.length === 0) {
-      const defaults = [
-        {
-          question: "What is your return policy?",
-          answer: "You can return any item within 30 days of purchase for a full refund.",
-          displayOrder: 1,
-        },
-        {
-          question: "How long does shipping take?",
-          answer:
-            "Standard shipping takes 5-7 business days. Express shipping takes 2-3 business days.",
-          displayOrder: 2,
-        },
-        {
-          question: "Do you ship internationally?",
-          answer:
-            "Yes, we ship to over 50 countries worldwide. Shipping costs vary by destination.",
-          displayOrder: 3,
-        },
-      ];
-      for (const faq of defaults) {
-        await db.insert(faqs).values({ ...faq, status: "approved" });
-      }
-    }
   }
 
   // ── Password Reset Token Operations ───────────────────────────────────────

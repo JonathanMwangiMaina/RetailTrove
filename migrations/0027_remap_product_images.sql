@@ -1,6 +1,6 @@
 -- Migration: remap image_url for all 321 products from historical dump
 -- Source: tool_fe5d0e48a001COzzpny1SZtE87
--- Fixed audit-2026-08-09/ and seed/ references to jumia/
+-- Fixed historical path references
 -- Generated: 2026-08-09
 
 UPDATE public.products

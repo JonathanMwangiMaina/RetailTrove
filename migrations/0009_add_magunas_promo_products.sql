@@ -1,4 +1,4 @@
--- Migration: Magunas (BeiFresh) promo products (51 items)
+-- Migration: Vendor promo products batch B (51 items)
 -- Generated: 2026-08-05T07:50:21.008Z | Vendor: vendor@retailtrove.com (users.id = 2)
 -- Pricing: USD anchored so the cheapest promo item = $1.99 (existing convention);
 --          proportions preserved from the original KSh promo prices.

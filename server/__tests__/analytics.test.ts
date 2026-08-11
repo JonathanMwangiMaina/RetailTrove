@@ -114,11 +114,6 @@ const { mockStorage } = vi.hoisted(() => {
     getAllLoyaltyAccounts: vi.fn().mockResolvedValue([]),
     createAuditLog: vi.fn(),
     getAuditLogs: vi.fn().mockResolvedValue([]),
-    ensureBanner: vi.fn().mockResolvedValue(undefined),
-    ensureDefaultAdmin: vi.fn().mockResolvedValue(undefined),
-    ensureSiteContent: vi.fn().mockResolvedValue(undefined),
-    ensureSiteSettings: vi.fn().mockResolvedValue(undefined),
-    ensureDefaultFaqs: vi.fn().mockResolvedValue(undefined),
   };
 
   return { mockStorage };

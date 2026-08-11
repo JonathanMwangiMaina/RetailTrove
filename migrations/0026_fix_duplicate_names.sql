@@ -1,5 +1,5 @@
--- Migration: restore accurate product names overwritten by generic Jumia titles
--- Category audit (0023) replaced specific brand names with generic Jumia titles
+-- Migration: restore accurate product names overwritten by generic retailer titles
+-- Category audit (0023) replaced specific brand names with generic retailer titles
 -- This restores the original accurate names
 
 UPDATE public.products SET name = 'Mika Gas Stove 1 Burner' WHERE id = 92;
