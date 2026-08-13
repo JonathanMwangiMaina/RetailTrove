@@ -333,11 +333,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteProduct(id: number): Promise<boolean> {
-    const result = await db.delete(products).where(eq(products.id, id));
-    if ((result.rowCount ?? 0) > 0) {
-      await cache.delPrefix("products:");
-    }
-    return (result.rowCount ?? 0) > 0;
+    return await db.transaction(async (tx) => {
+      // Detach historical order lines first (productId + variantId -> null) so a
+      // product delete never fails on order references and never erases order
+      // history — the frozen name/price/variant_name snapshots are preserved.
+      await tx
+        .update(orderItems)
+        .set({ productId: null, variantId: null })
+        .where(eq(orderItems.productId, id));
+
+      // Variants, images, reviews, cart/wishlist lines are cleaned up by the
+      // product FK cascade chain; testimonials SET NULL the product link.
+      const result = await tx.delete(products).where(eq(products.id, id));
+      if ((result.rowCount ?? 0) > 0) {
+        await cache.delPrefix("products:");
+      }
+      return (result.rowCount ?? 0) > 0;
+    });
   }
 
   async getPendingProducts(): Promise<Product[]> {

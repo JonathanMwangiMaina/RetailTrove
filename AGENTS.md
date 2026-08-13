@@ -147,6 +147,29 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 
 ---
 
+## Current Session (2026-08-13) — v0.12.1 Admin Product Delete FK Chain
+
+### Symptom
+- Admin inventory **delete button**: confirm dialog appears, OK is clicked, but nothing happens — product count unchanged even after a browser refresh.
+
+### Root cause (NOT the client invalidation)
+- `DELETE /api/products/:id` → `storage.deleteProduct()` → `db.delete(products)` threw Postgres `23503` because **migration 0030 only fixed 3 of the 6 product-referencing FKs**. Left at default `NO ACTION`: `product_variants` (167/321 products have variants), `testimonials` (4), `order_items.variant_id` (3), `cart_items.variant_id`, legacy `wishlists`. The `[DEBUG]` log added in `3c824d5` was a red herring — the request reached the server; the DB delete threw, route returned 500.
+- Why 0030 missed it: prod's `product_variants` table pre-existed before migration 0005 ran, so `CREATE TABLE IF NOT EXISTS` never rebuilt the FK; it stayed the Drizzle default (NO ACTION) while `schema.ts` declared CASCADE — schema/prod drift.
+
+### Fix — migration `0031` (applied to prod, idempotent)
+- `product_variants.product_id` → **CASCADE** · `testimonials.product_id` → **SET NULL** · `order_items.variant_id` → **SET NULL** · `cart_items.variant_id` → **CASCADE** · `wishlists.product_id` → **CASCADE**.
+- `order_items.product_id` moved **CASCADE (0030) → SET NULL** (user decision): deleting a product must never erase historical order lines; frozen `product_name`/`price`/`variant_name` snapshots survive.
+- `DatabaseStorage.deleteProduct()` now runs in a `db.transaction`: detaches `order_items` (`productId`/`variantId` → NULL) first, then deletes (cascade cleans variants/images/reviews/carts/wishlists). Defense-in-depth against future FK drift.
+- `DELETE /api/products/:id` returns **409** on `err.code === "23503"` instead of generic 500; removed the `[DEBUG]` console.log.
+
+### Smoke test (temp, product 334)
+- Seeded product 334 + 1 variant via SQL → pre-fix `DELETE FROM products WHERE id=334` reproduced `23503` → post-fix succeeded, variant cascade-deleted, both gone (`probe-334-gone`). Seed scripts in `e2e/results/` (gitignored): `smoke-seed-334.sql`, `smoke-repro-fk.sql`, `probe-334-gone.sql`. API-level variant script: `/mnt/c/Users/user/AppData/Local/Temp/opencode/smoke-delete-334.mjs` (env `SMOKE_ADMIN_EMAIL`/`SMOKE_ADMIN_PASSWORD` or stdin prompt).
+
+### Verified
+- `tsc --noEmit`: 0 errors · `vitest run`: **241/241 (22 files)** · `eslint`: 0 errors · `prettier --check`: clean · `vite build`: success.
+
+---
+
 ## Current Session (2026-08-11) — v0.11.0 Product Reviews + Server-Side Currency Wiring
 
 ### Product Reviews (migration 0029 — `product_reviews`)

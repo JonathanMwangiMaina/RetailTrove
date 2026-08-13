@@ -7,6 +7,24 @@ This project does not currently use semantic versioning — entries are dated.
 
 ---
 
+## [v0.12.1] — Admin Product Delete Fix: Complete FK Chain (2026-08-13)
+
+### Fixed
+- Admin inventory **delete button now actually deletes** in production. Root cause was **not** client-side: migration `0030` only converted `order_items`/`cart_items`/`wishlist_items` product FKs to CASCADE, but the remaining product-referencing FKs stayed at their default `NO ACTION`, so `DELETE /api/products/:id` threw Postgres `23503` for **167 of 321 products** (every product with a variant) plus 4 products with testimonials — the route returned 500 and the count never changed.
+- **Migration `0031`** (applied to prod, idempotent): `product_variants.product_id` → CASCADE, `testimonials.product_id` → SET NULL, `order_items.variant_id` → SET NULL, `cart_items.variant_id` → CASCADE, legacy `wishlists.product_id` → CASCADE. `order_items.product_id` moved **CASCADE → SET NULL** so deleting a product never erases historical order line items (frozen `product_name`/`price`/`variant_name` snapshots survive).
+- `DatabaseStorage.deleteProduct()` now runs in a transaction that detaches `order_items` (`product_id`/`variant_id` → NULL) before deleting the product — defense-in-depth so deletes keep working even if FK drift recurs.
+- `DELETE /api/products/:id` returns a clear **409** (instead of generic 500) if a future FK violation ever surfaces.
+- Removed the `[DEBUG] DELETE /products/:id` console.log added in `3c824d5`.
+
+### Verification
+- Prod DB: seeded temp product 334 + variant → pre-fix `DELETE` threw `23503` (reproduced) → post-fix `DELETE` succeeded and the variant cascade-deleted; seed removed.
+- `tsc --noEmit`: 0 errors · `vitest run`: 241/241 · `eslint`: 0 errors · `prettier --check`: clean · `vite build`: success.
+
+### Setup required
+- Migration `0031` already applied to prod. Re-run is a no-op.
+
+---
+
 ## [v0.12.0] — Security Hardening, Admin Delete Fix, Seed Refactor, Docs Cleanup (2026-08-11)
 
 ### Security

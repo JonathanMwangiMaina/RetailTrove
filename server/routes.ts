@@ -482,7 +482,6 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
 
   del("/products/:id", writeLimiter, requireAuth, async (req: Request, res: Response) => {
     try {
-      console.log("[DEBUG] DELETE /products/:id params:", req.params, "query:", req.query);
       if (!isProductWriteRole(req)) {
         return res
           .status(403)
@@ -508,6 +507,18 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
       logAudit(req, { action: "product_deleted", entityType: "product", entityId: id });
       res.json({ message: "Product deleted" });
     } catch (error) {
+      // FK violation (Postgres 23503): the product is still referenced by a
+      // record the cascade chain does not cover — surface a clear 409 instead
+      // of a generic 500 so the failure is actionable.
+      if ((error as { code?: string }).code === "23503") {
+        console.error(
+          `Cannot delete product ${req.params.id}: still referenced by other records:`,
+          error,
+        );
+        return res.status(409).json({
+          message: "This product cannot be deleted because it is still referenced by other records",
+        });
+      }
       console.error(`Error deleting product ${req.params.id}:`, error);
       res.status(500).json({ message: "Failed to delete product" });
     }

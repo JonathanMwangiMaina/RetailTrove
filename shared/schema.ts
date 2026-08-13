@@ -148,11 +148,15 @@ export const orders = pgTable("orders", {
 export const orderItems = pgTable("order_items", {
   id: serial("id").primaryKey(),
   orderId: integer("order_id").references(() => orders.id),
-  productId: integer("product_id").references(() => products.id),
+  // SET NULL (not CASCADE): deleting a product must never erase historical
+  // order line items — productName/price/variantName are frozen snapshots.
+  productId: integer("product_id").references(() => products.id, { onDelete: "set null" }),
   productName: text("product_name"),
   price: numeric("price"),
   quantity: integer("quantity").default(1),
-  variantId: integer("variant_id").references(() => productVariants.id),
+  variantId: integer("variant_id").references(() => productVariants.id, {
+    onDelete: "set null",
+  }),
   variantName: text("variant_name"),
 });
 
@@ -162,11 +166,14 @@ export const orderItems = pgTable("order_items", {
  */
 export const cartItems = pgTable("cart_items", {
   id: serial("id").primaryKey(),
-  productId: integer("product_id").references(() => products.id),
+  // CASCADE: cart lines are ephemeral and should drop with the product/variant.
+  productId: integer("product_id").references(() => products.id, { onDelete: "cascade" }),
   quantity: integer("quantity").default(1),
   cartId: text("cart_id"),
   userId: uuid("user_id"),
-  variantId: integer("variant_id").references(() => productVariants.id),
+  variantId: integer("variant_id").references(() => productVariants.id, {
+    onDelete: "cascade",
+  }),
 });
 
 /**
@@ -180,7 +187,7 @@ export const wishlistItems = pgTable(
     id: serial("id").primaryKey(),
     userId: uuid("user_id").notNull(),
     productId: integer("product_id")
-      .references(() => products.id)
+      .references(() => products.id, { onDelete: "cascade" })
       .notNull(),
     createdAt: timestamp("created_at").defaultNow(),
   },
@@ -269,7 +276,8 @@ export const testimonials = pgTable("testimonials", {
   rating: integer("rating").notNull(),
   comment: text("comment").notNull(),
   status: text("status").default("pending"),
-  productId: integer("product_id"),
+  // SET NULL: a curated testimonial survives product deletion (link dropped).
+  productId: integer("product_id").references(() => products.id, { onDelete: "set null" }),
   submittedBy: integer("submitted_by"),
   createdAt: timestamp("created_at").defaultNow(),
 });
