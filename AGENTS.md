@@ -168,6 +168,9 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 ### Verified
 - `tsc --noEmit`: 0 errors · `vitest run`: **241/241 (22 files)** · `eslint`: 0 errors · `prettier --check`: clean · `vite build`: success.
 
+### Vercel deploy regression (v0.12.2, 2026-08-13)
+- `3c824d5` added `nodeOptions: "--import @sentry/otel/instrumentations-node"` to `vercel.json` → Vercel schema validation failed (`functions.api/index.ts` should NOT have additional property `nodeOptions`), blocking all deploys. Removed in v0.12.2. **Do not reintroduce `nodeOptions`** — current Vercel `functions` schema allows only `excludeFiles`/`includeFiles`/`maxDuration`/`maxConcurrency`/`memory`/`runtime`/`regions`/`functionFailoverRegions`/`supportsCancellation`/`experimentalTriggers` (`additionalProperties: false`). Also `@sentry/otel` is not a dependency, so that preload was doubly broken. Sentry still works via `setupExpressErrorHandler`.
+
 ---
 
 ## Current Session (2026-08-11) — v0.11.0 Product Reviews + Server-Side Currency Wiring

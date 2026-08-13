@@ -7,6 +7,13 @@ This project does not currently use semantic versioning — entries are dated.
 
 ---
 
+## [v0.12.2] — Fix Vercel deploy: drop unsupported `functions.nodeOptions` (2026-08-13)
+
+### Fixed
+- Vercel deployment was failing schema validation: `functions.api/index.ts` should NOT have additional property `nodeOptions`. Removed `nodeOptions: "--import @sentry/otel/instrumentations-node"` (added in `3c824d5`) from `vercel.json` — the current `functions` config schema (`additionalProperties: false`) does not support it, and `@sentry/otel` was never an installed dependency, so the preload would have crashed at runtime anyway. Restores the known-good config (`maxDuration: 30` only); Sentry error capture via `setupExpressErrorHandler` is unaffected.
+
+---
+
 ## [v0.12.1] — Admin Product Delete Fix: Complete FK Chain (2026-08-13)
 
 ### Fixed
