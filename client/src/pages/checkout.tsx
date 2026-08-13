@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useCart } from "@/hooks/use-cart";
 import { CartItem } from "@/components/ui/cart-item";
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,20 @@ const checkoutFormSchema = insertOrderSchema.extend({
 
 type CheckoutFormValues = z.infer<typeof checkoutFormSchema>;
 
+// Client-generated order-creation idempotency key. One per checkout page load,
+// reused across retries of the same submit so a timed-out POST /orders can never
+// create a duplicate order (the server dedupes on this key).
+function createClientRequestKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  // UUID-v4-shaped fallback for browsers without crypto.randomUUID.
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
 export default function Checkout() {
   useEffect(() => {
     document.title = "Checkout - RetailTrove";
@@ -54,6 +68,11 @@ export default function Checkout() {
   const [paymentMethod, setPaymentMethod] = useState<"lemonsqueezy" | "mpesa">("lemonsqueezy");
   const [mpesaPhone, setMpesaPhone] = useState("");
   const [mpesaWaiting, setMpesaWaiting] = useState(false);
+
+  const requestKeyRef = useRef<string | null>(null);
+  if (requestKeyRef.current === null) {
+    requestKeyRef.current = createClientRequestKey();
+  }
 
   // Calculate tax (10%)
   const tax = subtotal * 0.1;
@@ -124,10 +143,12 @@ export default function Checkout() {
           : {}),
       }));
 
-      // Create order first
+      // Create order first — the clientRequestKey is reused on any retry so a
+      // timed-out request never results in a duplicate order.
       const response = await apiRequest("POST", "/api/orders", {
         order: { ...values, paymentProvider: paymentMethod },
         items: orderItems,
+        clientRequestKey: requestKeyRef.current,
       });
 
       if (!response.ok) {

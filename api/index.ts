@@ -73,7 +73,12 @@ app.post(
       res.status(200).json({ received: true });
     } catch (err: any) {
       console.error("[Lemon Squeezy] webhook error:", err.message);
-      res.status(200).json({ received: true });
+      // Distinguish a malformed payload (client error — must NOT retry) from a
+      // transient processing failure (Lemon Squeezy SHOULD retry).
+      if (err instanceof SyntaxError) {
+        return res.status(400).json({ error: "Malformed payload" });
+      }
+      return res.status(500).json({ error: "Internal processing error" });
     }
   },
 );
@@ -86,7 +91,10 @@ app.post(
   async (req: Request, res: Response) => {
     // Origin allowlist: only Safaricom Daraja IPs may invoke this endpoint.
     // Opt-in via MPESA_CALLBACK_ALLOWED_IPS; unset = accept (sandbox-friendly).
-    const callbackIp = req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() ?? req.ip;
+    // req.ip is used (not X-Forwarded-For, which callers can spoof) — the app
+    // trusts exactly one proxy hop (app.set("trust proxy", 1)), so Vercel's own
+    // proxy is the only XFF source honored.
+    const callbackIp = req.ip ?? "";
     if (!isMpesaCallbackAllowedIp(callbackIp)) {
       console.warn(`[M-Pesa] Callback rejected from non-allowlisted IP ${callbackIp}`);
       return res.status(403).json({ ResultCode: 1, ResultDesc: "Forbidden" });
@@ -99,7 +107,9 @@ app.post(
       return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
     } catch (err: any) {
       console.error("[M-Pesa] callback processing error:", err.message);
-      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
+      // 500 (NOT an ack) so Safaricom retries the callback — the payment state
+      // change may not have been persisted.
+      return res.status(500).json({ ResultCode: 1, ResultDesc: "Internal error — please retry" });
     }
   },
 );

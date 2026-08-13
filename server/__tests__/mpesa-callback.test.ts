@@ -62,6 +62,7 @@ vi.mock("../storage.js", () => ({ storage: mockStorage }));
 import { processMpesaCallback } from "../payment-callbacks.js";
 import { sendOrderConfirmationEmail, sendOrderStatusEmail } from "../email.js";
 import { awardLoyaltyPointsForOrder } from "../loyalty-service.js";
+import { usdToKes } from "../../client/src/lib/currencies.js";
 
 const mockOrder = {
   id: 1,
@@ -71,6 +72,8 @@ const mockOrder = {
   stockReleased: false,
 };
 
+// A valid success callback must report the exact whole-KES amount derived from
+// the stored USD total (`usdToKes(order.total)`) and carry a receipt.
 const successCallback = {
   Body: {
     stkCallback: {
@@ -80,6 +83,7 @@ const successCallback = {
       MerchantRequestID: "merchant-request-id-456",
       CallbackMetadata: {
         Item: [
+          { Name: "Amount", Value: usdToKes(Number(mockOrder.total)) },
           { Name: "MpesaReceiptNumber", Value: "QHJ7A1BCDE" },
           { Name: "PhoneNumber", Value: 254712345678 },
         ],
@@ -122,7 +126,12 @@ describe("M-Pesa Callback (real handler)", () => {
           ResultDesc: "Success",
           CheckoutRequestID: "checkout-request-id-123",
           MerchantRequestID: "merchant-request-id-456",
-          CallbackMetadata: { Item: [] },
+          CallbackMetadata: {
+            Item: [
+              { Name: "Amount", Value: usdToKes(Number(mockOrder.total)) },
+              { Name: "MpesaReceiptNumber", Value: "QHJ7A1BCDE" },
+            ],
+          },
         },
       },
     });
@@ -131,7 +140,7 @@ describe("M-Pesa Callback (real handler)", () => {
     expect(sendOrderConfirmationEmail).toHaveBeenCalledTimes(1);
   });
 
-  it("tolerates a missing CallbackMetadata block on success", async () => {
+  it("fails the order (fail-closed) when a success callback lacks CallbackMetadata", async () => {
     await processMpesaCallback({
       Body: {
         stkCallback: {
@@ -144,10 +153,13 @@ describe("M-Pesa Callback (real handler)", () => {
       },
     });
 
-    expect(orders.get(1).paymentStatus).toBe("paid");
-    expect(mockStorage.markOrderPaymentStatus).toHaveBeenCalledWith(1, "pending", "paid", {
-      mpesaReceiptNumber: undefined,
-    });
+    // No amount + no receipt means the payment can't be verified — the order
+    // must NOT be marked paid from an unverifiable callback.
+    expect(orders.get(1).paymentStatus).toBe("failed");
+    expect(orders.get(1).stockReleased).toBe(true);
+    expect(mockStorage.releaseOrderStock).toHaveBeenCalledWith(1);
+    expect(mockStorage.markOrderPaymentStatus).not.toHaveBeenCalledWith(1, "pending", "paid");
+    expect(sendOrderConfirmationEmail).not.toHaveBeenCalled();
   });
 
   it("marks order as failed and releases stock on failure", async () => {

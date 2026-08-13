@@ -17,6 +17,8 @@ import { sendOrderConfirmationEmail, sendOrderStatusEmail } from "./email.js";
 import { awardLoyaltyPointsForOrder } from "./loyalty-service.js";
 import { usdToKes } from "../client/src/lib/currencies.js";
 
+let warnedUnsetAllowlist = false;
+
 /**
  * Verify that the request originated from an allowlisted Daraja callback IP.
  * Reads the comma-separated `MPESA_CALLBACK_ALLOWED_IPS` env var (CIDR or exact
@@ -27,7 +29,15 @@ import { usdToKes } from "../client/src/lib/currencies.js";
  */
 export function isMpesaCallbackAllowedIp(ip: string | undefined): boolean {
   const raw = process.env.MPESA_CALLBACK_ALLOWED_IPS;
-  if (!raw || raw.trim() === "") return true;
+  if (!raw || raw.trim() === "") {
+    if (!warnedUnsetAllowlist) {
+      warnedUnsetAllowlist = true;
+      console.warn(
+        "[M-Pesa] MPESA_CALLBACK_ALLOWED_IPS is not set — callbacks are accepted from any IP. Set it to Safaricom's Daraja ranges in production.",
+      );
+    }
+    return true;
+  }
   if (!ip) return false;
 
   return raw
@@ -195,11 +205,12 @@ export async function processMpesaCallback(body: unknown): Promise<void> {
 
     // Amount verification: the callback must report the exact whole-KES amount
     // derived from the stored order total (within a 1-KES rounding tolerance).
-    // A mismatched amount means a provider error or a forged callback — do NOT
-    // accept it as paid; fail the order and release stock instead.
+    // The check is FAIL-CLOSED: a missing/unparsable Amount is treated as a
+    // mismatch too (a valid success callback always carries the amount), so a
+    // forged or truncated callback cannot slip through as paid.
     const callbackAmount = Number(metadata.Amount);
     const expected = expectedMpesaAmount(order);
-    if (Number.isFinite(callbackAmount) && Math.abs(callbackAmount - expected) > 1) {
+    if (!Number.isFinite(callbackAmount) || Math.abs(callbackAmount - expected) > 1) {
       console.warn(
         `[M-Pesa] Order #${order.id} amount mismatch — callback ${callbackAmount} KES, expected ${expected} KES`,
       );
@@ -207,6 +218,12 @@ export async function processMpesaCallback(body: unknown): Promise<void> {
         order,
         `Amount mismatch (callback ${callbackAmount} vs expected ${expected} KES)`,
       );
+      return;
+    }
+
+    if (!receiptNumber) {
+      console.warn(`[M-Pesa] Order #${order.id} success callback missing MpesaReceiptNumber`);
+      await failMpesaOrder(order, "Success callback missing MpesaReceiptNumber");
       return;
     }
 

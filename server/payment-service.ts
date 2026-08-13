@@ -9,6 +9,21 @@
 import crypto from "node:crypto";
 import { getCurrency } from "../client/src/lib/currencies.js";
 
+/** Outbound provider requests are capped so a hung upstream can never wedge the
+ *  serverless function past its budget. Aborted requests surface as network
+ *  errors (returned as `{ error }`, never thrown). */
+const FETCH_TIMEOUT_MS = 10_000;
+
+async function fetchWithTimeout(url: string, init: RequestInit = {}): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /* ============================================================================
  *  LEMON SQUEEZY
  * ============================================================================ */
@@ -80,7 +95,7 @@ export async function createLemonSqueezyCheckout(params: {
   };
 
   try {
-    const res = await fetch(`${LS_BASE}/checkouts`, {
+    const res = await fetchWithTimeout(`${LS_BASE}/checkouts`, {
       method: "POST",
       headers: lsHeaders,
       body: JSON.stringify(body),
@@ -146,9 +161,12 @@ async function getMpesaAccessToken(): Promise<string> {
 
   const auth = Buffer.from(`${MPESA_CONSUMER_KEY}:${MPESA_CONSUMER_SECRET}`).toString("base64");
 
-  const res = await fetch(`${MPESA_BASE}/oauth/v1/generate?grant_type=client_credentials`, {
-    headers: { Authorization: `Basic ${auth}` },
-  });
+  const res = await fetchWithTimeout(
+    `${MPESA_BASE}/oauth/v1/generate?grant_type=client_credentials`,
+    {
+      headers: { Authorization: `Basic ${auth}` },
+    },
+  );
 
   const json = (await res.json()) as any;
   mpesaToken = {
@@ -227,7 +245,7 @@ export async function initiateMpesaStkPush(params: {
   try {
     const token = await getMpesaAccessToken();
 
-    const res = await fetch(`${MPESA_BASE}/mpesa/stkpush/v1/processrequest`, {
+    const res = await fetchWithTimeout(`${MPESA_BASE}/mpesa/stkpush/v1/processrequest`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,

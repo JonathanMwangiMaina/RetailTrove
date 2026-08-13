@@ -299,14 +299,14 @@ describe("GET /api/orders/:id/receipt (downloadable order receipt)", () => {
     expect(res.body.message).toBe("You do not have access to this order");
   });
 
-  it("allows legacy unbound orders to be downloaded", async () => {
+  it("denies legacy unbound orders to non-admins (fail-closed H1)", async () => {
     allOrders.push(order(8, null, "2026-08-02T10:00:00Z", { email: "guest@example.com" }));
     const res = await request(
       buildApp({ userId: 3, authUserId: "auth-customer-1", role: "customer" }),
     )
       .get("/api/orders/8/receipt")
-      .expect(200);
-    expect(res.text).toContain("Receipt #8");
+      .expect(403);
+    expect(res.body.message).toBe("You do not have access to this order");
   });
 
   it("escapes HTML in user-controlled product names (no XSS via receipt)", async () => {

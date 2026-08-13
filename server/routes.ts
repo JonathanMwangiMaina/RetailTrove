@@ -30,6 +30,9 @@ import { sendShippingStatusEmail } from "./email.js";
 
 type CsrfMiddleware = (req: Request, res: Response, next: NextFunction) => void;
 
+// Client-generated order-creation idempotency key must be a UUID (see POST /orders).
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Absolute session lifetime enforcement (shared by dev + serverless entries).
  * Runs after express-session. Idle expiry is handled by the rolling cookie
@@ -105,15 +108,16 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
   }
 
   // Verifies the authenticated user may initiate payment for an order:
-  // admins may do so for any order; non-admins only for their own orders
-  // (legacy orders predating user binding remain accessible). Already-paid
-  // orders cannot be charged again.
+  // admins may do so for any order; non-admins only for orders bound to their
+  // auth UUID. Orders without a bound user are denied to everyone except
+  // admins (they could contain another user's data). Already-paid orders
+  // cannot be charged again.
   function assertCheckoutAccess(
     req: Request,
     order: { userId?: string | null; paymentStatus?: string | null },
     res: Response,
   ): boolean {
-    if (!isAdmin(req) && order.userId && order.userId !== req.session.authUserId) {
+    if (!isAdmin(req) && order.userId !== req.session.authUserId) {
       res.status(403).json({ message: "You do not have access to this order" });
       return false;
     }
@@ -942,8 +946,34 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
   // ── Order Routes ────────────────────────────────────────────────────────────
 
   post("/orders", writeLimiter, requireAuth, async (req: Request, res: Response) => {
+    let clientRequestKey: string | undefined;
     try {
-      const { order: orderData, items: rawItems } = req.body;
+      const { order: orderData, items: rawItems, clientRequestKey: rawKey } = req.body;
+
+      // Optional order-creation idempotency key: a client-generated UUID reused
+      // across retries so a timed-out request can never create duplicate orders.
+      // Checked BEFORE price/stock verification so a replay — where the order's
+      // stock has since been decremented — still resolves to the existing order
+      // instead of failing validation. A replayed key only ever returns an order
+      // owned by the caller — never another user's data.
+      if (rawKey !== undefined && rawKey !== null) {
+        if (typeof rawKey !== "string" || !UUID_RE.test(rawKey.trim())) {
+          return res.status(400).json({ message: "clientRequestKey must be a UUID" });
+        }
+        clientRequestKey = rawKey.trim();
+        const existing = await storage.getOrderByClientRequestKey(clientRequestKey);
+        if (existing) {
+          if (!isAdmin(req) && existing.userId !== req.session.authUserId) {
+            return res.status(403).json({ message: "You do not have access to this order" });
+          }
+          logAudit(req, {
+            action: "order_created_duplicate",
+            entityType: "order",
+            entityId: existing.id,
+          });
+          return res.status(201).json(existing);
+        }
+      }
 
       // Whitelist client-writable fields. paymentStatus / paymentProvider /
       // mpesaReceiptNumber / shippingStatus / idempotencyKey / userId are
@@ -1017,19 +1047,54 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
       if (req.session?.authUserId) {
         orderForDb.userId = req.session.authUserId;
       }
+      if (clientRequestKey) {
+        orderForDb.clientRequestKey = clientRequestKey;
+      }
 
       const newOrder = await storage.createOrder(orderForDb, validatedItems);
 
       logAudit(req, { action: "order_created", entityType: "order", entityId: newOrder.id });
 
+      // Best-effort, ownership-checked cart cleanup: a cart is only cleared if
+      // it holds no items owned by another user. This runs AFTER the order is
+      // committed, so a failure here must never fail the order.
       if (orderData.cartId) {
-        await storage.clearCart(orderData.cartId);
+        try {
+          const cartContents = await storage.getCart(orderData.cartId);
+          const sessionUserId = req.session.authUserId ?? null;
+          const ownedByCaller = cartContents.every(
+            (item) => !item.userId || (sessionUserId !== null && item.userId === sessionUserId),
+          );
+          if (ownedByCaller) {
+            await storage.clearCart(orderData.cartId);
+          } else {
+            console.warn(
+              `[orders] Skipping clear of cart ${orderData.cartId}: contains items not owned by the caller`,
+            );
+          }
+        } catch (cartErr) {
+          console.error("[orders] Failed to clear cart after order creation:", cartErr);
+        }
       }
 
       res.status(201).json(newOrder);
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      // Concurrent double-submit of the same clientRequestKey: the unique index
+      // rejected the second INSERT — return the already-created order instead of
+      // surfacing a 500 to the user.
+      if (clientRequestKey && (error as { code?: string })?.code === "23505") {
+        const existing = await storage.getOrderByClientRequestKey(clientRequestKey);
+        if (existing) {
+          logAudit(req, {
+            action: "order_created_duplicate",
+            entityType: "order",
+            entityId: existing.id,
+          });
+          return res.status(201).json(existing);
+        }
       }
       console.error("Error creating order:", error);
       res.status(500).json({ message: "Failed to create order" });
@@ -1086,9 +1151,9 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
         if (!order) return res.status(404).json({ message: "Order not found" });
 
         // Ownership: admins may inspect any order; non-admins may only see
-        // their own (or legacy orders that predate user binding).
+        // their own. Unbound (legacy) orders are denied to non-admins.
         const isAdminUser = req.session.role === "admin";
-        if (!isAdminUser && order.userId && order.userId !== req.session.authUserId) {
+        if (!isAdminUser && order.userId !== req.session.authUserId) {
           return res.status(403).json({ message: "You do not have access to this order" });
         }
 
@@ -1106,8 +1171,8 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
   );
 
   // Downloadable order receipt. Same ownership model as /orders/:id/status —
-  // admins any order, users only their own (legacy unbound orders remain
-  // accessible). Served as an HTML attachment the customer can print / save as PDF.
+  // admins any order, users only their own (unbound legacy orders denied to
+  // non-admins). Served as an HTML attachment the customer can print / save as PDF.
   router.get(
     "/orders/:id/receipt",
     statusLimiter,
@@ -1120,7 +1185,7 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
         if (!order) return res.status(404).json({ message: "Order not found" });
 
         const isAdminUser = req.session.role === "admin";
-        if (!isAdminUser && order.userId && order.userId !== req.session.authUserId) {
+        if (!isAdminUser && order.userId !== req.session.authUserId) {
           return res.status(403).json({ message: "You do not have access to this order" });
         }
 
@@ -1239,6 +1304,20 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
         });
       }
 
+      // Idempotent re-initiation: if this order already has a live Lemon Squeezy
+      // checkout session (user double-clicked, or a client retried after a
+      // timeout), return the SAME session URL instead of spawning a duplicate
+      // checkout and overwriting the stored session id / idempotency key.
+      if (order.paymentProvider === "lemonsqueezy" && order.stripeSessionId) {
+        logAudit(req, {
+          action: "checkout_initiated_reused",
+          entityType: "order",
+          entityId: order.id,
+          changes: { provider: "lemonsqueezy" },
+        });
+        return res.json({ url: order.stripeSessionId });
+      }
+
       // Charge in the order's recorded currency (site_currency at checkout
       // time): the USD order total is converted, and Lemon Squeezy is told the
       // charged currency so custom_price is interpreted in its minor units.
@@ -1305,6 +1384,23 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
       if (order.paymentStatus !== "pending") {
         return res.status(409).json({
           message: `This order is already ${order.paymentStatus} — it cannot be charged again`,
+        });
+      }
+
+      // Idempotent re-initiation: reuse the already-stored STK push instead of
+      // firing a second push and overwriting the CheckoutRequestID (which would
+      // orphan the first callback's correlation and could double-charge).
+      if (order.paymentProvider === "mpesa" && order.stripeSessionId) {
+        logAudit(req, {
+          action: "checkout_initiated_reused",
+          entityType: "order",
+          entityId: order.id,
+          changes: { provider: "mpesa" },
+        });
+        return res.json({
+          MerchantRequestID: order.stripePaymentIntentId,
+          CheckoutRequestID: order.stripeSessionId,
+          message: "STK push already initiated — check your phone",
         });
       }
 

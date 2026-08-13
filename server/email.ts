@@ -2,6 +2,7 @@ import nodemailer from "nodemailer";
 import type { Order, OrderItem } from "../shared/schema.js";
 import { storage } from "./storage.js";
 import { convertCurrency, formatAmountCompact } from "../client/src/lib/currencies.js";
+import { escapeHtml } from "./receipt.js";
 
 let transporter: nodemailer.Transporter | null = null;
 
@@ -261,7 +262,7 @@ export async function sendVerificationEmail(
         "Confirm Your Email",
         `
         <p style="margin: 0 0 16px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
-          Hi${name ? ` ${name}` : ""}, welcome to RetailTrove.
+          Hi${name ? ` ${escapeHtml(name)}` : ""}, welcome to RetailTrove.
         </p>
         <p style="margin: 0 0 24px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
           Please confirm that this email address belongs to you before you sign in.
@@ -356,7 +357,7 @@ function orderItemsTable(items: OrderItem[], currency: string): string {
     .map(
       (item) => `
         <tr>
-          <td style="padding: 10px 0; border-bottom: 1px solid #e5e7eb; color: #374151; font-size: 14px;">${item.productName ?? `Product #${item.productId}`}</td>
+          <td style="padding: 10px 0; border-bottom: 1px solid #e5e7eb; color: #374151; font-size: 14px;">${escapeHtml(item.productName ?? `Product #${item.productId}`)}</td>
           <td style="padding: 10px 0; border-bottom: 1px solid #e5e7eb; color: #6b7280; font-size: 14px; text-align: center;">${item.quantity ?? 1}</td>
           <td style="padding: 10px 0; border-bottom: 1px solid #e5e7eb; color: #374151; font-size: 14px; text-align: right;">${formatOrderMoney(Number(item.price ?? 0), currency)}</td>
         </tr>
@@ -379,15 +380,15 @@ function orderItemsTable(items: OrderItem[], currency: string): string {
 function shippingAddressHtml(order: Order): string {
   return `
     <p style="margin: 0 0 4px 0; color: #374151; font-size: 14px;">
-      ${order.firstName ?? ""} ${order.lastName ?? ""}
+      ${escapeHtml(order.firstName ?? "")} ${escapeHtml(order.lastName ?? "")}
     </p>
     <p style="margin: 0 0 4px 0; color: #374151; font-size: 14px;">
-      ${order.address ?? ""}${order.apartment ? `, ${order.apartment}` : ""}
+      ${escapeHtml(order.address ?? "")}${order.apartment ? `, ${escapeHtml(order.apartment)}` : ""}
     </p>
     <p style="margin: 0 0 4px 0; color: #374151; font-size: 14px;">
-      ${order.city ?? ""}${order.state ? `, ${order.state}` : ""} ${order.postalCode ?? ""}
+      ${escapeHtml(order.city ?? "")}${order.state ? `, ${escapeHtml(order.state)}` : ""} ${escapeHtml(order.postalCode ?? "")}
     </p>
-    <p style="margin: 0 0 4px 0; color: #374151; font-size: 14px;">${order.country ?? ""}</p>
+    <p style="margin: 0 0 4px 0; color: #374151; font-size: 14px;">${escapeHtml(order.country ?? "")}</p>
   `;
 }
 
@@ -534,7 +535,7 @@ export async function sendOrderStatusEmail(
         copy.title,
         `
           <p style="margin: 0 0 16px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
-            Hi ${order.firstName ?? "there"}, ${copy.intro}
+            Hi ${escapeHtml(order.firstName ?? "there")}, ${copy.intro}
           </p>
           <p style="margin: 0 0 4px 0; color: #1f2937; font-size: 16px; font-weight: 600;">
             Order ${orderIdLabel}

@@ -7,6 +7,34 @@ This project does not currently use semantic versioning — entries are dated.
 
 ---
 
+## [v0.13.0] — Phase 3 Reliability: Migration Baseline + Ledger (2026-08-13)
+
+### Added
+- **Migration baseline** `0033_add_missing_base_tables.sql` — idempotent CREATE TABLE for the 6 tables that existed in production but were never created by any migration (`testimonials`, `team_members`, `password_reset_tokens`, `loyalty_accounts`, `loyalty_transactions`, `audit_logs`). Exact DDL from `information_schema` prod probe, matching `shared/schema.ts`. A fresh-instance rebuild no longer fails at `0002` (which creates indexes on these tables).
+- **Migration ledger** `0034_add_schema_migrations.sql` — `public.schema_migrations` table (`file_name` UNIQUE, `sha256`, `applied_at`, `applied_by`, `duration_ms`, `note`) with RLS deny-all. Single source of truth for "what is applied here", replacing the stale `migrations/meta/_journal.json` (which only tracked `0000`/`0001`).
+- **Safe-apply tool** `scripts/apply-migrations.mjs` — ESM, connects via raw-pg (`ssl:{rejectUnauthorized:false}`), three modes:
+  - `--status` (default) — lists every managed migration file, whether it is recorded in the ledger, and whether the local sha256 matches the recorded one.
+  - `--apply` — runs each pending file in order, then records it in the ledger (with duration + sha256).
+  - `--backfill` — records every managed file as already-applied WITHOUT executing it (for databases that were fully migrated by manual means, e.g. production today).
+  - Baseline `0033` is hoisted to run right after `0001` (before `0002`) automatically, because `0002_add_performance_indexes.sql` creates indexes on tables that only `0033` creates.
+  - Strips Drizzle `--> statement-breakpoint` markers before execution.
+
+### Changed
+- Prod ledger backfilled: **34/34** managed migration files recorded as `applied` (`2026-08-13T13:08:29Z` → `2026-08-13T13:08:38Z`).
+
+### Documentation
+- Fixed stale `audit_logs` schema in AGENTS.md `Supabase Table Schemas` section: `details jsonb` → `changes jsonb` + added `user_agent text`.
+- Added missing `type text not null` to `loyalty_transactions` schema block in AGENTS.md.
+- Noted `0025` is a real numbering gap (no file ever existed).
+
+### Dedupe candidates (agreed in principle; NOT executed)
+- Delete: `0000_famous_firebird_supabase.sql` (duplicate of `0000`), `rls-policies.sql` (superseded by `0013`), `backup/migration-20260608/schema.sql` (redundant snapshot).
+- Squash: `0023+0024+0026` (category audit churn), `0030+0031` (FK chain), `0015+0021+0027` (image URL rewrites).
+- Renumber: `add-idempotency-key.sql` → `0033_add_idempotency_key.sql` (after baseline move).
+- Next step: agree on exact dedupe scope, then prune.
+
+---
+
 ## [v0.12.2] — Fix Vercel deploy: drop unsupported `functions.nodeOptions` (2026-08-13)
 
 ### Fixed

@@ -143,6 +143,7 @@ export interface IStorage {
   getOrderById(id: number): Promise<Order | undefined>;
   getOrderByStripeSessionId(sessionId: string): Promise<Order | undefined>;
   getOrderByIdempotencyKey(key: string): Promise<Order | undefined>;
+  getOrderByClientRequestKey(key: string): Promise<Order | undefined>;
   getOrdersByUserId(authUserId: string): Promise<Order[]>;
   getOrderItems(orderId: number): Promise<OrderItem[]>;
   decrementStock(productId: number, quantity: number): Promise<Product | undefined>;

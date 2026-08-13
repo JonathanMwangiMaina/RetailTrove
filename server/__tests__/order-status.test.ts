@@ -216,16 +216,16 @@ describe("GET /api/orders/:id/status (authenticated payment-status lookup)", () 
       .expect(403);
   });
 
-  it("allows authenticated users to see legacy orders without a bound user", async () => {
+  it("denies non-admin access to legacy orders without a bound user", async () => {
     orders.set(8, { id: 8, paymentStatus: "pending", paymentProvider: "mpesa" });
 
     const res = await request(
       buildApp({ userId: 3, authUserId: "auth-customer-1", role: "customer" }),
     )
       .get("/api/orders/8/status")
-      .expect(200);
+      .expect(403);
 
-    expect(res.body.paymentStatus).toBe("pending");
+    expect(res.body.message).toBe("You do not have access to this order");
   });
 
   it("returns 404 for an unknown order", async () => {

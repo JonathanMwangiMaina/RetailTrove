@@ -207,6 +207,7 @@ describe("Checkout requires authentication", () => {
       id: 1,
       total: "55.00",
       paymentStatus: "pending",
+      userId: "auth-uuid-1",
       firstName: "Jane",
       lastName: "Doe",
       email: "jane@example.com",
@@ -220,7 +221,7 @@ describe("Checkout requires authentication", () => {
   });
 
   it("allows authenticated users to initiate M-Pesa checkout", async () => {
-    orders.set(1, { id: 1, total: "55.00", paymentStatus: "pending" });
+    orders.set(1, { id: 1, total: "55.00", paymentStatus: "pending", userId: "auth-uuid-1" });
     const session = { userId: 1, authUserId: "auth-uuid-1", role: "customer" };
     const res = await request(buildApp(session))
       .post("/api/checkout/mpesa")

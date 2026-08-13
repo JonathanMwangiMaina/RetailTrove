@@ -671,6 +671,7 @@ export class DatabaseStorage implements IStorage {
           stripePaymentIntentId: order.stripePaymentIntentId ?? null,
           mpesaReceiptNumber: order.mpesaReceiptNumber ?? null,
           idempotencyKey: order.idempotencyKey ?? null,
+          clientRequestKey: order.clientRequestKey ?? null,
         })
         .returning();
 
@@ -687,53 +688,44 @@ export class DatabaseStorage implements IStorage {
           })),
         );
 
-        // Stock reservation: verify availability BEFORE decrementing so an order
-        // that oversells a product is rejected (rollback) instead of silently
-        // driving stock negative. Quantity limits (max 10/line) are enforced by
-        // the Zod schema upstream. Throwing here rolls back the whole order.
+        // Stock reservation is ATOMIC: each decrement is guarded with
+        // `stock_quantity >= qty` in the WHERE clause, so the UPDATE is
+        // conditional. Two concurrent orders can never both pass a separate
+        // check-then-decrement and oversell — the second conditional UPDATE
+        // matches 0 rows, throws, and rolls the whole transaction back.
+        // Quantity limits (max 10/line) are enforced by the Zod schema upstream.
         for (const item of items) {
           const qty = item.quantity ?? 1;
           if (item.variantId) {
-            const [variant] = await tx
-              .select({ id: productVariants.id, stockQuantity: productVariants.stockQuantity })
-              .from(productVariants)
-              .where(eq(productVariants.id, item.variantId))
-              .limit(1);
-            if (!variant || variant.stockQuantity < qty) {
+            const updated = await tx
+              .update(productVariants)
+              .set({
+                stockQuantity: sql`${productVariants.stockQuantity} - ${qty}`,
+              })
+              .where(
+                and(
+                  eq(productVariants.id, item.variantId),
+                  gte(productVariants.stockQuantity, qty),
+                ),
+              )
+              .returning({ id: productVariants.id });
+            if (updated.length === 0) {
               throw new Error(
                 `Insufficient stock for ${item.variantName ?? "variant"} (${qty} needed)`,
               );
             }
           } else {
-            const [product] = await tx
-              .select({ id: products.id, stockQuantity: products.stockQuantity })
-              .from(products)
-              .where(eq(products.id, item.productId!))
-              .limit(1);
-            if (!product || (product.stockQuantity ?? 0) < qty) {
-              throw new Error(`Insufficient stock for product ${item.productName} (${qty} needed)`);
-            }
-          }
-        }
-
-        // Decrement stock for each ordered item — single decrement, variant-level when present
-        for (const item of items) {
-          const qty = item.quantity ?? 1;
-          if (item.variantId) {
-            await tx
-              .update(productVariants)
-              .set({
-                stockQuantity: sql`${productVariants.stockQuantity} - ${qty}`,
-              })
-              .where(eq(productVariants.id, item.variantId));
-          } else {
-            await tx
+            const updated = await tx
               .update(products)
               .set({
                 stockQuantity: sql`${products.stockQuantity} - ${qty}`,
                 inStock: sql`CASE WHEN ${products.stockQuantity} - ${qty} <= 0 THEN false ELSE ${products.inStock} END`,
               })
-              .where(eq(products.id, item.productId!));
+              .where(and(eq(products.id, item.productId!), gte(products.stockQuantity, qty)))
+              .returning({ id: products.id });
+            if (updated.length === 0) {
+              throw new Error(`Insufficient stock for product ${item.productName} (${qty} needed)`);
+            }
           }
         }
       }
@@ -786,6 +778,11 @@ export class DatabaseStorage implements IStorage {
 
   async getOrderByIdempotencyKey(key: string): Promise<Order | undefined> {
     const [order] = await db.select().from(orders).where(eq(orders.idempotencyKey, key));
+    return order;
+  }
+
+  async getOrderByClientRequestKey(key: string): Promise<Order | undefined> {
+    const [order] = await db.select().from(orders).where(eq(orders.clientRequestKey, key));
     return order;
   }
 
@@ -844,8 +841,16 @@ export class DatabaseStorage implements IStorage {
   async releaseOrderStock(orderId: number): Promise<boolean> {
     let released = false;
     await db.transaction(async (tx) => {
-      const [order] = await tx.select().from(orders).where(eq(orders.id, orderId));
-      if (!order || order.stockReleased) return;
+      // Atomic claim: only one transaction can flip stock_released. Concurrent
+      // callbacks serialise on the row lock; the loser's UPDATE re-evaluates
+      // the WHERE against the committed row, matches 0 rows and skips — so
+      // stock is never restored twice.
+      const claim = await tx
+        .update(orders)
+        .set({ stockReleased: true })
+        .where(and(eq(orders.id, orderId), eq(orders.stockReleased, false)))
+        .returning({ id: orders.id });
+      if (claim.length === 0) return;
 
       const items = await tx.select().from(orderItems).where(eq(orderItems.orderId, orderId));
       for (const item of items) {
@@ -866,7 +871,6 @@ export class DatabaseStorage implements IStorage {
         }
       }
 
-      await tx.update(orders).set({ stockReleased: true }).where(eq(orders.id, orderId));
       released = true;
     });
 
@@ -1341,13 +1345,22 @@ export class DatabaseStorage implements IStorage {
     description: string,
     orderId?: number,
   ): Promise<LoyaltyTransaction> {
-    const account = await this.getLoyaltyAccount(userId);
-    const newTotal = account.points + points;
-    const newTier = this.recalculateTier(newTotal);
+    await this.getLoyaltyAccount(userId);
 
+    // Atomic increment — avoids the read-modify-write race that could lose
+    // points when two transactions are awarded concurrently. The RETURNING
+    // clause yields the new balance so the tier can be recomputed from it.
+    const [updated] = await db
+      .update(loyaltyAccounts)
+      .set({ points: sql`${loyaltyAccounts.points} + ${points}`, updatedAt: new Date() })
+      .where(eq(loyaltyAccounts.userId, userId))
+      .returning({ points: loyaltyAccounts.points });
+
+    const newTotal = updated?.points ?? 0;
+    const newTier = this.recalculateTier(newTotal);
     await db
       .update(loyaltyAccounts)
-      .set({ points: newTotal, tier: newTier, updatedAt: new Date() })
+      .set({ tier: newTier })
       .where(eq(loyaltyAccounts.userId, userId));
 
     const [transaction] = await db
@@ -1362,16 +1375,25 @@ export class DatabaseStorage implements IStorage {
     points: number,
     description: string,
   ): Promise<LoyaltyTransaction> {
-    const account = await this.getLoyaltyAccount(userId);
-    if (account.points < points) {
+    await this.getLoyaltyAccount(userId);
+
+    // Atomic guarded decrement: `points >= n` in the WHERE clause makes
+    // overspending impossible under concurrency — the losing transaction
+    // matches 0 rows and is rejected.
+    const [updated] = await db
+      .update(loyaltyAccounts)
+      .set({ points: sql`${loyaltyAccounts.points} - ${points}`, updatedAt: new Date() })
+      .where(and(eq(loyaltyAccounts.userId, userId), gte(loyaltyAccounts.points, points)))
+      .returning({ points: loyaltyAccounts.points });
+
+    if (!updated) {
       throw new Error("Insufficient loyalty points");
     }
-    const newTotal = account.points - points;
-    const newTier = this.recalculateTier(newTotal);
 
+    const newTier = this.recalculateTier(updated.points);
     await db
       .update(loyaltyAccounts)
-      .set({ points: newTotal, tier: newTier, updatedAt: new Date() })
+      .set({ tier: newTier })
       .where(eq(loyaltyAccounts.userId, userId));
 
     const [transaction] = await db

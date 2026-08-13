@@ -103,7 +103,10 @@ export function setupAuth(app: Express) {
         name: parsedInput.name || "",
         passwordHash,
         role: "customer",
-        authUserId: req.body.authUserId || crypto.randomUUID(),
+        // authUserId is ALWAYS server-generated — it links this user row to the
+        // Supabase auth UUID. It must never be client-supplied (a spoofed UUID
+        // would let an attacker bind to another identity's orders/receipts).
+        authUserId: crypto.randomUUID(),
         emailVerified: false,
         verificationToken,
         verificationTokenExpiresAt,
@@ -227,15 +230,16 @@ export function setupAuth(app: Express) {
 
   const handleLogin = async (req: Request, res: Response) => {
     try {
-      const { email, password, authUserId } = req.body;
+      const { email, password } = req.body;
 
-      if (!password) {
-        return res.status(400).json({ message: "Password is required" });
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email and password are required" });
       }
 
-      const user = authUserId
-        ? await storage.getUserByAuthUserId(authUserId)
-        : await storage.getUserByEmail(email);
+      // Login is EMAIL-ONLY: the client must never be able to select which user
+      // record to authenticate against via a client-supplied authUserId (that
+      // would let an attacker target arbitrary accounts with a guessed password).
+      const user = await storage.getUserByEmail(email);
 
       if (!user) {
         return res.status(401).json({ message: "Invalid credentials" });

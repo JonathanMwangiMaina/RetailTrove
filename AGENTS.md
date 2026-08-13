@@ -423,6 +423,7 @@ create table public.loyalty_accounts (
 create table public.loyalty_transactions (
   id serial not null,
   user_id integer not null references public.users(id),
+  type text not null,
   points integer not null,
   description text not null,
   order_id integer,
@@ -452,8 +453,9 @@ create table public.audit_logs (
   action text not null,
   entity_type text not null,
   entity_id integer,
-  details jsonb,
+  changes jsonb,
   ip_address text,
+  user_agent text,
   created_at timestamp without time zone null default now(),
   constraint audit_logs_pkey primary key (id)
 )
@@ -953,3 +955,42 @@ wsl -d Ubuntu-26.04 -e bash -c 'cd /mnt/wsl/RetailTrove && git push origin main'
 
 ### Bottom line
 The site has strong technical security and basic legal pages, but is **not compliant** for a Kenyan e-commerce business because it lacks: (1) cookie consent, (2) Kenyan business registration/CAK licensing, (3) Data Protection Act 2019 compliance, and (4) real contact details. The US placeholder legal framework suggests this was built for a demo/portfolio context, not live Kenyan commerce.
+
+---
+
+## Current Session (2026-08-13) — v0.13.0 Phase 3 Reliability (Migrations + Ledger)
+
+### Migration benchmark
+- Enumerated all 37 git-tracked SQL files under `migrations/` + `backup/`.
+- Cross-referenced CHANGELOG.md + server JSDoc pointers to reconstruct the full migration journey.
+- Key findings: `0000_famous_firebird.sql` and `0000_famous_firebird_supabase.sql` are duplicates; `rls-policies.sql` is superseded by `0013`; `migrations/meta/_journal.json` only tracks `0000/0001` (everything since applied manually); 6 tables exist in prod but no migration creates them (fresh rebuild breaks at `0002` which indexes those tables).
+
+### Deliverables shipped
+- **Migration baseline** `migrations/0033_add_missing_base_tables.sql` — idempotent CREATE TABLE for `testimonials`, `team_members`, `password_reset_tokens`, `loyalty_accounts`, `loyalty_transactions`, `audit_logs` (exact prod DDL from `information_schema` probe, matching `shared/schema.ts`). Fresh-instance rebuilds no longer fail at `0002`.
+- **Migration ledger** `migrations/0034_add_schema_migrations.sql` — `public.schema_migrations` table (file_name UNIQUE, sha256, applied_at, applied_by, duration_ms, note) + RLS deny-all. Single source of truth for "what is applied here".
+- **Safe-apply tool** `scripts/apply-migrations.mjs` — ESM, raw-pg WSL pattern (`ssl:{rejectUnauthorized:false}`), three modes:
+  - `--status` (default) — lists managed files, applied state, sha256 match.
+  - `--apply` — runs pending files in order, records each in ledger.
+  - `--backfill` — records all managed files as already-applied WITHOUT executing (for already-migrated prod).
+  - Baseline `0033` is hoisted to run right after `0001` (before `0002`) automatically.
+  - Strips Drizzle `--> statement-breakpoint` markers before execution.
+
+### Prod verification
+- Backfilled prod ledger: **34/34** managed files recorded as `applied` (`2026-08-13T13:08:29` → `2026-08-13T13:08:38Z`).
+- `tsc --noEmit`: 0 errors · `vitest run`: 248/248 · `eslint`: 0 errors · `prettier`: clean · `build:client`: success.
+
+### Documentation fixes
+- Fixed stale `audit_logs` schema in AGENTS.md `Supabase Table Schemas` section: `details jsonb` → `changes jsonb` + added `user_agent text` (matches prod + `shared/schema.ts`).
+- Added missing `type text not null` to `loyalty_transactions` schema block in AGENTS.md.
+- Noted `0025` is a real numbering gap (no file ever existed).
+
+### Dedupe candidates (agreed in principle; NOT executed yet)
+- Delete: `0000_famous_firebird_supabase.sql` (pure duplicate of `0000`), `rls-policies.sql` (superseded by `0013`), `backup/migration-20260608/schema.sql` (redundant snapshot — belongs in storage bucket per #1).
+- Squash: `0023+0024+0026` (category audit churn), `0030+0031` (FK chain), `0015+0021+0027` (image URL rewrites).
+- Renumber: `add-idempotency-key.sql` → `0033_add_idempotency_key.sql` (after baseline move).
+- Next step: agree on exact dedupe scope, then prune.
+
+### Pending
+- #1 Automated DB backups (private Supabase Storage bucket, automated in linked DB).
+- #5 Recovery runbook (`docs/reliability.md`).
+- Lean repo: SQL dedupe per above.
