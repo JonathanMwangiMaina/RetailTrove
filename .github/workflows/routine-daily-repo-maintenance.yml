@@ -1,110 +1,37 @@
 name: "Routine: Daily Repo Maintenance"
-# @portable-routine: true
-# @portable-description: Maintenance of ecommerce full stack Vercel web app.
+
 on:
   schedule:
     - cron: "0 5 * * *"
-  workflow_dispatch:  # "Run Now" button
+  workflow_dispatch:
+
 jobs:
-  execute-routine:
+  maintenance:
+    name: Daily Maintenance Checks
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - name: Trigger Portable Routine
-        uses: ./.github/actions/trigger-portable-routine
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          routine_name: "Daily Repo Maintenance"
-          prompt: |
-            You are a senior full-stack engineer maintaining RetailTrove,
-            a production ecommerce web app with the following stack:
-
-            STACK CONTEXT:
-            - Frontend: React 19, Vite 8, Tailwind CSS, Wouter, TanStack Query,
-              Radix UI, shadcn/ui, Framer Motion
-            - Backend: Node.js 20, Express 4, TypeScript 6, ESM modules
-            - Database: PostgreSQL via Supabase (Connection Pooler), pg
-              (node-postgres) driver, Drizzle ORM 0.45.2
-            - Auth: express-session + connect-pg-simple (PostgreSQL-backed
-              session store, sessions persisted in `user_sessions` table),
-              bcryptjs
-            - Build: Vite (frontend, `build:client`), esbuild (backend,
-              `build:api` bundles api/index.ts → api/index.js), tsx (dev)
-            - Deployment: Vercel (serverless), `vercel-build` script runs
-              `npm run build:client`; the serverless function is compiled by
-              the @vercel/node builder automatically
-            - Payments (LIVE): Lemon Squeezy hosted checkout + HMAC-signed
-              `order_created`/`order_refunded` webhooks; M-Pesa STK Push
-              (Safaricom Daraja API, sandbox verified in production) with
-              callback handling in server/index.ts + api/index.ts. CRITICAL:
-              the M-Pesa callback must process the ResultCode-0 payment update
-              BEFORE the 200 ack (Vercel can freeze the function right after
-              res.send). Idempotency keys (`idempotency_key` column) prevent
-              duplicate charges; callbacks skip processing when the order is
-              not `pending`.
-            - Email: Nodemailer + Brevo SMTP (server/email.ts) — order
-              confirmation on payment callbacks + shipping status emails
-            - Caching: Upstash Redis (@upstash/redis) via server/cache.ts —
-              product listings, featured, new arrivals, site settings. Cache
-              is optional: when UPSTASH_REDIS_REST_URL/TOKEN are unset,
-              getCache() returns null and the DB is always hit. Never stub or
-              fake the cache.
-            - Key files: server/index.ts, server/db.ts, server/cache.ts,
-              server/routes.ts, server/database-storage.ts, api/index.ts,
-              vercel.json, package.json, shared/schema.ts
-
-            KNOWN CRITICAL RULES:
-            1. `vercel-build` MUST run `build:client` or the frontend will not
-               ship; do NOT reintroduce a separate esbuild step for api/index.ts
-            2. api/index.ts is the Vercel serverless entry point — never
-               delete it
-            3. ESM project ("type":"module") — always use relative `.js`
-               extensions in imports (e.g. `../shared/schema.js`), even
-               for `.ts` source files
-            4. Environment variables are injected by Vercel in production —
-               never hardcode secrets. Dashboard vars are authoritative (not
-               git `.env`). Required vars include DATABASE_URL,
-               SESSION_SECRET, and SUPABASE_CA_CERT. The repo `.env` is kept
-               for local dev/e2e/debug — do not delete it
-            5. server/db.ts enforces strict SSL via a pinned SUPABASE_CA_CERT
-               (`rejectUnauthorized: true`) and throws on startup if
-               DATABASE_URL or SUPABASE_CA_CERT is missing — never revert
-               to `rejectUnauthorized: false`
-            6. server/db.ts uses a singleton `pg.Pool` cached on
-               `globalThis.__pgPool` — never instantiate a second `new Pool()`
-               elsewhere, or Supabase's connection limit can be exhausted
-               across warm serverless invocations
-            7. `users.id` is an integer identity primary key, not a text/string
-               ID — do not reintroduce string-based user IDs. Supabase Auth
-               linkage lives in the separate `auth_user_id` (uuid) column
-            8. Sessions are persisted to PostgreSQL via connect-pg-simple, so
-               they survive cold starts — this replaced the old in-memory
-               session store; don't reintroduce an in-memory store
-            9. Every user-creation path (auth.ts register, ensureDefaultAdmin,
-               admin POST /api/admin/users) MUST set `auth_user_id` via
-               crypto.randomUUID() — null auth_user_id silently breaks
-               loyalty/"my orders"/wishlists
-            10. Every Sentry.* call (init, setupExpressErrorHandler,
-                captureException) MUST be guarded behind
-                `if (process.env.SENTRY_DSN)` — the module stays mostly
-                undefined until init() is called
-            11. Stock decrements exactly once per order, inside the
-                createOrder DB transaction — never add a separate
-                decrementStock loop in routes
-
-            TODAY'S MAINTENANCE TASK:
-            [DESCRIBE YOUR TASK HERE — e.g. "Fix the cart not updating",
-            "Add a new product category filter", "Debug 500 on /api/orders"]
-
-            INSTRUCTIONS:
-            - Diagnose before suggesting fixes
-            - Show exact file paths for every change
-            - Show git commands to commit and push
-            - Flag any change that could break the Vercel build
-            - If touching vercel.json or package.json scripts, double-check
-              `build:api` (esbuild) is still part of `vercel-build`
-            - Keep changes minimal and targeted
-            - After the fix, suggest one quick smoke test to verify it
-              works in production
-          model: "sonnet"
-          permissions: "bypass_permissions"
-          webhook_secret: ${{ secrets.PORTABLE_WEBHOOK_SECRET }}
-          webhook_url: ${{ secrets.PORTABLE_WEBHOOK_URL }}
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit --no-fund
+      - name: Check for outdated packages
+        run: npm outdated --omit=dev || true
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=moderate || true
+      - name: Verify package-lock consistency
+        run: npm run check:packages:offline
+      - name: Run tests
+        run: npm run test
+      - name: Check for security advisories
+        run: npm audit --omit=dev --audit-level=high || true
+      - name: Verify build still works
+        run: npm run build:client
+      - name: Check bundle size
+        run: |
+          du -sh dist/public/assets/
+          echo "Total build size: $(du -sh dist/public | cut -f1)"

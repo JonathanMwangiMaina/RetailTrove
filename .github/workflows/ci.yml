@@ -9,69 +9,50 @@ on:
 env:
   NODE_VERSION: "22"
 
+# Reduce redundant npm ci runs by sharing dependencies via cache
 jobs:
-  lint:
-    name: Lint & Format
+  validate:
+    name: Validate (Lint + TypeCheck + Tests + Security)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run format:check
-
-  typecheck:
-    name: TypeScript Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-      - run: npm ci
-      - run: npm run check
-
-  test:
-    name: Unit & Integration Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-      - run: npm ci
-      - run: npm run check:packages
-      - run: npm run test
-
-  security:
-    name: Dependency Audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-      - run: npm ci
-      - run: npm audit --omit=dev --audit-level=high
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit --no-fund
+      - name: Lint
+        run: npm run lint
+      - name: Format Check
+        run: npm run format:check
+      - name: TypeScript Check
+        run: npm run check
+      - name: Security Audit
+        run: npm audit --omit=dev --audit-level=high
+      - name: Run Tests
+        run: npm run test
+      - name: Package Lock Validation
+        run: npm run check:packages
 
   build:
-    name: Build
+    name: Build Client
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, test, security]
+    needs: validate
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - run: npm ci
-      - run: npm run build:client
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit --no-fund
+      - name: Build
+        run: npm run build:client
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist/public
@@ -79,15 +60,18 @@ jobs:
   deploy:
     name: Deploy to Vercel
     runs-on: ubuntu-latest
-    needs: [build]
+    needs: build
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - run: npm ci
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit --no-fund
       - uses: amondnet/vercel-action@v25
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
