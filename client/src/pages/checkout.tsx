@@ -1,3 +1,27 @@
+/**
+ * @file client/src/pages/checkout.tsx
+ * @description Checkout page component — handles order creation, payment initiation, and cart flow.
+ * 
+ * Features:
+ * - Contact/shipping form with validation (react-hook-form + Zod)
+ * - Country selector with currency conversion preview
+ * - Payment method selection (M-Pesa STK Push, Lemon Squeezy)
+ * - M-Pesa phone input with sandbox test number support (254708374149)
+ * - Lazy STK push initiation (user clicks "Pay with M-Pesa" on confirmation page)
+ * - Client-side idempotency key (crypto.randomUUID) for duplicate order prevention
+ * - Toast notifications for success/error states
+ * - Country-based approximate total in local currency
+ * 
+ * Flow:
+ * 1. User fills form, selects payment method
+ * 2. On submit: POST /api/orders (with idempotency key)
+ * 3. If M-Pesa: redirect to /order-confirmation with query params (id, total, payment=mpesa, phone)
+ * 4. Confirmation page shows "Pay with M-Pesa" button → triggers STK push on demand
+ * 5. Lemon Squeezy: redirect to hosted checkout URL
+ * 
+ * @module Client/Checkout
+ */
+
 import { useState, useEffect, useRef } from "react";
 import { useCart } from "@/hooks/use-cart";
 import { CartItem } from "@/components/ui/cart-item";
@@ -41,9 +65,17 @@ const checkoutFormSchema = insertOrderSchema.extend({
 
 type CheckoutFormValues = z.infer<typeof checkoutFormSchema>;
 
-// Client-generated order-creation idempotency key. One per checkout page load,
-// reused across retries of the same submit so a timed-out POST /orders can never
-// create a duplicate order (the server dedupes on this key).
+/**
+ * Generates a client-side UUID for order creation idempotency.
+ * Uses Web Crypto API (crypto.randomUUID) when available; falls back to a
+ * timestamp + random string for older environments.
+ * 
+ * The key is generated once per checkout page load and reused across retries,
+ * ensuring that a timed-out POST /orders never creates duplicate orders.
+ * The server dedupes on this key.
+ * 
+ * @returns UUID string (RFC 4122 format)
+ */
 function createClientRequestKey(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();

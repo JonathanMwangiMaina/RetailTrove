@@ -31,7 +31,10 @@ import { sendShippingStatusEmail } from "./email.js";
 
 type CsrfMiddleware = (req: Request, res: Response, next: NextFunction) => void;
 
-// Client-generated order-creation idempotency key must be a UUID (see POST /orders).
+/**
+ * UUID regex for validating client-generated idempotency keys.
+ * Format: 8-4-4-4-12 hexadecimal characters (RFC 4122).
+ */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -945,7 +948,22 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
   });
 
   // ── Order Routes ────────────────────────────────────────────────────────────
-
+  
+  /**
+   * POST /api/orders
+   * Creates a new order with server-side validation and idempotency support.
+   * 
+   * Body:
+   * - order: { firstName, lastName, email, phone, address, apartment, city, state, postalCode, total, paymentProvider, currency }
+   * - items: Array of { productId, productName, price, quantity, variantId?, variantName? }
+   * - clientRequestKey: (optional) UUID for idempotent retries — prevents duplicate orders on timeout
+   * 
+   * Auth: Required (user or guest)
+   * Rate limited: writeLimiter (10 req/min)
+   * 
+   * Returns: 201 with created order object, or existing order if clientRequestKey matches
+   * Errors: 400 (validation), 403 (access), 400 (stock/total mismatch)
+   */
   post("/orders", writeLimiter, requireAuth, async (req: Request, res: Response) => {
     let clientRequestKey: string | undefined;
     try {
@@ -1285,8 +1303,26 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
 
   /**
    * POST /api/checkout/lemonsqueezy
-   * Creates a Lemon Squeezy hosted-checkout session for an existing order.
-   * Returns { url } — the client redirects the user there.
+   * Creates a Lemon Squeezy hosted checkout session for an existing order.
+   * 
+   * Body: { orderId: number }
+   * 
+   * Auth: Required (user must own the order)
+   * Rate limited: writeLimiter
+   * 
+   * Validates:
+   * - Order exists and is in "pending" status
+   * - User owns the order (or is admin)
+   * - Order is not already paid/refunded/failed
+   * 
+   * Idempotency: If order already has a checkout session, returns existing
+   * URL instead of creating a new one (prevents duplicate charges).
+   * 
+   * Currency: Uses order's recorded currency (site_currency at checkout time).
+   * Converts order total from USD to the charged currency's minor units.
+   * 
+   * Returns: 200 with { url }
+   * Errors: 400 (validation), 404 (order not found), 403 (access), 409 (status), 502 (LS error)
    */
   post("/checkout/lemonsqueezy", writeLimiter, requireAuth, async (req: Request, res: Response) => {
     try {
@@ -1360,8 +1396,24 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
 
   /**
    * POST /api/checkout/mpesa
-   * Initiates an M-Pesa STK Push for an existing order.
-   * Returns { MerchantRequestID, CheckoutRequestID }.
+   * Initiates an M-Pesa STK Push (Lipa Na M-Pesa Online) for an existing order.
+   * 
+   * Body: { orderId: number, phone: string }
+   * 
+   * Auth: Required (user must own the order)
+   * Rate limited: writeLimiter + mpesaPhoneRateLimiter (10 req/15min per phone)
+   * 
+   * Validates:
+   * - Order exists and is in "pending" status
+   * - User owns the order (or is admin)
+   * - Phone number is valid Kenyan format (E.164)
+   * - Order is not already paid/refunded/failed
+   * 
+   * Idempotency: If order already has an STK push initiated, returns existing
+   * CheckoutRequestID instead of creating a new one (prevents double-charge).
+   * 
+   * Returns: 200 with { MerchantRequestID, CheckoutRequestID, message }
+   * Errors: 400 (validation), 404 (order not found), 403 (access), 409 (status), 502 (Daraja error)
    */
   post(
     "/checkout/mpesa",
