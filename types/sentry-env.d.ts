@@ -17,3 +17,7 @@ declare module "@sentry/react" {
   }): void;
   export function browserTracingIntegration(): unknown;
 }
+
+declare module "../scripts/refresh-mpesa-allowlist.mjs" {
+  export function refreshMpesaAllowlist(): Promise<{ success: boolean; ranges: string[] }>;
+}

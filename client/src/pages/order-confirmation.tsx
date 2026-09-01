@@ -2,15 +2,24 @@ import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useCurrency } from "@/hooks/use-currency";
-import { CheckCircle2Icon, XCircleIcon, Loader2Icon, AlertTriangleIcon } from "lucide-react";
+import {
+  CheckCircle2Icon,
+  XCircleIcon,
+  Loader2Icon,
+  AlertTriangleIcon,
+  PhoneIcon,
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 function getSearchParams() {
-  if (typeof window === "undefined") return { id: "ORDER123456", total: 0, payment: "" };
+  if (typeof window === "undefined") return { id: "ORDER123456", total: 0, payment: "", phone: "" };
   const sp = new URLSearchParams(window.location.search);
   return {
     id: sp.get("id") || "ORDER123456",
     total: parseFloat(sp.get("total") || "0"),
     payment: sp.get("payment") || "",
+    phone: sp.get("phone") || "",
   };
 }
 
@@ -19,6 +28,7 @@ export default function OrderConfirmation() {
     document.title = "Order Confirmation - RetailTrove";
   }, []);
   const { formatPrice } = useCurrency();
+  const { toast } = useToast();
   const [params] = useState(getSearchParams);
 
   const realOrderId = Number(params.id);
@@ -28,6 +38,36 @@ export default function OrderConfirmation() {
 
   const [orderStatus, setOrderStatus] = useState("pending");
   const [checkingStopped, setCheckingStopped] = useState(false);
+  const [isInitiatingMpesa, setIsInitiatingMpesa] = useState(false);
+
+  // Initiate M-Pesa STK push on demand (lazy initiation)
+  const handleInitiateMpesa = async () => {
+    if (isInitiatingMpesa) return;
+    setIsInitiatingMpesa(true);
+    try {
+      const res = await apiRequest("POST", "/api/checkout/mpesa", {
+        orderId: realOrderId,
+        phone: params.phone || "",
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message ?? "Failed to initiate M-Pesa payment");
+      }
+      toast({
+        title: "STK push sent!",
+        description: "Check your phone for the M-Pesa payment prompt. Enter your PIN to complete.",
+      });
+    } catch (error) {
+      console.error("Error initiating M-Pesa:", error);
+      toast({
+        title: "Error",
+        description: "Failed to initiate M-Pesa payment. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsInitiatingMpesa(false);
+    }
+  };
 
   useEffect(() => {
     if (!showPaymentStatus) return;
@@ -106,9 +146,28 @@ export default function OrderConfirmation() {
             </h1>
             <p className="mt-2 text-lg text-gray-500">
               {params.payment === "mpesa"
-                ? "Check your phone for the M-Pesa prompt and enter your PIN. Your order will update automatically once the payment is confirmed."
+                ? "Your order is ready. Click below to initiate the M-Pesa payment."
                 : "Confirming your payment. This usually takes a few seconds."}
             </p>
+            {params.payment === "mpesa" && !isInitiatingMpesa && (
+              <div className="mt-6">
+                <Button onClick={handleInitiateMpesa} className="w-full sm:w-auto">
+                  <PhoneIcon className="mr-2 h-4 w-4" />
+                  Pay with M-Pesa
+                </Button>
+                <p className="mt-2 text-xs text-gray-500">
+                  You will receive an STK push prompt on your phone to complete the payment.
+                </p>
+              </div>
+            )}
+            {isInitiatingMpesa && (
+              <div className="mt-6">
+                <Button disabled className="w-full sm:w-auto">
+                  <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
+                  Sending STK push...
+                </Button>
+              </div>
+            )}
             {checkingStopped && (
               <div className="mt-6 flex items-start justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 text-left">
                 <AlertTriangleIcon

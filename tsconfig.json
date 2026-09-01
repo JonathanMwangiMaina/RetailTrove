@@ -1,12 +1,13 @@
 {
-  "include": [
-    "client/src/**/*", 
-    "shared/**/*", 
+"include": [
+    "client/src/**/*",
+    "shared/**/*",
     "server/**/*",
     "api/**/*",
     "types/**/*",
     "e2e/**/*",
-    "playwright.config.ts"
+    "playwright.config.ts",
+    "scripts/**/*"
   ],
   "exclude": ["node_modules", "build", "dist", "**/*.test.ts"],
   "compilerOptions": {
@@ -27,7 +28,8 @@
     "paths": {
       "@/*": ["./client/src/*"],
       "@shared/*": ["./shared/*"],
-      "@server/*": ["./server/*"]  // 👈 Added for backend imports
+      "@server/*": ["./server/*"],
+      "@scripts/*": ["./scripts/*"]
     }
   }
 }

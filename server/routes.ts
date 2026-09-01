@@ -18,6 +18,7 @@ import { requireAuth, requireRole } from "./auth.js";
 import crypto from "crypto";
 import { z } from "zod";
 import { writeLimiter, statusLimiter } from "./middleware/rate-limiter.js";
+import { mpesaPhoneRateLimiter } from "./middleware/mpesa-rate-limiter.js";
 import { logAudit } from "./middleware/audit.js";
 import { orderBreakdown, buildOrderReceiptHtml } from "./receipt.js";
 import {
@@ -1362,89 +1363,95 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
    * Initiates an M-Pesa STK Push for an existing order.
    * Returns { MerchantRequestID, CheckoutRequestID }.
    */
-  post("/checkout/mpesa", writeLimiter, requireAuth, async (req: Request, res: Response) => {
-    try {
-      const { orderId, phone } = req.body;
-      if (!orderId || !phone) {
-        return res.status(400).json({ message: "orderId and phone are required" });
-      }
-      const normalizedPhone = normalizeKenyanPhone(String(phone));
-      if (!normalizedPhone) {
-        return res
-          .status(400)
-          .json({ message: "Please enter a valid Kenyan mobile number (e.g. 07XXXXXXXX)" });
-      }
+  post(
+    "/checkout/mpesa",
+    writeLimiter,
+    mpesaPhoneRateLimiter,
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { orderId, phone } = req.body;
+        if (!orderId || !phone) {
+          return res.status(400).json({ message: "orderId and phone are required" });
+        }
+        const normalizedPhone = normalizeKenyanPhone(String(phone));
+        if (!normalizedPhone) {
+          return res
+            .status(400)
+            .json({ message: "Please enter a valid Kenyan mobile number (e.g. 07XXXXXXXX)" });
+        }
 
-      const order = await storage.getOrderById(Number(orderId));
-      if (!order) return res.status(404).json({ message: "Order not found" });
-      if (!assertCheckoutAccess(req, order, res)) return;
+        const order = await storage.getOrderById(Number(orderId));
+        if (!order) return res.status(404).json({ message: "Order not found" });
+        if (!assertCheckoutAccess(req, order, res)) return;
 
-      // Prevent double-charging: only a pending order may be pushed to M-Pesa.
-      // Paid/refunded/failed orders reject re-initiation.
-      if (order.paymentStatus !== "pending") {
-        return res.status(409).json({
-          message: `This order is already ${order.paymentStatus} — it cannot be charged again`,
+        // Prevent double-charging: only a pending order may be pushed to M-Pesa.
+        // Paid/refunded/failed orders reject re-initiation.
+        if (order.paymentStatus !== "pending") {
+          return res.status(409).json({
+            message: `This order is already ${order.paymentStatus} — it cannot be charged again`,
+          });
+        }
+
+        // Idempotent re-initiation: reuse the already-stored STK push instead of
+        // firing a second push and overwriting the CheckoutRequestID (which would
+        // orphan the first callback's correlation and could double-charge).
+        if (order.paymentProvider === "mpesa" && order.stripeSessionId) {
+          logAudit(req, {
+            action: "checkout_initiated_reused",
+            entityType: "order",
+            entityId: order.id,
+            changes: { provider: "mpesa" },
+          });
+          return res.json({
+            MerchantRequestID: order.stripePaymentIntentId,
+            CheckoutRequestID: order.stripeSessionId,
+            message: "STK push already initiated — check your phone",
+          });
+        }
+
+        // Catalog is priced in USD at Kenyan market value; M-Pesa charges whole KES.
+        const kesAmount = usdToKes(Number(order.total ?? 0));
+        const accountRef = `RT${order.id}`.slice(0, 12);
+
+        const result = await initiateMpesaStkPush({
+          phone: normalizedPhone,
+          amount: kesAmount,
+          orderId: order.id,
+          accountRef,
         });
-      }
 
-      // Idempotent re-initiation: reuse the already-stored STK push instead of
-      // firing a second push and overwriting the CheckoutRequestID (which would
-      // orphan the first callback's correlation and could double-charge).
-      if (order.paymentProvider === "mpesa" && order.stripeSessionId) {
+        if (result.error) return res.status(502).json({ message: result.error });
+
+        await storage.updateOrderPayment(order.id, {
+          paymentProvider: "mpesa",
+          currency: "KES", // M-Pesa always charges whole Kenyan Shillings
+          stripeSessionId: result.CheckoutRequestID,
+          stripePaymentIntentId: result.MerchantRequestID,
+          idempotencyKey: `mpesa-${order.id}-${crypto.randomUUID()}`,
+        });
+
         logAudit(req, {
-          action: "checkout_initiated_reused",
+          action: "checkout_initiated",
           entityType: "order",
           entityId: order.id,
-          changes: { provider: "mpesa" },
+          changes: {
+            provider: "mpesa",
+            phone: `${normalizedPhone.slice(0, 3)}****${normalizedPhone.slice(-3)}`,
+          },
         });
-        return res.json({
-          MerchantRequestID: order.stripePaymentIntentId,
-          CheckoutRequestID: order.stripeSessionId,
-          message: "STK push already initiated — check your phone",
+
+        res.json({
+          MerchantRequestID: result.MerchantRequestID,
+          CheckoutRequestID: result.CheckoutRequestID,
+          message: "STK push sent — check your phone",
         });
+      } catch (error) {
+        console.error("M-Pesa STK push error:", error);
+        res.status(500).json({ message: "Failed to initiate M-Pesa payment" });
       }
-
-      // Catalog is priced in USD at Kenyan market value; M-Pesa charges whole KES.
-      const kesAmount = usdToKes(Number(order.total ?? 0));
-      const accountRef = `RT${order.id}`.slice(0, 12);
-
-      const result = await initiateMpesaStkPush({
-        phone: normalizedPhone,
-        amount: kesAmount,
-        orderId: order.id,
-        accountRef,
-      });
-
-      if (result.error) return res.status(502).json({ message: result.error });
-
-      await storage.updateOrderPayment(order.id, {
-        paymentProvider: "mpesa",
-        currency: "KES", // M-Pesa always charges whole Kenyan Shillings
-        stripeSessionId: result.CheckoutRequestID,
-        stripePaymentIntentId: result.MerchantRequestID,
-        idempotencyKey: `mpesa-${order.id}-${crypto.randomUUID()}`,
-      });
-
-      logAudit(req, {
-        action: "checkout_initiated",
-        entityType: "order",
-        entityId: order.id,
-        changes: {
-          provider: "mpesa",
-          phone: `${normalizedPhone.slice(0, 3)}****${normalizedPhone.slice(-3)}`,
-        },
-      });
-
-      res.json({
-        MerchantRequestID: result.MerchantRequestID,
-        CheckoutRequestID: result.CheckoutRequestID,
-        message: "STK push sent — check your phone",
-      });
-    } catch (error) {
-      console.error("M-Pesa STK push error:", error);
-      res.status(500).json({ message: "Failed to initiate M-Pesa payment" });
-    }
-  });
+    },
+  );
 
   // ── Admin Routes ────────────────────────────────────────────────────────────
 

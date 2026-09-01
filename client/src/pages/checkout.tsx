@@ -190,15 +190,17 @@ export default function Checkout() {
         }
 
         toast({
-          title: "STK push sent!",
+          title: "Order created!",
           description:
-            "Check your phone for the M-Pesa payment prompt. Enter your PIN to complete.",
+            'Your order has been created. Click "Pay with M-Pesa" on the next page to complete the payment.',
         });
 
-        // Clear cart and redirect to confirmation — the confirmation page polls
-        // the real payment status instead of waiting on a fixed timeout.
+        // Clear cart and redirect to confirmation — the confirmation page will
+        // let the user initiate the M-Pesa STK push on demand (lazy initiation).
         clearCart();
-        navigate(`/order-confirmation?id=${orderId}&total=${total}&payment=mpesa`);
+        navigate(
+          `/order-confirmation?id=${orderId}&total=${total}&payment=mpesa&phone=${encodeURIComponent(mpesaPhone.trim())}`,
+        );
         return;
       }
     } catch (error) {

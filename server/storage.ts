@@ -172,7 +172,11 @@ export interface IStorage {
     id: number,
     fromStatus: string,
     toStatus: string,
-    extra?: { mpesaReceiptNumber?: string; stripePaymentIntentId?: string },
+    extra?: {
+      mpesaReceiptNumber?: string;
+      mpesaReceiptNumberEncrypted?: string;
+      stripePaymentIntentId?: string;
+    },
   ): Promise<Order | undefined>;
 
   /**

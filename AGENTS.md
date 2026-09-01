@@ -59,18 +59,13 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 
 ---
 
-## Tomorrow's Session — P2/P3 Scope of Work
+## Tomorrow's Session — P4 Scope of Work
 
 ### Recommended Order
 
 | # | Feature | Priority | Est. Time | Notes |
 |---|---------|----------|-----------|-------|
-| 1 | **Email notifications** | **P1 — High** | 3-4 hours | ✅ Done (v0.5.0). Order confirmation + shipping status emails wired. Needs SMTP creds to activate. |
-| 2 | **Wishlists / favorites** | **P2 — Medium** | 3-4 hours | ✅ Done (v0.5.0). Table + API + UI shipped. Run `migrations/0003_add_wishlist_items.sql`. |
-| 3 | **Supabase RLS policies** | **P2 — Medium** | 30 min | ✅ Done. `migrations/rls-policies.sql` ready — execute in Supabase SQL Editor. |
-| 4 | **Redis cache layer** | **P3 — Nice-to-have** | 3-4 hours | ✅ Done (v0.6.0). Upstash read-through for products/site settings. Opt-in via `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN`. |
-| 5 | **CDN image optimisation** | **P3 — Nice-to-have** | 1-2 hours | ✅ Done (v0.7.0). Self-hosted `/api/image` sharp proxy + `OptimizedImage` component across all render sites. No account needed. |
-| 6 | **Product variants** | **P3 — Nice-to-have** | 8-12 hours | ✅ Done (v0.6.0). `product_variants` table + cart/order changes + UI selectors + gallery images. Run `migrations/0005_add_product_variants.sql` + `migrations/0006_add_product_images.sql`. |
+| 1 | **Admin "Journey" Sankey tab** | **P4** | 3-5 hrs | recharts 2.15 already ships Sankey — no new dep. New `GET /api/admin/analytics/journey` + pure `buildJourneyGraph(visits, orders)` (session reconstruct by userEmail/order of `user_visits`). New `journey-tab.tsx` + admin.tsx tab. |
 
 ---
 
@@ -82,7 +77,9 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 |---|---------|--------|-----------|------------------------|
 | **P0** | **Analytics revenue mismatch** | ✅ Done (v0.8.0) | 1-2 hrs | `routes.ts:1057` `totalRevenue` summed ALL orders (pending+failed+paid = $453k); Orders tab correctly sums paid only ($57k). `totalRevenue` is now paid-only, `bookedRevenue` added for reference, `sales-trend` counts paid only. |
 | **P1** | **Checkout race conditions** | ✅ Done (v0.8.1) | 4-6 hrs | (1) Stock never restored when payment fails/refunds — added `releaseOrderStock` guarded by new `stock_released` column (migration 0007). (2) TOCTOU in callbacks — added atomic CAS `markOrderPaymentStatus` used from shared `server/payment-callbacks.ts`. (3) M-Pesa `ResultCode === "0"` now accepted. (4) Client polls real status via new `GET /api/orders/:id/status` instead of fixed 3 s. |
+| **P1** | **M-Pesa pipeline observability** | ✅ Done (v0.13.1) | 2-3 hrs | Sentry custom measurements (`mpesa.stk_push.duration`, `mpesa.callback.duration`, `mpesa.callback.result`, `mpesa.token.duration`, `mpesa.stock_restored.count`), structured correlation logging (`[M-Pesa] [checkoutRequestId] [order#N]`), Daraja IP allowlist auto-refresh via Vercel Cron (`scripts/refresh-mpesa-allowlist.mjs`, `GET /api/cron/refresh-mpesa-allowlist`). ADR-014. |
 | **P2** | **Customer notification pipeline (Brevo)** | ✅ Done (v0.9.0) | 3-5 hrs | Scenario copy map (`payment_success`, `payment_failed`, `processing`, `shipped`, `delivered`, `cancelled`; pending = no-op) in `server/email.ts`. Failure + refund emails on winning CAS transition only. Recipient fallback `resolveOrderEmail(order)` → checkout email → auth-user email by UUID. Admin shipping PUT emails on any real change (dropped `paid &&` gate). Optional Brevo Transactional API v3 sender (`BREVO_API_KEY` in dashboard only). 12 email tests. |
+| **P2** | **M-Pesa developer experience & vendor integration** | ✅ Done (v0.13.2) | 3-4 hrs | Local sandbox simulator (`POST /api/dev/mpesa/simulate-callback`), Web Push notifications (`web-push` + VAPID, `GET/POST /api/push/*`), Vendor order status webhooks (HMAC-SHA256 signed, `server/vendor-webhooks.ts`). ADR-015. |
 | **P3** | **Shop price slider $9.99–$4,000** | ✅ Done (v0.9.1) | 1 hr | `shop.tsx` FilterSidebar: `MIN_PRICE`/`MAX_PRICE` constants, `step={1}`, default `[9.99, 4000]`, USD label, decimal-aware URL parsing + clamping + min/max ordering. Backend already accepted arbitrary `minPrice`/`maxPrice`. |
 | **P4** | **Admin "Journey" Sankey tab** | ⏳ | 3-5 hrs | recharts 2.15 already ships Sankey — no new dep. New `GET /api/admin/analytics/journey` + pure `buildJourneyGraph(visits, orders)` (session reconstruct by userEmail/order of `user_visits`). New `journey-tab.tsx` + admin.tsx tab. |
 
@@ -117,7 +114,7 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 
 ---
 
-## Current Session (2026-08-07) — v0.10.0 Security Remediation + Customer Features
+## Current Session (2026-09-01) — P4 M-Pesa Security Hardening + Admin Journey Sankey
 
 ### Git
 - Working tree held the full v0.10.0 batch (uncommitted on top of `c65e220`): pentest-finding fixes F1–F12, email verification, order history + receipts, legal rewrite, pricing helper, CI `security` job, `npm audit fix`, migrations 0010–0013, 209 tests. Version bumped 0.9.0 → 0.10.0 (`npm version 0.10.0 --no-git-tag-version`).
@@ -128,11 +125,15 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 - `0012` (email verification columns + grandfather existing) — **applied**; all 5 existing users `email_verified = true`.
 - `0013` (RLS/PCI hardening) — **already live** in prod (all policy names present; verified via `pg_policies`). Do NOT re-apply blindly. Probe before applying: `probe_0010/0011/0012.sql` pattern in `e2e/results/` (gitignored).
 
+### Migration applied to prod (2026-09-01)
+- `0035` (M-Pesa receipt encryption) — **applied** via Supabase CLI (`supabase db query --db-url "$DATABASE_URL"` split into individual statements). Verified: `mpesa_receipt_encrypted` bytea column exists, `encrypt_mpesa_receipt`/`decrypt_mpesa_receipt` functions work, B-tree index created.
+
 ### Supabase CLI operational discovery (supersedes older AGENTS.md note)
 - The current CLI **executes multi-statement files** (verified: CREATE TEMP TABLE + INSERT + SELECT all ran on one connection) but **displays only the LAST result set**. So a file with 4 queries prints only the 4th table — split probes into separate files, or rely on side-effect checks, when you need each result.
 - Multi-statement migration files (0012/0013) applied cleanly in one go via `supabase db query --linked --file /mnt/wsl/RetailTrove/migrations/00XX.sql`.
 - CLI (Windows binary) cannot read `/mnt/c/...` paths — resolve as `\\wsl.localhost\Ubuntu-26.04\mnt\c\...` (broken). Use repo paths `/mnt/wsl/RetailTrove/...` or `e2e/results/`.
 - **PowerShell mangles WSL `for` loops + `(a|b)` grep patterns** — never inline them in `-c`; write probe `.sql`/`.mjs` files instead.
+- For multi-statement files that fail with "cannot insert multiple commands into a prepared statement", apply statements individually via `supabase db query --db-url "$DATABASE_URL" -f <(echo "STATEMENT;")`.
 
 ### Security remediation batch (v0.10.0) — see CHANGELOG for full list
 - F1 product write auth, F2 payment-field mass assignment, F3 order/status auth (+ `/api/orders/:id/receipt`, faqs admin-only), F4 M-Pesa callback IP allowlist (`MPESA_CALLBACK_ALLOWED_IPS`), F5 cart ownership via `adoptCart`, F6 `crypto.randomUUID()` cart IDs, F9 rolling + absolute session expiry (`SESSION_IDLE_MS`/`SESSION_ABSOLUTE_MS` + `enforceSessionAbsoluteTimeout`), F11 stock availability checks, F12 prerender 404 allowlist.
@@ -141,6 +142,7 @@ Production-grade e-commerce platform — Vite 8.1 + React 19 SPA, Express.js bac
 
 ### Env vars introduced
 - `MPESA_CALLBACK_ALLOWED_IPS` (comma-separated CIDR/exact IP; unset = accept for sandbox) · `SESSION_IDLE_MS` (default 30 min) · `SESSION_ABSOLUTE_MS` (default 24 h).
+- `MPESA_RECEIPT_ENC_KEY` (32-byte hex, required in production; generate with `openssl rand -hex 32`) — set in Vercel dashboard.
 
 ### Verified
 - `tsc --noEmit`: 0 errors · `vitest run`: **209/209 (20 files)** · `eslint`: 0 errors (114 pre-existing warnings) · `prettier --check`: clean (wrote `login.tsx` + `verify-email.tsx`) · `vite build`: success.

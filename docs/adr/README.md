@@ -28,3 +28,8 @@ Each ADR follows the [MADR](https://adr.github.io/madr/) template:
 | 010 | [Redis Cache Layer (Upstash)](ADR-010-redis-cache-layer.md) | ✅ Accepted |
 | 011 | [Shared Client-Server Currency Module](ADR-011-shared-currency-module.md) | ✅ Accepted |
 | 012 | [Verified-Buyer Review Gate](ADR-012-verified-buyer-review-gate.md) | ✅ Accepted |
+| 013 | [Remove Hardcoded Bootstrap Seeds](ADR-013-remove-hardcoded-bootstrap-seeds.md) | ✅ Accepted |
+| 014 | [M-Pesa Payment Observability](ADR-014-mpesa-observability.md) | ✅ Accepted |
+| 015 | [M-Pesa Developer Experience & Vendor Integration](ADR-015-mpesa-developer-experience-vendor-integration.md) | ✅ Accepted |
+| 016 | [M-Pesa Pipeline Optimizations (P3)](ADR-016-mpesa-pipeline-optimizations-p3.md) | ✅ Accepted |
+| 017 | [M-Pesa Security Hardening (P4)](ADR-017-mpesa-security-hardening-p4.md) | ✅ Accepted |

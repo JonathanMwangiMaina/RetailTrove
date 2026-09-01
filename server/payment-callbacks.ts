@@ -16,6 +16,50 @@ import { storage } from "./storage.js";
 import { sendOrderConfirmationEmail, sendOrderStatusEmail } from "./email.js";
 import { awardLoyaltyPointsForOrder } from "./loyalty-service.js";
 import { usdToKes } from "../client/src/lib/currencies.js";
+import { z } from "zod";
+import { encryptMpesaReceipt } from "./mpesa-encryption.js";
+import { getCache } from "./cache.js";
+
+const REPLAY_PROTECTION_TTL = 48 * 60 * 60; // 48 hours
+
+/**
+ * Zod schema for M-Pesa STK Push CallbackMetadata Item.
+ * Ensures the callback contains the expected fields in the correct order.
+ */
+const MpesaCallbackMetadataItemSchema = z.object({
+  Name: z.string(),
+  Value: z.union([z.string(), z.number()]),
+});
+
+/**
+ * Zod schema for M-Pesa STK Push CallbackMetadata.
+ * Validates the structure of items (Amount, MpesaReceiptNumber, PhoneNumber).
+ * Allows empty array for failure callbacks.
+ */
+const MpesaCallbackMetadataSchema = z.object({
+  Item: z.array(MpesaCallbackMetadataItemSchema).max(10),
+});
+
+/**
+ * Zod schema for M-Pesa STK Push callback body.
+ * Validates the entire callback structure from Safaricom Daraja.
+ */
+const MpesaStkCallbackSchema = z.object({
+  MerchantRequestID: z.string().optional(),
+  CheckoutRequestID: z.string(),
+  ResultCode: z.union([z.number(), z.string()]),
+  ResultDesc: z.string().optional(),
+  CallbackMetadata: MpesaCallbackMetadataSchema.optional(),
+});
+
+/**
+ * Zod schema for the full M-Pesa callback body.
+ */
+const MpesaCallbackBodySchema = z.object({
+  Body: z.object({
+    stkCallback: MpesaStkCallbackSchema,
+  }),
+});
 
 let warnedUnsetAllowlist = false;
 
@@ -165,11 +209,17 @@ export async function processLemonSqueezyWebhook(
  * Tolerates a string `ResultCode` (Safaricom may send "0" instead of 0) and a
  * missing `CallbackMetadata` block. Always returns without throwing so the route
  * can ack Safaricom with a 200.
+ * Validates callback structure using Zod schema.
  */
 export async function processMpesaCallback(body: unknown): Promise<void> {
-  const { Body } = (body ?? {}) as { Body?: unknown };
-  const { stkCallback } = (Body ?? {}) as { stkCallback?: unknown };
-  if (!stkCallback) return;
+  // Validate callback structure with Zod
+  const parseResult = MpesaCallbackBodySchema.safeParse(body);
+  if (!parseResult.success) {
+    console.warn("[M-Pesa] Callback validation failed:", parseResult.error.flatten().fieldErrors);
+    return;
+  }
+
+  const { stkCallback } = parseResult.data.Body;
 
   const {
     ResultCode,
@@ -177,19 +227,32 @@ export async function processMpesaCallback(body: unknown): Promise<void> {
     MerchantRequestID: _mrid,
     CheckoutRequestID,
     CallbackMetadata,
-  } = stkCallback as {
-    ResultCode?: number | string;
-    ResultDesc?: string;
-    MerchantRequestID?: string;
-    CheckoutRequestID?: string;
-    CallbackMetadata?: { Item?: Array<{ Name: string; Value: unknown }> };
-  };
+  } = stkCallback;
 
-  const order = await storage.getOrderByStripeSessionId(CheckoutRequestID ?? "");
+  const order = await storage.getOrderByStripeSessionId(CheckoutRequestID);
 
   if (!order) {
     console.warn(`[M-Pesa] No order found for CheckoutRequestID: ${CheckoutRequestID}`);
     return;
+  }
+
+  // Replay protection: check if this CheckoutRequestID was already processed
+  const cache = getCache();
+  if (cache) {
+    const replayKey = `mpesa:processed:${CheckoutRequestID}`;
+    try {
+      const alreadyProcessed = await cache.get(replayKey);
+      if (alreadyProcessed) {
+        console.log(
+          `[M-Pesa] Replay detected for CheckoutRequestID: ${CheckoutRequestID} — skipping`,
+        );
+        return;
+      }
+      // Mark as processed (set with 48h TTL)
+      await cache.set(replayKey, "1", { ex: REPLAY_PROTECTION_TTL });
+    } catch (cacheErr) {
+      console.warn("[M-Pesa] Replay protection cache error (continuing):", cacheErr);
+    }
   }
 
   const isSuccess = ResultCode === 0 || ResultCode === "0";
@@ -227,8 +290,18 @@ export async function processMpesaCallback(body: unknown): Promise<void> {
       return;
     }
 
+    // Encrypt the receipt number for PII protection
+    let encryptedReceipt: string | undefined;
+    try {
+      encryptedReceipt = await encryptMpesaReceipt(receiptNumber);
+    } catch (encErr) {
+      console.error("[M-Pesa] Failed to encrypt receipt number:", encErr);
+      // Continue without encryption as fallback (will store plaintext if column exists)
+    }
+
     const transitioned = await storage.markOrderPaymentStatus(order.id, "pending", "paid", {
       mpesaReceiptNumber: receiptNumber,
+      mpesaReceiptNumberEncrypted: encryptedReceipt,
     });
     if (!transitioned) {
       console.log(

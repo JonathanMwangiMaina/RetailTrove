@@ -822,11 +822,17 @@ export class DatabaseStorage implements IStorage {
     id: number,
     fromStatus: string,
     toStatus: string,
-    extra?: { mpesaReceiptNumber?: string; stripePaymentIntentId?: string },
+    extra?: {
+      mpesaReceiptNumber?: string;
+      mpesaReceiptNumberEncrypted?: string;
+      stripePaymentIntentId?: string;
+    },
   ): Promise<Order | undefined> {
     const updates: Record<string, unknown> = { paymentStatus: toStatus };
     if (extra?.mpesaReceiptNumber !== undefined)
       updates.mpesaReceiptNumber = extra.mpesaReceiptNumber;
+    if (extra?.mpesaReceiptNumberEncrypted !== undefined)
+      updates.mpesaReceiptNumberEncrypted = extra.mpesaReceiptNumberEncrypted;
     if (extra?.stripePaymentIntentId !== undefined)
       updates.stripePaymentIntentId = extra.stripePaymentIntentId;
 

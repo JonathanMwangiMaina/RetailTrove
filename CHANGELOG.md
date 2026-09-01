@@ -35,6 +35,168 @@ This project does not currently use semantic versioning — entries are dated.
 
 ---
 
+## [v0.13.1] — M-Pesa Pipeline Observability (P1) (2026-08-31)
+
+### Added
+- **Sentry custom measurements** for Prometheus-style metrics in `server/payment-callbacks.ts` and `server/payment-service.ts`:
+  - `mpesa.stk_push.duration` / `.result` — STK push latency and result codes
+  - `mpesa.token.duration` / `.cache_hit` — OAuth token fetch latency and Redis cache hit rate
+  - `mpesa.callback.duration` / `.result` — Callback processing latency and result codes
+  - `mpesa.stock_restored.count` — Stock restoration counter
+  - Queryable in Sentry Metrics dashboard with alerting support
+- **Structured correlation logging** via `createCorrelationLogger(checkoutRequestId, orderId)`:
+  - All M-Pesa log lines now prefixed with `[M-Pesa] [checkoutRequestId] [order#N]`
+  - Enables grep/Logtail correlation from STK push → callback → order transition
+- **Daraja IP allowlist auto-refresh** (`scripts/refresh-mpesa-allowlist.mjs`):
+  - Fetches Safaricom's published callback IP ranges daily (with hardcoded fallback)
+  - Updates `MPESA_CALLBACK_ALLOWED_IPS` via Vercel API (POST/PATCH env var)
+  - Vercel Cron endpoint `GET /api/cron/refresh-mpesa-allowlist` (protected by `CRON_SECRET`)
+  - Eliminates manual IP rotation; runs daily at 3 AM UTC
+
+### Changed
+- `server/payment-callbacks.ts`: Wrapped `processMpesaCallback()` and `failMpesaOrder()` with Sentry spans, added measurements and correlation logger
+- `server/payment-service.ts`: Wrapped `getMpesaAccessToken()` and `initiateMpesaStkPush()` with Sentry spans, added measurements and correlation logger
+- `api/index.ts`: Added cron endpoint for allowlist refresh
+- `tsconfig.json`: Added `@scripts/*` path alias and `scripts/**/*` to include
+- `types/sentry-env.d.ts`: Extended Sentry `startSpan<T>` declaration for typed measurements
+
+### Documentation
+- Added **ADR-014** (`docs/adr/ADR-014-mpesa-observability.md`) documenting the observability strategy
+- Updated ADR index (`docs/adr/README.md`) with ADR-013 and ADR-014
+
+### Verification
+- `tsc --noEmit`: 0 errors
+- `npm test`: 248/248 tests pass
+- `npm run lint`: 0 errors
+- `npm run format:check`: Clean
+- `npm run build:client`: Success
+
+---
+
+## [v0.13.2] — M-Pesa Developer Experience & Vendor Integration (P2) (2026-09-01)
+
+### Added
+- **Local sandbox simulator endpoint** `POST /api/dev/mpesa/simulate-callback`:
+  - Available only in non-production environments (`NODE_ENV !== "production"`)
+  - Accepts `checkoutRequestId`, `resultCode`, optional `resultDesc`, `amount`, `receiptNumber`
+  - Constructs valid Safaricom STK Push callback body and invokes real `processMpesaCallback()`
+  - Returns updated order status for immediate verification
+  - Example payload documented in endpoint response
+- **Web Push notifications** (`web-push` + VAPID):
+  - New endpoints: `GET /api/push/vapid-public-key`, `POST /api/push/subscribe`, `POST /api/push/unsubscribe`
+  - `server/push-notifications.ts` — In-memory subscription store with auto-cleanup of expired subscriptions
+  - Integrated into M-Pesa callback: `sendPaymentConfirmationPush()` on success, `sendPaymentFailurePush()` on failure
+  - VAPID key generation via `scripts/generate-vapid-keys.mjs` (env: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`)
+- **Vendor order status webhooks**:
+  - `server/vendor-webhooks.ts` — HMAC-SHA256 signed webhook delivery with timestamp + body signing
+  - Functions: `configureVendorWebhook()`, `sendVendorWebhook()`, `notifyVendorPaymentConfirmed()`, `notifyVendorPaymentFailed()`
+  - Integrated into M-Pesa callback: iterates order items, finds product vendor, sends webhook per vendor
+  - Payload: `orderId`, `productId`, `productName`, `quantity`, `price`, `variantName`, `mpesaReceiptNumber`/`reason`
+  - Signature verification: `X-Webhook-Signature` = HMAC-SHA256(secret, timestamp + "." + body)
+
+### Changed
+- `server/routes.ts`: Added simulator endpoint, push notification endpoints
+- `server/payment-callbacks.ts`: Integrated push and vendor notifications into callback flow
+- `server/push-notifications.ts` — Web Push service with VAPID auth
+- `server/vendor-webhooks.ts` — Vendor webhook service with HMAC signing
+- `scripts/generate-vapid-keys.mjs` — VAPID key generation utility
+- `types/sentry-env.d.ts` — Extended with module declarations for new scripts
+
+### Documentation
+- Added **ADR-015** (`docs/adr/ADR-015-mpesa-developer-experience-vendor-integration.md`) documenting the P2 features
+- Updated ADR index (`docs/adr/README.md`) with ADR-013, ADR-014, ADR-015
+
+### Verification
+- `tsc --noEmit`: 0 errors
+- `npm test`: 248/248 tests pass
+- `npm run lint`: 0 errors
+- `npm run format:check`: Clean
+- `npm run build:client`: Success
+
+---
+
+## [v0.13.3] — M-Pesa Pipeline Optimizations (P3) (2026-09-01)
+
+### Added
+- **Lazy STK push initiation**:
+  - STK push no longer initiated automatically after order creation
+  - New "Pay with M-Pesa" button on order confirmation page (`client/src/pages/order-confirmation.tsx`)
+  - User explicitly triggers STK push, eliminating wasted Daraja API calls for abandoned checkouts
+  - Phone number passed via query parameter from checkout to confirmation page
+- **Per-phone rate limiting** (`server/middleware/mpesa-rate-limiter.ts`):
+  - Redis-backed sliding window (Upstash sorted sets)
+  - 10 requests per 15 minutes per phone number
+  - Returns 429 with `Retry-After` header and standard rate limit headers
+  - Gracefully allows requests if Redis unavailable (best-effort)
+- **CallbackMetadata schema validation** (`server/payment-callbacks.ts`):
+  - Zod schemas for M-Pesa STK Push callback structure
+  - Validates `CallbackMetadata.Item[]` structure (Amount, MpesaReceiptNumber, PhoneNumber)
+  - Allows empty array for failure callbacks
+  - Invalid callbacks logged and silently ignored (fail-safe for 200 ack to Daraja)
+
+### Changed
+- `client/src/pages/checkout.tsx`: Removed auto STK push initiation; passes phone to confirmation page
+- `client/src/pages/order-confirmation.tsx`: Added "Pay with M-Pesa" button with loading state
+- `server/routes.ts`: Applied `mpesaPhoneRateLimiter` middleware to `/api/checkout/mpesa`
+- `server/payment-callbacks.ts`: Added Zod schemas and validation in `processMpesaCallback()`
+
+### Documentation
+- Added **ADR-016** (`docs/adr/ADR-016-mpesa-pipeline-optimizations-p3.md`) documenting the P3 optimizations
+- Updated ADR index (`docs/adr/README.md`) with ADR-016
+
+### Verification
+- `tsc --noEmit`: 0 errors
+- `npm test`: 248/248 tests pass
+- `npm run lint`: 0 errors
+- `npm run format:check`: Clean
+- `npm run build:client`: Success
+
+---
+
+## [v0.13.4] — M-Pesa Security Hardening (P4) (2026-09-01)
+
+### Added
+- **M-Pesa receipt encryption at rest** (`server/mpesa-encryption.ts`, `migrations/0035_encrypt_mpesa_receipt.sql`):
+  - pgcrypto-based symmetric encryption for `mpesaReceiptNumber` (PII protection)
+  - New `mpesa_receipt_encrypted` bytea column on `orders` table
+  - Helper functions `encrypt_mpesa_receipt()` / `decrypt_mpesa_receipt()` using `pgp_sym_encrypt`/`pgp_sym_decrypt`
+  - Encryption key from `MPESA_RECEIPT_ENC_KEY` env var (required in production, dev fallback with warning)
+  - Integrated into `processMpesaCallback()` — encrypts on successful payment, stores both plaintext and encrypted
+  - Graceful fallback: logs encryption errors but continues processing
+- **Callback replay protection** (`server/payment-callbacks.ts`):
+  - Redis-backed deduplication using Upstash sorted sets
+  - Key format: `mpesa:processed:{CheckoutRequestID}` with 48-hour TTL
+  - Early check in callback handler — returns immediately if already processed
+  - Prevents duplicate side effects (emails, loyalty points, vendor webhooks, push notifications)
+  - Graceful degradation: logs warning and continues if Redis unavailable
+
+### Changed
+- `server/payment-callbacks.ts`: Added encryption and replay protection in `processMpesaCallback()`
+- `server/database-storage.ts`: Updated `markOrderPaymentStatus` to accept `mpesaReceiptNumberEncrypted`
+- `server/storage.ts`: Updated `IStorage` interface with new parameter
+- `server/mpesa-encryption.ts` (new): Encryption/decryption utilities using pgcrypto
+- `migrations/0035_encrypt_mpesa_receipt.sql` (new): Database migration for encrypted column and pgcrypto functions
+
+### Documentation
+- Added **ADR-017** (`docs/adr/ADR-017-mpesa-security-hardening-p4.md`) documenting the P4 security hardening
+- Updated ADR index (`docs/adr/README.md`) with ADR-017
+
+### Verification
+- `tsc --noEmit`: 0 errors
+- `npm test`: 248/248 tests pass
+- `npm run lint`: 0 errors
+- `npm run format:check`: Clean
+- `npm run build:client`: Success
+
+### Setup Required
+- Apply migration `0035` to production via Supabase CLI:
+  ```bash
+  supabase db query --linked --file /mnt/wsl/RetailTrove/migrations/0035_encrypt_mpesa_receipt.sql
+  ```
+- Set `MPESA_RECEIPT_ENC_KEY` in Vercel dashboard (generate with `openssl rand -hex 32`)
+
+---
+
 ## [v0.12.2] — Fix Vercel deploy: drop unsupported `functions.nodeOptions` (2026-08-13)
 
 ### Fixed
