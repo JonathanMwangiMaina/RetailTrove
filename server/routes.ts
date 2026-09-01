@@ -1453,6 +1453,78 @@ export async function registerRoutes(app: Express, csrfProtection: CsrfMiddlewar
     },
   );
 
+  // ── Dev-only: M-Pesa Callback Simulator ──────────────────────────────────────
+  // Allows local testing of the full callback flow without real Safaricom callbacks.
+  // Only available in non-production environments.
+  if (process.env.NODE_ENV !== "production") {
+    post("/dev/mpesa/simulate-callback", async (req: Request, res: Response) => {
+      try {
+        const { checkoutRequestId, resultCode, resultDesc, amount, receiptNumber } = req.body as {
+          checkoutRequestId: string;
+          resultCode: number | string;
+          resultDesc?: string;
+          amount?: number;
+          receiptNumber?: string;
+        };
+
+        if (!checkoutRequestId || resultCode === undefined) {
+          return res.status(400).json({
+            message: "checkoutRequestId and resultCode are required",
+            example: {
+              checkoutRequestId: "ws_CO_123456789",
+              resultCode: 0,
+              resultDesc: "Success",
+              amount: 12938,
+              receiptNumber: "QHJ7A1BCDE",
+            },
+          });
+        }
+
+        const order = await storage.getOrderByStripeSessionId(checkoutRequestId);
+        if (!order) {
+          return res.status(404).json({ message: "No order found for this CheckoutRequestID" });
+        }
+
+        // Build callback body matching Safaricom's STK Push callback structure
+        const expectedAmount = amount ?? Number(order.total) * 129.38; // USD to KES fallback
+        const callbackBody = {
+          Body: {
+            stkCallback: {
+              MerchantRequestID: order.stripePaymentIntentId ?? "SIM-MERCHANT-" + Date.now(),
+              CheckoutRequestID: checkoutRequestId,
+              ResultCode: resultCode,
+              ResultDesc: resultDesc ?? (resultCode === 0 || resultCode === "0" ? "Success" : "Simulated failure"),
+              CallbackMetadata:
+                resultCode === 0 || resultCode === "0"
+                  ? {
+                      Item: [
+                        { Name: "Amount", Value: expectedAmount },
+                        { Name: "MpesaReceiptNumber", Value: receiptNumber ?? "SIM" + Date.now() },
+                        { Name: "PhoneNumber", Value: 254700000000 },
+                      ],
+                    }
+                  : { Item: [] },
+            },
+          },
+        };
+
+        console.log(`[M-Pesa Simulator] Simulating callback for order #${order.id}: ResultCode=${resultCode}`);
+        const { processMpesaCallback } = await import("./payment-callbacks.js");
+        await processMpesaCallback(callbackBody);
+
+        const updatedOrder = await storage.getOrderById(order.id);
+        res.json({
+          success: true,
+          message: `Callback simulated — order #${order.id} is now ${updatedOrder?.paymentStatus ?? "unknown"}`,
+          order: updatedOrder,
+        });
+      } catch (error) {
+        console.error("M-Pesa callback simulation error:", error);
+        res.status(500).json({ message: "Failed to simulate callback" });
+      }
+    });
+  }
+
   // ── Admin Routes ────────────────────────────────────────────────────────────
 
   router.get(
